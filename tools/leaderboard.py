@@ -10,7 +10,8 @@ Writes the reply for the issue to /tmp/reply.md."""
 import json, os, re, sys, datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VERSION = open(os.path.join(ROOT, "VERSION")).read().strip()
+FULL_VERSION = open(os.path.join(ROOT, "VERSION")).read().strip()
+VERSION = ".".join(FULL_VERSION.split(".")[:2])   # the high-score season: patch releases share it
 def board_path(mode="rts"):
     return os.path.join(ROOT, "leaderboard", ("arena-" if mode == "arena" else "") + f"v{VERSION}.json")
 REPLY = "/tmp/reply.md"
@@ -43,8 +44,8 @@ def table(board):
     return out
 
 def render(_=None):
-    lines = [f"# Partial Annihilation leaderboard - v{VERSION}", "",
-             "Each new game version starts a fresh board. Submit from the end-of-game screen (**Submit score online**).", "",
+    lines = [f"# Partial Annihilation leaderboard - season {VERSION}", "",
+             "Each season (0.9, 0.10, ...) starts a fresh board; patch releases keep it. Submit from the end-of-game screen (**Submit score online**).", "",
              "## RTS", "", "Official games only: no Alien Tech or Dropships.", ""]
     lines += table(load("rts"))
     lines += ["", "## Commander Arena", ""]
@@ -70,7 +71,7 @@ def submit():
         key = "|".join([fields["version"], fields["score"], fields["result"], fields["time"], fields["map"]])
     except (KeyError, ValueError):
         reply("This score block is incomplete. Please submit from the game's end screen."); return 1
-    if fields["version"] != VERSION:
+    if ".".join(fields["version"].split(".")[:2]) != VERSION:
         reply(f"This score is from v{fields['version']}, but the current board is v{VERSION}. "
               "Update the game from its title screen and play another round!"); return 1
     if check32(key + "|partial") != fields.get("check") or not (0 < score < 50_000_000):

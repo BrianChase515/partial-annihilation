@@ -6,7 +6,8 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.9"  -- bump to start a fresh high-score season
+D.VERSION = "0.9.1"  -- the first two numbers are the high-score season
+D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 
 D.units = {
   commander = {

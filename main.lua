@@ -309,7 +309,12 @@ function love.textinput(t)
 end
 
 function love.resize()
-  if state == "game" and game then game:clampCam() end
+  if state == "game" and game then
+    -- early in a match (e.g. the browser sizing its canvas), keep the Commander in view
+    local c = game.world.teams[1].commander
+    if game.world.time < 5 and c and c.alive and not game.opts.autotest then game:centerOn(c.x, c.y) end
+    game:clampCam()
+  end
 end
 
 function love.quit()

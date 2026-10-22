@@ -363,7 +363,7 @@ function Menu:draw()
   local hy = y + 44 + 5 * 40 + 34
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("HIGH SCORES  v" .. D.VERSION, x0 + 580, hy)
+  lg.print("HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
   local official = not (self.mods.alien or self.mods.drops)
   if official then lg.setColor(0.5, 0.9, 0.55) else lg.setColor(1, 0.6, 0.35) end
   local ot = official and "this game counts" or "modifiers on: unofficial"
@@ -381,7 +381,7 @@ function Menu:draw()
   local ON = require("src.online")
   local oy = hy + 4 + 6 * 20 + 14
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("ONLINE LEADERBOARD  v" .. D.VERSION, x0 + 580, oy)
+  lg.print("ONLINE LEADERBOARD  season " .. D.SEASON, x0 + 580, oy)
   if not ON.board or #ON.board == 0 then
     lg.setColor(0.45, 0.5, 0.58)
     lg.print(ON.board and "No scores yet this version - be the first." or "(offline)", x0 + 580, oy + 22)
@@ -439,7 +439,7 @@ function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   local hy = y + 7 * 34 + 24
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("ARENA HIGH SCORES  v" .. D.VERSION, x0 + 580, hy)
+  lg.print("ARENA HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
   if #self.arenaScores == 0 then
     lg.setColor(0.45, 0.5, 0.58)
     lg.print("None yet - win an Arena match.", x0 + 580, hy + 22)
@@ -452,7 +452,7 @@ function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   local ON = require("src.online")
   local oy = hy + 4 + 6 * 20 + 14
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("ONLINE ARENA LEADERBOARD  v" .. D.VERSION, x0 + 580, oy)
+  lg.print("ONLINE ARENA LEADERBOARD  season " .. D.SEASON, x0 + 580, oy)
   local board = ON.arenaBoard
   if not board or #board == 0 then
     lg.setColor(0.45, 0.5, 0.58)

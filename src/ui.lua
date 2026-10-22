@@ -1208,7 +1208,7 @@ function UI.drawOver(game)
     lg.setFont(font(13))
     if f.official then
       lg.setColor(0.5, 0.9, 0.55)
-      lg.print(game.highRank and ("Official score  -  #" .. game.highRank .. " on your high-score table (v" .. D.VERSION .. ")")
+      lg.print(game.highRank and ("Official score  -  #" .. game.highRank .. " on your high-score table (season " .. D.SEASON .. ")")
         or "Official score", rx, y)
     else
       lg.setColor(1, 0.6, 0.35)

@@ -7,7 +7,7 @@ L.__index = L
 
 local function logDir()
   local base = love.filesystem.getSource()
-  if base and base:match("%.love$") then
+  if base and base:match("%.love$") and love.system.getOS() ~= "Web" then
     local dir = love.filesystem.getSourceBaseDirectory() .. "/logs"
     if love.system.getOS() == "Windows" then os.execute('mkdir "' .. dir .. '" 2>nul')
     else os.execute("mkdir -p '" .. dir:gsub("'", "'\\''") .. "'") end

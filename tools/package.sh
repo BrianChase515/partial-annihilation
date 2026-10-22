@@ -39,3 +39,9 @@ ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$CACHE/appimagetool" --no-appstream "$S"
 chmod +x dist/PartialAnnihilation-x86_64.AppImage
 rm -rf "$WORK"
 ls -la dist/
+
+# --- Browser: love.js (compatibility mode: no SharedArrayBuffer headers needed) into docs/ for GitHub Pages
+if command -v npx >/dev/null 2>&1; then
+  rm -rf docs && mkdir -p docs
+  npx --yes love.js@11.4.1 -c -t "Partial Annihilation" -m 268435456 PartialAnnihilation.love docs >/dev/null 2>&1 && echo "Built docs/ (browser version)"
+fi

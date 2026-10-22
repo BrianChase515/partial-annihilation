@@ -1,6 +1,6 @@
 -- Local high-score table (official games only). A new game version starts a fresh table.
 local S = {}
-local V = require("src.defs").VERSION
+local V = require("src.defs").SEASON
 local function file(kind) return (kind == "arena" and "high_scores_arena_v" or "high_scores_v") .. V .. ".txt" end
 
 function S.load(kind)

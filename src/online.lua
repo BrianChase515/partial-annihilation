@@ -32,7 +32,20 @@ local function shellQuote(s)
 end
 
 function O.enabled()
+  if love.system.getOS() == "Web" then return false end
   return io and io.popen ~= nil and love.thread ~= nil
+end
+
+-- 32-bit XOR without the LuaJIT bit library (the browser build runs plain Lua)
+local function bxor(a, b)
+  if bit then return bit.bxor(a, b) end
+  local r, p = 0, 1
+  while a > 0 or b > 0 do
+    local x, y = a % 2, b % 2
+    if x ~= y then r = r + p end
+    a, b, p = (a - x) / 2, (b - y) / 2, p * 2
+  end
+  return r
 end
 
 local function run(id, cmd)
@@ -51,11 +64,11 @@ end
 
 -- kick off the update check + leaderboard fetch (call once on the title screen)
 function O.check()
-  if O.checked then return end
+  if O.checked or not O.enabled() then return end
   O.checked = true
   run("version", "curl -fsSL --max-time 8 " .. O.RAW .. "VERSION")
-  run("board", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/v" .. D.VERSION .. ".json")
-  run("arenaboard", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/arena-v" .. D.VERSION .. ".json")
+  run("board", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/v" .. D.SEASON .. ".json")
+  run("arenaboard", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/arena-v" .. D.SEASON .. ".json")
 end
 
 -- replace the .love we were launched from with the newest build
@@ -111,6 +124,7 @@ local function parseBoard(s)
 end
 
 function O.poll()
+  if not O.enabled() then return end
   local ch = love.thread.getChannel("pa_online")
   local msg = ch:pop()
   while msg do
@@ -138,7 +152,7 @@ end
 function O.check32(s)
   local h = 2166136261
   for i = 1, #s do
-    h = bit.bxor(h, s:byte(i)) % 4294967296
+    h = bxor(h, s:byte(i)) % 4294967296
     -- h * 16777619 mod 2^32 without overflowing a double (16777619 = 2^24 + 403)
     h = (h * 403 + (h % 256) * 16777216) % 4294967296
   end

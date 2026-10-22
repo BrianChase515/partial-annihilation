@@ -689,14 +689,15 @@ end
 
 function G:stop()
   for _, u in ipairs(self:selectedMobile()) do
-    if self.world:isFleeing(u) then goto continue end
-    u.orders = {}
-    u.path = nil
-    u.chase = nil
-    u.homeX, u.homeY = u.x, u.y
-    ::continue::
+    if not self.world:isFleeing(u) then
+      u.orders = {}
+      u.path = nil
+      u.chase = nil
+      u.homeX, u.homeY = u.x, u.y
+    end
   end
 end
+
 
 function G:placeBuilding(wx, wy, queue)
   local key = self.buildKey
@@ -913,6 +914,15 @@ end
 -- Update
 
 function G:update(dt)
+  -- (re)center on the Commander on the first frame: the window may have been resized
+  -- after the game was created (browser builds especially)
+  local gw, gh = love.graphics.getDimensions()
+  if not self.camReady or (self.world.time < 3 and (gw ~= self.lastW or gh ~= self.lastH)) then
+    self.camReady = true
+    self.lastW, self.lastH = gw, gh
+    local c = self.world.teams[1].commander
+    if c and not self.opts.autotest then self:centerOn(c.x, c.y) end
+  end
   if self.world.over then
     if not self.overShown then
       self.overShown = true

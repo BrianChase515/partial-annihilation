@@ -1,6 +1,6 @@
-# Partial Annihilation leaderboard - v0.9
+# Partial Annihilation leaderboard - season 0.9
 
-Each new game version starts a fresh board. Submit from the end-of-game screen (**Submit score online**).
+Each season (0.9, 0.10, ...) starts a fresh board; patch releases keep it. Submit from the end-of-game screen (**Submit score online**).
 
 ## RTS
 
