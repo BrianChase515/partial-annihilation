@@ -1,0 +1,1171 @@
+-- In-game state: camera, selection, control groups, commands, input handling.
+local D = require("src.defs")
+local U = require("src.util")
+local World = require("src.world")
+local R = require("src.render")
+local UI = require("src.ui")
+local AI = require("src.ai")
+local SFX = require("src.sfx")
+
+local G = {}
+G.__index = G
+
+function G.new(opts)
+  local self = setmetatable({}, G)
+  self.opts = opts
+  -- players[i] = { human = bool, ally = n, level = 1..10, profile = name }
+  local players = opts.players
+  if not players then
+    players = {
+      { human = true, ally = 1 },
+      { ally = 2, level = opts.level or 5, profile = opts.profile or "Balanced" },
+    }
+  end
+  if opts.autotest then
+    players[1] = { ally = players[1].ally or 1, level = opts.level1 or 5, profile = opts.profile1 or "Balanced" }
+  end
+  self.players = players
+  local income = {}
+  for i, p in ipairs(players) do income[i] = p.human and 1 or D.aiLevel(p.level).income end
+  self.world = World.new({
+    size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers,
+    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income,
+  })
+  local world = self.world
+  R.init(world)
+  self.ais = {}
+  for i, p in ipairs(players) do
+    if not p.human then
+      local ai = AI.new(world, i, p.level, p.profile or "Balanced")
+      self.ais[#self.ais + 1] = ai
+      p.profileName = ai.profileName
+    end
+  end
+  world.onEliminate = function(team)
+    local name = D.teamName[team]
+    if team == 1 then
+      if not world.over then self:notice("Your Commander has fallen. Your allies fight on - you're spectating.", 6) end
+      self.spectating = true
+    elseif world:hostile(team, 1) then
+      self:notice(name .. " has been eliminated!", 4)
+    else
+      self:notice("Your ally " .. name .. " has been eliminated.", 4)
+    end
+  end
+
+  self.selected = {}      -- set: entity -> true
+  self.groups = {}        -- 1..9 -> list of entities
+  self.mode = nil         -- nil | "amove" | "patrol" | "build"
+  self.buildKey = nil
+  self.speed = 1
+  self.paused = false
+  self.menuOpen = false
+  self.showHelp = false
+  self.lastGroupTap = { n = nil, t = 0 }
+  self.lastClick = { t = 0, e = nil }
+  self.notices = {}
+  self.stats = { built = 0, lost = 0, killed = 0 }
+  self.edgePan = true
+  self.showSidebar = true
+  self.mouseLock = true
+
+  -- camera centered on the commander
+  local c = world.teams[1].commander
+  self.cam = { x = 0, y = 0, zoom = 1 }
+  self:centerOn(c.x, c.y)
+  self:select({ c })
+
+  world.onProduce = function(u, f)
+    if u.team == 1 then
+      self.stats.built = self.stats.built + 1
+      if f.assignGroup then
+        local g = self.groups[f.assignGroup] or {}
+        g[#g + 1] = u
+        self.groups[f.assignGroup] = g
+      end
+      if self.selected[f] or self:onScreen(f.x, f.y) then SFX.play("ready", 0.5, 0) end
+    end
+  end
+  world.onFire = function(e, o)
+    if self:onScreen(e.x, e.y) and (e.team == 1 or world:isVisible(e)) then
+      local w = e.def.weapon
+      local heavy = w.damage >= 60 or w.ballistic
+      SFX.play(heavy and "cannon" or "shot", (heavy and 0.7 or 0.35) * math.min(1, self.cam.zoom + 0.3))
+    end
+  end
+  world.onLevel = function(e)
+    if e.team == 1 and self:onScreen(e.x, e.y) then SFX.play("ready", 0.35, 0) end
+  end
+  world.onKill = function(o, attacker)
+    if self:onScreen(o.x, o.y) and (o.team == 1 or world:isVisible(o)) then
+      local big = o.def.building or o.key == "commander" or o.def.radius >= 14
+      SFX.play("boom", big and 0.9 or 0.5, 0.3)
+    end
+    if o.team == 1 then self.stats.lost = self.stats.lost + 1
+    elseif attacker and attacker.team == 1 then self.stats.killed = self.stats.killed + 1 end
+  end
+  self.lastAttackNotice = -100
+  return self
+end
+
+---------------------------------------------------------------------------
+-- Camera
+
+function G:viewSize()
+  return love.graphics.getWidth(), love.graphics.getHeight()
+end
+
+function G:centerOn(x, y)
+  self.follow = nil
+  local w, h = self:viewSize()
+  local z = self.cam.zoom
+  self.cam.x = x - w / 2 / z
+  self.cam.y = y - (h - UI.PANEL_H + UI.TOP_H) / 2 / z
+  self:clampCam()
+end
+
+function G:clampCam()
+  local w, h = self:viewSize()
+  local map = self.world.map
+  local mw, mh = map.w * D.TILE, map.h * D.TILE
+  local z = self.cam.zoom
+  local vw, vh = w / z, h / z
+  local padTop, padBot = UI.TOP_H / z, UI.PANEL_H / z
+  if vw >= mw then
+    self.cam.x = (mw - vw) / 2
+  else
+    self.cam.x = U.clamp(self.cam.x, 0, mw - vw)
+  end
+  local usable = vh - padTop - padBot
+  if usable >= mh then
+    self.cam.y = (mh - usable) / 2 - padTop
+  else
+    self.cam.y = U.clamp(self.cam.y, -padTop, mh - vh + padBot)
+  end
+end
+
+function G:onScreen(x, y)
+  local c = self.cam
+  if not c.wx0 then return false end
+  return x > c.wx0 - 40 and x < c.wx1 + 40 and y > c.wy0 - 40 and y < c.wy1 + 40
+end
+
+function G:screenToWorld(sx, sy)
+  return self.cam.x + sx / self.cam.zoom, self.cam.y + sy / self.cam.zoom
+end
+
+function G:worldToScreen(wx, wy)
+  return (wx - self.cam.x) * self.cam.zoom, (wy - self.cam.y) * self.cam.zoom
+end
+
+function G:zoomAt(sx, sy, factor)
+  local wx, wy = self:screenToWorld(sx, sy)
+  local w, h = self:viewSize()
+  local map = self.world.map
+  local minZoom = math.min(w / (map.w * D.TILE), (h - UI.PANEL_H) / (map.h * D.TILE)) * 0.9
+  self.cam.zoom = U.clamp(self.cam.zoom * factor, math.max(0.18, minZoom), 2.2)
+  self.cam.x = wx - sx / self.cam.zoom
+  self.cam.y = wy - sy / self.cam.zoom
+  self:clampCam()
+end
+
+---------------------------------------------------------------------------
+-- Selection helpers
+
+function G:select(list, add)
+  if not add then self.selected = {} end
+  for _, e in ipairs(list) do
+    if e.alive and e.team == 1 then self.selected[e] = true end
+  end
+  self.mode = nil
+end
+
+function G:selectedList()
+  local out = {}
+  for e in pairs(self.selected) do
+    if e.alive then out[#out + 1] = e else self.selected[e] = nil end
+  end
+  table.sort(out, function(a, b) return a.id < b.id end)
+  return out
+end
+
+function G:selectedMobile()
+  local out = {}
+  for _, e in ipairs(self:selectedList()) do
+    if not e.def.building then out[#out + 1] = e end
+  end
+  return out
+end
+
+function G:selectedBuilders()
+  local out = {}
+  for _, e in ipairs(self:selectedList()) do
+    if e.def.builds and not e.def.factory and e.built >= 1 then out[#out + 1] = e end
+  end
+  return out
+end
+
+function G:selectedFactories()
+  local out = {}
+  for _, e in ipairs(self:selectedList()) do
+    if e.def.factory and e.built >= 1 then out[#out + 1] = e end
+  end
+  return out
+end
+
+-- What the command card shows: a builder's build list or a factory's unit list
+function G:commandContext()
+  local b = self:selectedBuilders()
+  if #b > 0 then return "builder", b[1].def.builds, b end
+  local f = self:selectedFactories()
+  if #f > 0 then
+    -- use the most common factory type in the selection
+    return "factory", f[1].def.builds, f
+  end
+  return nil
+end
+
+function G:subRevealed(e)
+  local found = false
+  self.world:query(e.x, e.y, 260, function(o)
+    if o.alive and o.team == 1 and (o.def.domain == "sea" or o.def.domain == "sub") then
+      if U.dist(o.x, o.y, e.x, e.y) < 240 then found = true end
+    end
+  end)
+  return found
+end
+
+---------------------------------------------------------------------------
+-- Orders
+
+-- Spread units around a point in a loose grid, preserving their relative positions
+function G:formation(units, x, y)
+  local n = #units
+  if n == 0 then return {} end
+  if n == 1 then return { [units[1]] = { x, y } } end
+  local maxR = 0
+  local cx, cy = 0, 0
+  for _, u in ipairs(units) do
+    maxR = math.max(maxR, u.def.radius)
+    cx, cy = cx + u.x, cy + u.y
+  end
+  cx, cy = cx / n, cy / n
+  local spacing = maxR * 2 + 12
+  local cols = math.ceil(math.sqrt(n))
+  local rows = math.ceil(n / cols)
+  -- orient the grid toward the move direction
+  local dx, dy, len = U.norm(x - cx, y - cy)
+  if len < 1 then dx, dy = 0, -1 end
+  local px, py = -dy, dx
+  local slots = {}
+  for i = 0, n - 1 do
+    local c = i % cols
+    local r = math.floor(i / cols)
+    local ox = (c - (cols - 1) / 2) * spacing
+    local oy = (r - (rows - 1) / 2) * spacing
+    slots[#slots + 1] = { x + px * ox - dx * oy, y + py * ox - dy * oy }
+  end
+  -- greedy assignment: each unit takes the nearest free slot (relative to group centroid)
+  local result = {}
+  local free = {}
+  for i = 1, #slots do free[i] = true end
+  local order = {}
+  for _, u in ipairs(units) do order[#order + 1] = u end
+  table.sort(order, function(a, b)
+    return U.dist2(a.x, a.y, x, y) > U.dist2(b.x, b.y, x, y)
+  end)
+  for _, u in ipairs(order) do
+    local relx, rely = u.x - cx + x, u.y - cy + y
+    local best, bd
+    for i, s in ipairs(slots) do
+      if free[i] then
+        local d = U.dist2(relx, rely, s[1], s[2])
+        if not bd or d < bd then best, bd = i, d end
+      end
+    end
+    free[best] = false
+    result[u] = slots[best]
+  end
+  return result
+end
+
+function G:commandMove(x, y, kind, queue)
+  local units = self:selectedMobile()
+  local slots = self:formation(units, x, y)
+  for _, u in ipairs(units) do
+    local s = slots[u]
+    local o = { type = kind, x = s[1], y = s[2] }
+    if kind == "patrol" then
+      local last = queue and u.orders[#u.orders]
+      o.fromX, o.fromY = last and last.x or u.x, last and last.y or u.y
+    end
+    self.world:issue(u, o, queue)
+  end
+  for _, f in ipairs(self:selectedFactories()) do
+    self.world:issue(f, { type = kind == "patrol" and "patrol" or kind, x = x, y = y })
+  end
+  local col = kind == "amove" and { 1, 0.4, 0.3 } or (kind == "patrol" and { 0.4, 0.7, 1 } or { 0.3, 1, 0.4 })
+  self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.5, r = col[1], g = col[2], b = col[3] }
+end
+
+function G:rightClick(wx, wy, queue)
+  local world = self.world
+  local target = world:entityAt(wx, wy, function(e)
+    if e.team == 1 then return true end
+    if e.def.domain == "sub" and not self:subRevealed(e) then return false end
+    return world:isVisible(e) or (e.def.building and e.seen[1])
+  end)
+  local units = self:selectedMobile()
+  if #units == 0 then
+    -- factories only: set rally point
+    if #self:selectedFactories() > 0 then self:commandMove(wx, wy, "move") end
+    return
+  end
+  if target and target.team ~= 1 and not world:hostile(target.team, 1) then target = nil end
+  if target and target.team ~= 1 then
+    for _, u in ipairs(units) do
+      if u.def.weapon and world:canTarget(u, target) then
+        world:issue(u, { type = "attack", target = target }, queue)
+      elseif not u.def.weapon then
+        world:issue(u, { type = "move", x = target.x, y = target.y, arrive = 120 }, queue)
+      end
+    end
+    world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 1, g = 0.3, b = 0.2 }
+    return
+  end
+  if target and target.team == 1 then
+    local helps = target.built < 1 or target.hp < target.maxhp or target.def.factory
+    local others = {}
+    for _, u in ipairs(units) do
+      if u.def.builds and helps and u ~= target then
+        world:issue(u, { type = "assist", target = target, persist = target.def.factory and target.built >= 1 }, queue)
+      else
+        others[#others + 1] = u
+      end
+    end
+    if #others > 0 then
+      local slots = self:formation(others, wx, wy)
+      for _, u in ipairs(others) do
+        world:issue(u, { type = "move", x = slots[u][1], y = slots[u][2] }, queue)
+      end
+    end
+    world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 0.4, g = 1, b = 0.6 }
+    return
+  end
+  self:commandMove(wx, wy, "move", queue)
+end
+
+function G:stop()
+  for _, u in ipairs(self:selectedMobile()) do
+    u.orders = {}
+    u.path = nil
+    u.chase = nil
+    u.homeX, u.homeY = u.x, u.y
+  end
+end
+
+function G:placeBuilding(wx, wy, queue)
+  local key = self.buildKey
+  local tx, ty = self.world:footprintAt(key, wx, wy)
+  if not self.world:canPlace(key, tx, ty, 1) then
+    self:notice("Can't build there", 1.2)
+    return false
+  end
+  local builders = self:selectedBuilders()
+  for _, b in ipairs(builders) do
+    if self:builderCan(b, key) then
+      self.world:issue(b, { type = "build", key = key, tx = tx, ty = ty }, queue)
+    end
+  end
+  -- remember planned spot so ghosts are shown
+  return true
+end
+
+-- Valid build spots inside a dragged rectangle: extractors on every free deposit,
+-- other buildings packed in a grid with a one-tile walkway between them.
+function G:areaSites(key, ax, ay, bx, by)
+  local world = self.world
+  local map = world.map
+  local d = D.units[key]
+  local T = D.TILE
+  local x0, x1 = math.min(ax, bx), math.max(ax, bx)
+  local y0, y1 = math.min(ay, by), math.max(ay, by)
+  -- tiles already promised to queued builds
+  local planned = {}
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == 1 then
+      for _, o in ipairs(e.orders) do
+        if o.type == "build" and not o.ent then
+          local od = D.units[o.key]
+          for yy = o.ty, o.ty + od.h - 1 do for xx = o.tx, o.tx + od.w - 1 do planned[yy * map.w + xx] = true end end
+        end
+      end
+    end
+  end
+  local function free(tx, ty)
+    for yy = ty, ty + d.h - 1 do for xx = tx, tx + d.w - 1 do
+      if planned[yy * map.w + xx] then return false end
+    end end
+    return world:canPlace(key, tx, ty, 1)
+  end
+  local sites = {}
+  if key == "mex" then
+    for _, dp in ipairs(map.deposits) do
+      local cx, cy = map:center(dp.x, dp.y)
+      if cx >= x0 - T / 2 and cx <= x1 + T / 2 and cy >= y0 - T / 2 and cy <= y1 + T / 2 and free(dp.x, dp.y) then
+        sites[#sites + 1] = { tx = dp.x, ty = dp.y }
+      end
+    end
+  else
+    local tx0, ty0 = world:footprintAt(key, x0, y0)
+    local tx1, ty1 = world:footprintAt(key, x1, y1)
+    local stepX, stepY = d.w + 1, d.h + 1
+    -- a thin drag is a line: pack along it
+    if tx1 - tx0 < d.w then stepX = d.w + 1 end
+    for ty = ty0, math.max(ty0, ty1), stepY do
+      for tx = tx0, math.max(tx0, tx1), stepX do
+        if free(tx, ty) then sites[#sites + 1] = { tx = tx, ty = ty } end
+        if #sites >= 40 then break end
+      end
+      if #sites >= 40 then break end
+    end
+  end
+  return sites
+end
+
+-- Hand out sites so each builder works through the ones nearest to it first
+function G:assignSites(key, sites, queue)
+  local d = D.units[key]
+  local T = D.TILE
+  local builders = {}
+  for _, b in ipairs(self:selectedBuilders()) do
+    if self:builderCan(b, key) then builders[#builders + 1] = b end
+  end
+  if #builders == 0 then return end
+  local pos = {}
+  for i, b in ipairs(builders) do
+    pos[i] = { b.x, b.y }
+    if queue and #b.orders > 0 then
+      local o = b.orders[#b.orders]
+      if o.x then pos[i] = { o.x, o.y } end
+      if o.tx then pos[i] = { (o.tx + D.units[o.key].w / 2) * T, (o.ty + D.units[o.key].h / 2) * T } end
+    end
+    if not queue then b.orders = {}; b.path = nil end
+  end
+  local left = {}
+  for i, st in ipairs(sites) do left[i] = st end
+  while #left > 0 do
+    local bi, si, bd
+    for i, p in ipairs(pos) do
+      for j, st in ipairs(left) do
+        local cx, cy = (st.tx + d.w / 2) * T, (st.ty + d.h / 2) * T
+        local dd = U.dist2(p[1], p[2], cx, cy)
+        if not bd or dd < bd then bi, si, bd = i, j, dd end
+      end
+    end
+    local st = table.remove(left, si)
+    self.world:issue(builders[bi], { type = "build", key = key, tx = st.tx, ty = st.ty }, true)
+    pos[bi] = { (st.tx + d.w / 2) * T, (st.ty + d.h / 2) * T }
+  end
+end
+
+function G:builderCan(b, key)
+  for _, k in ipairs(b.def.builds) do if k == key then return true end end
+  return false
+end
+
+function G:queueUnit(key, count, remove)
+  local factories = {}
+  for _, f in ipairs(self:selectedFactories()) do
+    for _, k in ipairs(f.def.builds) do if k == key then factories[#factories + 1] = f; break end end
+  end
+  if #factories == 0 then return end
+  for _ = 1, count do
+    if remove then
+      -- remove from the factory that has the most of this unit queued
+      local best, bn = nil, 0
+      for _, f in ipairs(factories) do
+        local n = 0
+        for _, k in ipairs(f.queue) do if k == key then n = n + 1 end end
+        if n > bn then best, bn = f, n end
+      end
+      if best then
+        for i = #best.queue, 1, -1 do
+          if best.queue[i] == key then
+            table.remove(best.queue, i)
+            if i == 1 then best.progress = 0 end
+            break
+          end
+        end
+      end
+    else
+      table.sort(factories, function(a, b) return #a.queue < #b.queue end)
+      local f = factories[1]
+      f.queue[#f.queue + 1] = key
+    end
+  end
+end
+
+function G:activateSlot(i, shift, right)
+  local ctx, list = self:commandContext()
+  if not ctx then return end
+  local key = list[i]
+  if not key then return end
+  if ctx == "builder" then
+    self.mode = "build"
+    self.buildKey = key
+  else
+    self:queueUnit(key, shift and 5 or 1, right)
+  end
+end
+
+function G:notice(text, life, x, y)
+  self.notices[#self.notices + 1] = { text = text, t = 0, life = life or 2.5, x = x, y = y }
+  if #self.notices > 4 then table.remove(self.notices, 1) end
+end
+
+---------------------------------------------------------------------------
+-- Update
+
+function G:update(dt)
+  if self.world.over then
+    if not self.overShown then
+      self.overShown = true
+      self.overTime = love.timer.getTime()
+    end
+  end
+  self:applyMouseLock()
+  if self.paused or self.menuOpen or self.naming then return end
+
+  -- camera panning: arrows / screen edge (wider zone, speeds up near the very edge)
+  local w, h = self:viewSize()
+  local mx, my = love.mouse.getPosition()
+  local pan = 1000 / self.cam.zoom * dt
+  local kd = love.keyboard.isDown
+  local dx, dy = 0, 0
+  if kd("left") then dx = dx - 1 end
+  if kd("right") then dx = dx + 1 end
+  if kd("up") then dy = dy - 1 end
+  if kd("down") then dy = dy + 1 end
+  if self.edgePan and love.window.hasMouseFocus() and not self.dragPan and not self.rightPan then
+    local edge = 18
+    local function ramp(d) return 0.35 + 0.65 * (1 - d / edge) end
+    if mx <= edge then dx = dx - ramp(mx) end
+    if mx >= w - 1 - edge then dx = dx + ramp(w - 1 - mx) end
+    if my <= edge then dy = dy - ramp(my) end
+    if my >= h - 1 - edge then dy = dy + ramp(h - 1 - my) end
+  end
+  if dx ~= 0 or dy ~= 0 then
+    self.follow = nil
+    self.cam.x = self.cam.x + dx * pan
+    self.cam.y = self.cam.y + dy * pan
+    self:clampCam()
+  end
+  self:updateFollow(dt)
+
+  local step = dt * self.speed
+  -- fixed sub-steps for stability
+  local n = math.max(1, math.ceil(step / 0.034))
+  for _ = 1, n do
+    self.world:update(step / n)
+    for _, ai in ipairs(self.ais) do ai:update(step / n) end
+  end
+
+  -- under attack notices
+  local tm = self.world.teams[1]
+  if tm.lastAttacked > self.lastAttackNotice + 12 and self.world.time - tm.lastAttacked < 0.5 then
+    self.lastAttackNotice = self.world.time
+    self:notice("Under attack!  (press Space to jump there)", 3)
+    self.attackX, self.attackY = tm.lastAttackX, tm.lastAttackY
+    if not self:onScreen(tm.lastAttackX, tm.lastAttackY) then SFX.play("alert", 0.6, 0) end
+  end
+
+  for i = #self.notices, 1, -1 do
+    local nt = self.notices[i]
+    nt.t = nt.t + dt
+    if nt.t > nt.life then table.remove(self.notices, i) end
+  end
+end
+
+---------------------------------------------------------------------------
+-- Draw
+
+function G:draw()
+  local lg = love.graphics
+  local w, h = self:viewSize()
+  lg.clear(0.05, 0.07, 0.09)
+  local cam = self.cam
+  cam.wx0, cam.wy0 = self:screenToWorld(0, 0)
+  cam.wx1, cam.wy1 = self:screenToWorld(w, h)
+  lg.push()
+  lg.scale(cam.zoom)
+  lg.translate(-cam.x, -cam.y)
+  R.drawWorld(cam, self)
+  self:drawOverlays()
+  lg.pop()
+
+  -- box selection
+  if self.boxStart then
+    local mx, my = love.mouse.getPosition()
+    local x0, y0 = self.boxStart[1], self.boxStart[2]
+    if math.abs(mx - x0) > 4 or math.abs(my - y0) > 4 then
+      lg.setColor(0.3, 1, 0.4, 0.12)
+      lg.rectangle("fill", math.min(x0, mx), math.min(y0, my), math.abs(mx - x0), math.abs(my - y0))
+      lg.setColor(0.3, 1, 0.4, 0.8)
+      lg.setLineWidth(1)
+      lg.rectangle("line", math.min(x0, mx), math.min(y0, my), math.abs(mx - x0), math.abs(my - y0))
+    end
+  end
+
+  UI.draw(self)
+end
+
+-- Orders, build ghosts, rally points, range rings for the selection
+function G:drawOverlays()
+  local lg = love.graphics
+  local world = self.world
+  local T = D.TILE
+  if self.flag then
+    local fx, fy = self.flag.x, self.flag.y
+    lg.setColor(0, 0, 0, 0.4)
+    lg.ellipse("fill", fx, fy, 8, 3)
+    lg.setColor(0.85, 0.85, 0.85)
+    lg.setLineWidth(2)
+    lg.line(fx, fy, fx, fy - 34)
+    local wave = math.sin(love.timer.getTime() * 4) * 2
+    lg.setColor(1, 0.85, 0.3)
+    lg.polygon("fill", fx, fy - 34, fx + 20, fy - 29 + wave, fx, fy - 23)
+  end
+  local shift = love.keyboard.isDown("lshift", "rshift")
+  for _, e in ipairs(self:selectedList()) do
+    -- order waypoints
+    if not e.def.building and (#e.orders > 0) then
+      local px, py = e.x, e.y
+      for _, o in ipairs(e.orders) do
+        local ox, oy = o.x, o.y
+        if o.type == "build" then ox, oy = (o.tx + D.units[o.key].w / 2) * T, (o.ty + D.units[o.key].h / 2) * T end
+        if (o.type == "attack" or o.type == "assist") and o.target then ox, oy = o.target.x, o.target.y end
+        if ox then
+          local c = ({ move = { 0.3, 1, 0.4 }, amove = { 1, 0.4, 0.3 }, attack = { 1, 0.2, 0.2 }, patrol = { 0.4, 0.7, 1 }, build = { 0.4, 0.9, 1 }, assist = { 0.4, 0.9, 1 }, retreat = { 1, 0.85, 0.3 } })[o.type] or { 1, 1, 1 }
+          lg.setColor(c[1], c[2], c[3], shift and 0.6 or 0.3)
+          lg.setLineWidth(1.5)
+          lg.line(px, py, ox, oy)
+          lg.circle("fill", ox, oy, 3)
+          px, py = ox, oy
+        end
+        -- planned building ghost
+        if o.type == "build" and not o.ent then
+          local d = D.units[o.key]
+          lg.setColor(0.4, 0.9, 1, 0.25)
+          lg.rectangle("fill", o.tx * T + 2, o.ty * T + 2, d.w * T - 4, d.h * T - 4, 4)
+          lg.setColor(0.4, 0.9, 1, 0.7)
+          lg.rectangle("line", o.tx * T + 2, o.ty * T + 2, d.w * T - 4, d.h * T - 4, 4)
+        end
+      end
+    end
+    -- rally point
+    if e.def.factory and e.rally then
+      lg.setColor(0.3, 1, 0.4, 0.5)
+      lg.setLineWidth(1)
+      lg.line(e.x, e.y, e.rally.x, e.rally.y)
+      lg.circle("line", e.rally.x, e.rally.y, 8)
+    end
+    -- weapon range ring
+    if e.def.weapon and e.built >= 1 then
+      lg.setColor(1, 0.4, 0.3, 0.12)
+      lg.setLineWidth(1)
+      lg.circle("line", e.x, e.y, self.world:rangeOf(e))
+    end
+  end
+
+  -- drag-to-build preview
+  if self.mode == "build" and self.buildKey and self.buildDrag then
+    local mx, my = love.mouse.getPosition()
+    local wx, wy = self:screenToWorld(mx, my)
+    local sx, sy = self.buildDrag[1], self.buildDrag[2]
+    local d = D.units[self.buildKey]
+    lg.setColor(0.4, 0.9, 1, 0.12)
+    lg.rectangle("fill", math.min(sx, wx), math.min(sy, wy), math.abs(wx - sx), math.abs(wy - sy))
+    lg.setColor(0.4, 0.9, 1, 0.6)
+    lg.setLineWidth(1)
+    lg.rectangle("line", math.min(sx, wx), math.min(sy, wy), math.abs(wx - sx), math.abs(wy - sy))
+    if math.abs(wx - sx) > T * 0.5 or math.abs(wy - sy) > T * 0.5 then
+      for _, st in ipairs(self:areaSites(self.buildKey, sx, sy, wx, wy)) do
+        lg.setColor(0.3, 1, 0.4, 0.35)
+        lg.rectangle("fill", st.tx * T + 2, st.ty * T + 2, d.w * T - 4, d.h * T - 4, 4)
+        lg.setColor(0.3, 1, 0.4, 0.9)
+        lg.rectangle("line", st.tx * T + 2, st.ty * T + 2, d.w * T - 4, d.h * T - 4, 4)
+      end
+      return
+    end
+  end
+  -- build placement ghost
+  if self.mode == "build" and self.buildKey then
+    local mx, my = love.mouse.getPosition()
+    if not UI.overPanel(self, mx, my) then
+      local wx, wy = self:screenToWorld(mx, my)
+      local d = D.units[self.buildKey]
+      local tx, ty = world:footprintAt(self.buildKey, wx, wy)
+      local ok = world:canPlace(self.buildKey, tx, ty, 1)
+      if ok then lg.setColor(0.3, 1, 0.4, 0.35) else lg.setColor(1, 0.25, 0.2, 0.35) end
+      lg.rectangle("fill", tx * T, ty * T, d.w * T, d.h * T, 4)
+      if ok then lg.setColor(0.3, 1, 0.4, 0.9) else lg.setColor(1, 0.25, 0.2, 0.9) end
+      lg.setLineWidth(2)
+      lg.rectangle("line", tx * T, ty * T, d.w * T, d.h * T, 4)
+      if d.weapon then
+        lg.setColor(1, 1, 1, 0.25)
+        lg.circle("line", (tx + d.w / 2) * T, (ty + d.h / 2) * T, d.weapon.range)
+      end
+      -- highlight deposits when placing an extractor
+      if self.buildKey == "mex" then
+        for _, dp in ipairs(world.map.deposits) do
+          local i = world.map:idx(dp.x, dp.y)
+          if not world.map.blocked[i] then
+            lg.setColor(1, 0.9, 0.3, 0.6)
+            lg.circle("line", (dp.x + 0.5) * T, (dp.y + 0.5) * T, 14)
+          end
+        end
+      end
+    end
+  end
+end
+
+---------------------------------------------------------------------------
+-- Input
+
+function G:mousepressed(x, y, button)
+  if self.naming then return end
+  if self.world.over and self.overShown then
+    return UI.overClick(self, x, y, button)
+  end
+  if self.menuOpen then return UI.menuClick(self, x, y, button) end
+  if UI.click(self, x, y, button) then return end
+  local wx, wy = self:screenToWorld(x, y)
+  local shift = love.keyboard.isDown("lshift", "rshift")
+  if button == 1 then
+    if self.mode == "build" then
+      -- start a possible drag; single click is handled on release
+      self.buildDrag = { wx, wy }
+      return
+    elseif self.mode == "amove" or self.mode == "patrol" then
+      self:commandMove(wx, wy, self.mode, shift)
+      if not shift then self.mode = nil end
+      return
+    end
+    self.boxStart = { x, y }
+  elseif button == 2 then
+    if self.mode then self.mode = nil; return end
+    -- decide on release: a drag pans the camera, a click gives an order
+    self.rightDown = { x, y, self.cam.x, self.cam.y }
+    self.rightPan = false
+  elseif button == 3 then
+    self.dragPan = { x, y, self.cam.x, self.cam.y }
+    self.follow = nil
+  end
+end
+
+function G:mousereleased(x, y, button)
+  if button == 3 then self.dragPan = nil end
+  if button == 2 and self.rightDown then
+    local wasPan = self.rightPan
+    self.rightDown, self.rightPan = nil, false
+    if not wasPan then
+      local wx, wy = self:screenToWorld(x, y)
+      self:rightClick(wx, wy, love.keyboard.isDown("lshift", "rshift"))
+    end
+    return
+  end
+  if button == 1 then self.minimapDrag = false end
+  if button == 1 and self.buildDrag and self.mode == "build" then
+    local shift = love.keyboard.isDown("lshift", "rshift")
+    local wx, wy = self:screenToWorld(x, y)
+    local sx, sy = self.buildDrag[1], self.buildDrag[2]
+    self.buildDrag = nil
+    local d = D.units[self.buildKey]
+    if math.abs(wx - sx) < d.w * D.TILE * 0.6 and math.abs(wy - sy) < d.h * D.TILE * 0.6 then
+      if self:placeBuilding(wx, wy, shift) and not shift then self.mode = nil end
+    else
+      local sites = self:areaSites(self.buildKey, sx, sy, wx, wy)
+      if #sites == 0 then
+        self:notice("Nowhere to build in that area", 1.2)
+      else
+        self:assignSites(self.buildKey, sites, shift)
+        self:notice(#sites .. " x " .. d.name .. " queued (nearest first)", 1.5)
+        if not shift then self.mode = nil end
+      end
+    end
+    return
+  end
+  self.buildDrag = nil
+  if button ~= 1 or not self.boxStart then return end
+  local x0, y0 = self.boxStart[1], self.boxStart[2]
+  self.boxStart = nil
+  local shift = love.keyboard.isDown("lshift", "rshift")
+  local world = self.world
+  if math.abs(x - x0) <= 4 and math.abs(y - y0) <= 4 then
+    -- click select
+    local wx, wy = self:screenToWorld(x, y)
+    local e = world:entityAt(wx, wy, function(o) return o.team == 1 end)
+    if not e then
+      if not shift then self.selected = {} end
+      return
+    end
+    local now = love.timer.getTime()
+    if self.lastClick.e == e and now - self.lastClick.t < 0.35 then
+      -- double click: all of this type on screen
+      local list = {}
+      local cam = self.cam
+      for _, o in ipairs(world.entities) do
+        if o.alive and o.team == 1 and o.key == e.key and o.x > cam.wx0 and o.x < cam.wx1 and o.y > cam.wy0 and o.y < cam.wy1 then
+          list[#list + 1] = o
+        end
+      end
+      self:select(list, shift)
+    elseif shift and self.selected[e] then
+      self.selected[e] = nil
+    else
+      self:select({ e }, shift)
+    end
+    self.lastClick = { t = now, e = e }
+    return
+  end
+  -- box select: prefer mobile units over buildings
+  local ax, ay = self:screenToWorld(math.min(x, x0), math.min(y, y0))
+  local bx, by = self:screenToWorld(math.max(x, x0), math.max(y, y0))
+  local units, buildings = {}, {}
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == 1 and e.x >= ax and e.x <= bx and e.y >= ay and e.y <= by then
+      if e.def.building then buildings[#buildings + 1] = e else units[#units + 1] = e end
+    end
+  end
+  if #units > 0 then self:select(units, shift)
+  elseif #buildings > 0 then self:select(buildings, shift)
+  elseif not shift then self.selected = {} end
+end
+
+function G:mousemoved(x, y, dx, dy)
+  local rd = self.rightDown
+  if rd then
+    if not self.rightPan and (math.abs(x - rd[1]) > 8 or math.abs(y - rd[2]) > 8) then
+      self.rightPan = true
+      self.follow = nil
+    end
+    if self.rightPan then
+      local z = self.cam.zoom
+      self.cam.x = rd[3] - (x - rd[1]) / z
+      self.cam.y = rd[4] - (y - rd[2]) / z
+      self:clampCam()
+    end
+  end
+  if self.dragPan then
+    local z = self.cam.zoom
+    self.cam.x = self.dragPan[3] - (x - self.dragPan[1]) / z
+    self.cam.y = self.dragPan[4] - (y - self.dragPan[2]) / z
+    self:clampCam()
+  end
+  if self.minimapDrag then UI.minimapDrag(self, x, y) end
+end
+
+function G:wheelmoved(dx, dy)
+  local mx, my = love.mouse.getPosition()
+  if UI.overPanel(self, mx, my) then return end
+  if love.keyboard.isDown("lalt", "ralt") then
+    -- Option + two-finger scroll pans (handy on a trackpad)
+    self.follow = nil
+    self.cam.x = self.cam.x - dx * 40 / self.cam.zoom
+    self.cam.y = self.cam.y - dy * 40 / self.cam.zoom
+    self:clampCam()
+    return
+  end
+  if dy ~= 0 then self:zoomAt(mx, my, dy > 0 and 1.12 or 1 / 1.12) end
+end
+
+-- Camera that tracks units. Cinematic mode also zooms to frame them.
+function G:startFollow(cinematic)
+  local list = self:selectedList()
+  if #list == 0 then self.follow = nil; return end
+  if self.follow then self.follow = nil; self:notice("Camera unlocked", 1); return end
+  self.follow = { units = list, cinematic = cinematic }
+  self:notice((cinematic and "Cinematic camera" or "Camera locked") .. " on " .. #list .. " units  (L or pan to release)", 1.6)
+end
+
+function G:updateFollow(dt)
+  local f = self.follow
+  if not f then return end
+  local alive = {}
+  local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+  for _, e in ipairs(f.units) do
+    if e.alive then
+      alive[#alive + 1] = e
+      x0, y0 = math.min(x0, e.x), math.min(y0, e.y)
+      x1, y1 = math.max(x1, e.x), math.max(y1, e.y)
+    end
+  end
+  f.units = alive
+  if #alive == 0 then self.follow = nil; return end
+  local cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+  local w, h = self:viewSize()
+  local z = self.cam.zoom
+  if f.cinematic then
+    local vh = h - UI.PANEL_H - UI.TOP_H
+    local target = math.min(w / (x1 - x0 + 700), vh / (y1 - y0 + 500))
+    target = U.clamp(target, 0.45, 1.4)
+    local nz = z + (target - z) * math.min(1, dt * 0.8)
+    self.cam.zoom = nz
+    z = nz
+  end
+  local tx = cx - w / 2 / z
+  local ty = cy - (h - UI.PANEL_H + UI.TOP_H) / 2 / z
+  local k = math.min(1, dt * (f.cinematic and 1.8 or 5))
+  self.cam.x = self.cam.x + (tx - self.cam.x) * k
+  self.cam.y = self.cam.y + (ty - self.cam.y) * k
+  self:clampCam()
+end
+
+-- Keep the pointer inside the window so screen-edge panning always works
+function G:applyMouseLock()
+  local want = self.mouseLock and not self.menuOpen and not self.world.over and love.window.hasFocus()
+  love.mouse.setGrabbed(want and true or false)
+end
+
+function G:keypressed(key)
+  if self.naming then return self:namingKey(key) end
+  local ctrl = love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")
+  local shift = love.keyboard.isDown("lshift", "rshift")
+  if self.world.over and self.overShown then return end
+
+  if key == "escape" then
+    if self.showHelp then self.showHelp = false
+    elseif self.mode then self.mode = nil
+    else self.menuOpen = not self.menuOpen end
+    return
+  end
+  if self.menuOpen then return end
+  if key == "f1" then self.showHelp = not self.showHelp; return end
+  if key == "pause" or key == "f3" then self.paused = not self.paused; return end
+
+  local n = tonumber(key)
+  local alt = love.keyboard.isDown("lalt", "ralt")
+  if n and n >= 0 and n <= 9 and alt then
+    -- Option/Alt+number: new units from the selected factories join that group (0 = none)
+    local facs = self:selectedFactories()
+    for _, f in ipairs(facs) do f.assignGroup = (n > 0) and n or nil end
+    if #facs > 0 then
+      self:notice(n > 0 and ("New units from " .. #facs .. " factory(s) will join group " .. n) or "Factory group cleared", 1.6)
+    end
+    return
+  end
+  if n and n >= 1 and n <= 9 then
+    if ctrl then
+      self.groups[n] = self:selectedList()
+      self:notice("Group " .. n .. " set (" .. #self.groups[n] .. ")", 1.2)
+    elseif shift then
+      local g = self.groups[n] or {}
+      local have = {}
+      for _, e in ipairs(g) do have[e] = true end
+      for _, e in ipairs(self:selectedList()) do if not have[e] then g[#g + 1] = e end end
+      self.groups[n] = g
+    else
+      local g = self.groups[n]
+      if g then
+        local alive = {}
+        for _, e in ipairs(g) do if e.alive then alive[#alive + 1] = e end end
+        self.groups[n] = alive
+        self:select(alive)
+        local now = love.timer.getTime()
+        if self.lastGroupTap.n == n and now - self.lastGroupTap.t < 0.4 and #alive > 0 then
+          local cx, cy = 0, 0
+          for _, e in ipairs(alive) do cx, cy = cx + e.x, cy + e.y end
+          self:centerOn(cx / #alive, cy / #alive)
+        end
+        self.lastGroupTap = { n = n, t = now }
+      end
+    end
+    return
+  end
+
+  if ctrl and key == "a" then
+    self:selectAllArmy()
+    return
+  end
+  if key == "h" then
+    if shift then self:selectOtherHalf() else self:selectHalf() end
+    return
+  end
+  if key == "f" then
+    if ctrl then
+      local mx, my = love.mouse.getPosition()
+      local wx, wy = self:screenToWorld(mx, my)
+      self.flag = { x = wx, y = wy }
+      self:notice("Retreat flag placed", 1.2)
+    else
+      self:retreat(shift and "commander" or "flag")
+    end
+    return
+  end
+  if ctrl and key == "b" then
+    self:select(self.world:teamEntities(1, function(e) return e.key == "builder" end))
+    return
+  end
+
+  -- build / produce slots
+  for i, hk in ipairs(D.hotkeys) do
+    if key == hk then self:activateSlot(i, shift); return end
+  end
+
+  if key == "a" then
+    if #self:selectedMobile() > 0 then self.mode = "amove" end
+  elseif key == "s" then
+    self:stop()
+  elseif key == "p" then
+    if #self:selectedMobile() > 0 then self.mode = "patrol" end
+  elseif key == "space" then
+    if self.attackX and self.world.time - self.world.teams[1].lastAttacked < 15 then
+      self:centerOn(self.attackX, self.attackY)
+    else
+      local c = self.world.teams[1].commander
+      if c and c.alive then self:centerOn(c.x, c.y) end
+    end
+  elseif key == "home" or key == "c" then
+    local c = self.world.teams[1].commander
+    if c and c.alive then self:centerOn(c.x, c.y); self:select({ c }) end
+  elseif key == "l" then
+    self:startFollow(shift)
+  elseif key == "f9" then
+    self.mouseLock = not self.mouseLock
+    self:notice(self.mouseLock and "Mouse kept inside window (edge panning on)" or "Mouse free to leave window", 1.6)
+  elseif key == "f8" then
+    self.edgePan = not self.edgePan
+    self:notice(self.edgePan and "Edge panning on" or "Edge panning off", 1.2)
+  elseif key == "tab" then
+    self:selectIdleBuilder()
+  elseif key == "=" or key == "kp+" then
+    self:setSpeed(self.speed + 0.5)
+  elseif key == "-" or key == "kp-" then
+    self:setSpeed(self.speed - 0.5)
+  elseif key == "b" and not ctrl then
+    self.showSidebar = not self.showSidebar
+  elseif key == "delete" or key == "backspace" then
+    -- cancel last queued order
+    for _, u in ipairs(self:selectedMobile()) do
+      if #u.orders > 0 then table.remove(u.orders); u.path = nil end
+    end
+  elseif key == "g" then
+    for _, f in ipairs(self:selectedFactories()) do f.repeatMode = not f.repeatMode end
+  elseif key == "m" then
+    SFX.muted = not SFX.muted
+    self:notice(SFX.muted and "Sound off" or "Sound on", 1)
+  end
+end
+
+-- Saving the current map under a name (seed + settings)
+function G:startNaming()
+  self.menuOpen = false
+  self.naming = { text = "Map " .. self.world.map.seed }
+  love.keyboard.setTextInput(true)
+end
+
+function G:textinput(t)
+  if self.naming and #self.naming.text < 40 then self.naming.text = self.naming.text .. t end
+end
+
+function G:namingKey(key)
+  local n = self.naming
+  if key == "escape" then
+    self.naming = nil
+  elseif key == "backspace" then
+    n.text = n.text:sub(1, -2)
+  elseif key == "return" or key == "kpenter" then
+    local name = n.text:gsub("^%s+", ""):gsub("%s+$", "")
+    if #name > 0 then
+      local map = self.world.map
+      require("src.maps").add({ name = name, seed = map.seed, size = map.w, water = self.opts.water or 0.3, np = map.four and 4 or 2 })
+      self:notice("Saved map \"" .. name .. "\"", 2)
+    end
+    self.naming = nil
+  end
+  if not self.naming then love.keyboard.setTextInput(false) end
+end
+
+function G:setSpeed(v)
+  self.speed = U.clamp(v, 0.5, 3)
+  self:notice("Game speed " .. self.speed .. "x", 1)
+end
+
+-- Pull the selected units back (weapons off, +25% speed) to the flag or the Commander
+function G:retreat(where)
+  local units = self:selectedMobile()
+  local list = {}
+  for _, u in ipairs(units) do if u.key ~= "commander" then list[#list + 1] = u end end
+  if #list == 0 then return end
+  local c = self.world.teams[1].commander
+  local x, y
+  if where == "flag" and self.flag then x, y = self.flag.x, self.flag.y
+  elseif c and c.alive then x, y = c.x, c.y
+  else x, y = self.world.teams[1].startX, self.world.teams[1].startY end
+  local slots = self:formation(list, x, y)
+  for _, u in ipairs(list) do
+    self.world:issue(u, { type = "retreat", x = slots[u][1], y = slots[u][2] })
+  end
+  self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.6, r = 1, g = 0.85, b = 0.3 }
+  local name = (where == "flag" and self.flag) and "the flag" or "the Commander"
+  self:notice("Retreating " .. #list .. " units to " .. name, 1.2)
+end
+
+-- Every combat unit you own (not the Commander or constructors)
+function G:selectAllArmy()
+  local list = self.world:teamEntities(1, function(e)
+    return not e.def.building and e.def.weapon and e.key ~= "commander"
+  end)
+  self:select(list)
+  self:notice("Selected all " .. #list .. " combat units", 1)
+end
+
+-- Keep half of the current selection, balanced per unit type, preferring
+-- the units nearest the mouse pointer. Shift+H later grabs the other half.
+function G:selectHalf()
+  local list = self:selectedList()
+  if #list < 2 then return end
+  local mx, my = love.mouse.getPosition()
+  local wx, wy = self:screenToWorld(mx, my)
+  local byType, types = {}, {}
+  for _, e in ipairs(list) do
+    if not byType[e.key] then byType[e.key] = {}; types[#types + 1] = e.key end
+    local t = byType[e.key]
+    t[#t + 1] = e
+  end
+  local keep, rest = {}, {}
+  for _, k in ipairs(types) do
+    local t = byType[k]
+    table.sort(t, function(a, b) return U.dist2(a.x, a.y, wx, wy) < U.dist2(b.x, b.y, wx, wy) end)
+    local n = math.ceil(#t / 2)
+    for i, e in ipairs(t) do
+      if i <= n then keep[#keep + 1] = e else rest[#rest + 1] = e end
+    end
+  end
+  self.otherHalf = rest
+  self:select(keep)
+  self:notice(string.format("Half: %d selected  (Shift+H = the other %d)", #keep, #rest), 1.5)
+end
+
+function G:selectOtherHalf()
+  if not self.otherHalf then return end
+  local alive = {}
+  for _, e in ipairs(self.otherHalf) do if e.alive then alive[#alive + 1] = e end end
+  if #alive == 0 then return end
+  local prev = self:selectedList()
+  self:select(alive)
+  self.otherHalf = prev
+  self:notice("Other half: " .. #alive .. " selected", 1.2)
+end
+
+function G:selectIdleBuilder()
+  local idle = self.world:teamEntities(1, function(e) return e.def.builds and not e.def.factory and #e.orders == 0 end)
+  if #idle == 0 then self:notice("No idle constructors", 1.2); return end
+  self.idleIdx = ((self.idleIdx or 0) % #idle) + 1
+  local b = idle[self.idleIdx]
+  self:select({ b })
+  self:centerOn(b.x, b.y)
+end
+
+return G
