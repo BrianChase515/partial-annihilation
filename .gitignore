@@ -1,3 +1,4 @@
 *.love
 !dist/PartialAnnihilation.love
 .DS_Store
+__pycache__/
