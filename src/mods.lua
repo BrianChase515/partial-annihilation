@@ -36,12 +36,19 @@ function M.init(world, mods)
   if world.mods.alien then
     world.alien = { state = "waiting", arriveAt = M.ALIEN_FIRST, captures = 0 }
   end
-  if world.mods.score then
+  -- Score runs in every game. It is "official" (high-score table, online board) only when
+  -- no gameplay modifiers are on; Groovy is cosmetic so it doesn't count.
+  world.official = not (world.mods.alien or world.mods.drops)
+  do
     world.score = {}
-    for t = 1, world.np do world.score[t] = { pts = 0, streak = 0, mult = 1, last = -99 } end
+    for t = 1, world.np do
+      world.score[t] = { pts = 0, streak = 0, mult = 1, last = -99,
+        killPts = 0, streakPts = 0, buildPts = 0, cmdPts = 0,
+        kills = 0, bldKills = 0, cmdKills = 0, bestStreak = 0, bestMult = 1, built = 0, lost = 0 }
+    end
     -- par time: bigger maps and more opponents take longer
     local size = world.map.w
-    local par = (size <= 72 and 9) or (size <= 96 and 12) or 16
+    local par = (size <= 96 and 10) or (size <= 128 and 13) or 17
     par = par + 2 * math.max(0, world.np - 2)
     world.parTime = par * 60
   end
@@ -265,7 +272,7 @@ end
 ---------------------------------------------------------------------------
 -- Score
 
-function M.addPoints(world, team, pts, streaky)
+function M.addPoints(world, team, pts, streaky, kind)
   local sc = world.score and world.score[team]
   if not sc or not team or team < 1 then return end
   if streaky then
@@ -273,8 +280,13 @@ function M.addPoints(world, team, pts, streaky)
     sc.streak = sc.streak + 1
     sc.mult = math.min(M.STREAK_MAX, 1 + M.STREAK_STEP * (sc.streak - 1))
     sc.last = world.time
+    sc.bestStreak = math.max(sc.bestStreak, sc.streak)
+    sc.bestMult = math.max(sc.bestMult, sc.mult)
+    sc.killPts = sc.killPts + pts
+    sc.streakPts = sc.streakPts + pts * (sc.mult - 1)
     pts = pts * sc.mult
-  end
+  elseif kind == "build" then sc.buildPts = sc.buildPts + pts
+  elseif kind == "cmd" then sc.cmdPts = sc.cmdPts + pts end
   sc.pts = sc.pts + pts
 end
 
@@ -285,15 +297,22 @@ function M.onKill(world, o, attacker)
   if o.key == "commander" then v = 3000 end
   v = v * (1 + 0.1 * ((o.key == "commander" and o.clevel) or o.level or 0))
   if o.def.building then v = v * 0.75 end
+  local sc = world.score[attacker.team]
+  if o.key == "commander" then sc.cmdKills = sc.cmdKills + 1
+  elseif o.def.building then sc.bldKills = sc.bldKills + 1
+  else sc.kills = sc.kills + 1 end
   M.addPoints(world, attacker.team, v, true)
 end
 
 function M.onBuilt(world, b)
-  if b.def.cost then M.addPoints(world, b.team, b.def.cost.metal * 0.1, false) end
+  if b.def.cost and world.score and world.score[b.team] then
+    world.score[b.team].built = world.score[b.team].built + 1
+    M.addPoints(world, b.team, b.def.cost.metal * 0.1, false, "build")
+  end
 end
 
 function M.onCommanderLevel(world, e)
-  M.addPoints(world, e.team, 150 * (e.clevel or 1), false)
+  M.addPoints(world, e.team, 150 * (e.clevel or 1), false, "cmd")
 end
 
 function M.updateScore(world, dt)
@@ -304,17 +323,46 @@ function M.updateScore(world, dt)
   end
 end
 
--- End-of-game score: points x difficulty x time-vs-par (faster than par = bonus, slower = penalty)
-function M.finalScore(world, team, enemyLevels)
+-- End-of-game score:
+--   points x difficulty x opposition x time-vs-par
+-- difficulty: average enemy level (5 = x1.25, 10 = x2.0)
+-- opposition: how many enemies, whether they are teamed up (a 1v2 is much harder than a
+--   3-way free-for-all where the two computers also fight each other), and how much help
+--   you had from computer allies
+-- time: faster than par = bonus up to x2, slower = down to x0.5; a loss is a flat x0.75
+-- levels[t] = AI level of team t
+function M.finalScore(world, team, levels)
   local sc = world.score[team]
-  local sum, n = 0, 0
-  for _, l in ipairs(enemyLevels) do sum, n = sum + l, n + 1 end
-  local avg = n > 0 and sum / n or 5
-  local diffMul = 0.5 + 0.15 * avg                       -- level 5 = x1.25, level 10 = x2.0
+  local enemies, allies, groups = 0, 0, {}
+  local sum = 0
+  for t = 1, world.np do
+    if t ~= team then
+      if world:hostile(t, team) then
+        enemies = enemies + 1
+        sum = sum + (levels[t] or 5)
+        local a = world.ally[t]
+        groups[a] = (groups[a] or 0) + 1
+      else
+        allies = allies + 1
+      end
+    end
+  end
+  local avg = enemies > 0 and sum / enemies or 5
+  local diffMul = 0.5 + 0.15 * avg
+  local strengths = {}
+  for _, n in pairs(groups) do strengths[#strengths + 1] = 1 + 0.6 * (n - 1) end
+  table.sort(strengths, function(a, b) return a > b end)
+  local opp = strengths[1] or 1
+  for i = 2, #strengths do opp = opp + 0.35 * strengths[i] end
+  opp = opp / (1 + 0.5 * allies)
   local won = world.over and world.over.winnerAlly == world.ally[team]
   local dev = (world.parTime - world.time) / world.parTime  -- +0.5 = finished in half the par time
   local timeMul = won and math.max(0.5, math.min(2.0, 1 + dev)) or 0.75
-  return math.floor(sc.pts * diffMul * timeMul), diffMul, timeMul, won
+  local total = math.floor(sc.pts * diffMul * opp * timeMul)
+  return total, {
+    pts = sc.pts, diffMul = diffMul, avgLevel = avg, oppMul = opp, timeMul = timeMul, won = won,
+    enemies = enemies, allies = allies, enemyTeams = #strengths, dev = dev, total = total,
+  }
 end
 
 -- ranking rows for the leaderboard

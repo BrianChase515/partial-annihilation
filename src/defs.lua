@@ -6,6 +6,7 @@
 local D = {}
 
 D.TILE = 32
+D.VERSION = "0.5"  -- bump to start a fresh high-score season
 
 D.units = {
   commander = {

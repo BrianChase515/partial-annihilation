@@ -8,6 +8,7 @@ local AI = require("src.ai")
 local SFX = require("src.sfx")
 local VOICE = require("src.voice")
 local MUSIC = require("src.music")
+local MatchLog = require("src.matchlog")
 
 local G = {}
 G.__index = G
@@ -44,7 +45,9 @@ function G.new(opts)
     end
   end
   world.onCommanderLevel = function(e, offer)
+    if self.log then self.log:event(string.format("%s Commander reached level %d", D.teamName[e.team] or "?", e.clevel or 0)) end
     if e.team == 1 then
+      self.stats.cmdLevel = e.clevel
       if offer then
         self:notice("Commander reached level " .. e.clevel .. "!  Pick an upgrade (Z / X)", 3)
       else
@@ -63,6 +66,8 @@ function G.new(opts)
   world.onNuke = function(e, x, y)
     local secs = math.floor(U.dist(e.x, e.y, x, y) / require("src.commander").NUKE_SPEED + 0.5)
     local who = e.team == 1 and "You" or D.teamName[e.team]
+    if e.team == 1 then self.stats.nukes = (self.stats.nukes or 0) + 1 end
+    if self.log then self.log:event(string.format("NUKE launched by %s", D.teamName[e.team] or "?")) end
     self:notice("NUKE LAUNCHED by " .. who .. "!  Impact in " .. secs .. "s  (red circle)", 5)
     VOICE.say(world:hostile(e.team, 1) and "nuke_incoming" or "nuke_launched")
     MUSIC.bump(1.2)
@@ -75,6 +80,7 @@ function G.new(opts)
     end
   end
   world.onAlien = function(what, a, team)
+    if self.log then self.log:event("Alien Tech: " .. what .. (team and (" by " .. (D.teamName[team] or "?")) or "")) end
     if what == "announce" then
       self:notice("ALIEN TECH incoming! Lands in 60s at the purple marker. Hold its zone for 15s to claim it.", 6)
       VOICE.say("alien_signal")
@@ -104,6 +110,7 @@ function G.new(opts)
     return false
   end
   world.onDropResolved = function(sq)
+    if self.log then self.log:event(string.format("Drop crew (%d units) %s %s", #sq.units, sq.result == "join" and "joined" or "attacked", D.teamName[sq.team] or "?")) end
     if sq.team == 1 then return end
     local seen = false
     for _, u in ipairs(sq.units) do if u.alive and world:isVisible(u) then seen = true end end
@@ -112,6 +119,7 @@ function G.new(opts)
     end
   end
   world.onEliminate = function(team)
+    if self.log then self.log:event((D.teamName[team] or "?") .. " eliminated") end
     local name = D.teamName[team]
     if team == 1 then
       local alliesLeft = false
@@ -174,6 +182,7 @@ function G.new(opts)
     if e.team == 1 and self:onScreen(e.x, e.y) then SFX.play("ready", 0.35, 0) end
   end
   world.onKill = function(o, attacker)
+    if self.log then self.log:onKill(o, attacker) end
     if attacker and attacker.team and (world:allied(o.team, 1) or world:allied(attacker.team, 1)) then
       MUSIC.bump(o.def.building and 0.15 or (o.key == "commander" and 0.6 or 0.07))
     end
@@ -193,6 +202,8 @@ function G.new(opts)
   if not self.opts.autotest then
     MUSIC.reset()
     MUSIC.start()
+    local ok, lg = pcall(MatchLog.start, self)
+    if ok then self.log = lg else print("match log disabled:", lg) end
   end
   self.musicScan = 0
   return self
@@ -445,6 +456,45 @@ function G:rightClick(wx, wy, queue)
   self:commandMove(wx, wy, "move", queue)
 end
 
+-- The on-screen orders bar (same actions as the keyboard shortcuts)
+function G:orderAction(action, shift)
+  if action == "amove" or action == "patrol" then
+    if #self:selectedMobile() > 0 then self.mode = action end
+  elseif action == "stop" then self:stop()
+  elseif action == "flee" then self:retreat("flag"); VOICE.say("retreat")
+  elseif action == "fleecmd" then self:retreat("commander"); VOICE.say("retreat")
+  elseif action == "flag" then self.mode = "flag"
+  elseif action == "destroy" then self:selfDestruct()
+  elseif action == "army" then self:selectAllArmy()
+  elseif action == "half" then if shift then self:selectOtherHalf() else self:selectHalf() end
+  elseif action == "builder" then self:selectIdleBuilder()
+  elseif action == "cmd" then
+    local c = self.world.teams[1].commander
+    if c and c.alive then self:centerOn(c.x, c.y); self:select({ c }) end
+  elseif action == "follow" then self:startFollow(shift)
+  elseif action == "nuke" then self:startNuke()
+  elseif action == "repeat" then
+    for _, f in ipairs(self:selectedFactories()) do f.repeatMode = not f.repeatMode end
+  elseif action == "help" then self.showHelp = not self.showHelp
+  end
+end
+
+-- Open a pre-filled GitHub issue with this game's official score
+function G:submitScore()
+  local f, w = self.finalScore, self.world
+  if not f or not f.official or self.submitted then return end
+  local sc = w.score[1]
+  local ok = require("src.online").submit({
+    score = f.total, result = f.won and "Win" or "Loss",
+    time = string.format("%d:%02d", math.floor(w.time / 60), math.floor(w.time % 60)),
+    players = w.np, map = w.map.w .. "/" .. w.map.seed, lineup = f.lineup,
+    breakdown = string.format("pts %d x%.2f diff x%.2f opp x%.2f time", math.floor(f.pts), f.diffMul, f.oppMul, f.timeMul),
+  })
+  self.submitted = true
+  self.submitMsg = ok and "Your browser opened a GitHub page: press \"Submit new issue\" there (needs a free GitHub account). The board updates within a minute or two."
+    or "Couldn't open the browser."
+end
+
 -- Delete / Backspace: self-destruct the selected units and buildings you own.
 -- The Commander is skipped unless he is the only thing selected and you press twice.
 function G:selfDestruct()
@@ -692,20 +742,25 @@ function G:update(dt)
       VOICE.say(won and "victory" or "defeat")
       MUSIC.finale(won)
       local w = self.world
-      if w.score and not self.opts.autotest then
+      if w.score then
         local ais, levels = {}, {}
         for i, p in ipairs(self.players) do
           if not p.human then
-            ais[#ais + 1] = (p.profileName or p.profile) .. " " .. p.level
-            if w:hostile(i, 1) then levels[#levels + 1] = p.level end
+            ais[#ais + 1] = (w:hostile(i, 1) and "" or "ally ") .. (p.profileName or p.profile) .. " " .. p.level
+            levels[i] = p.level
           end
         end
-        local total, diffMul, timeMul, win = require("src.mods").finalScore(w, 1, levels)
-        self.finalScore = { total = total, pts = math.floor(w.score[1].pts), diffMul = diffMul, timeMul = timeMul }
-        self.highRank = require("src.scores").add({
-          pts = total, result = win and "Win" or "Loss", date = os.date("%Y-%m-%d"),
-          desc = string.format("%d players vs %s, %d:%02d", w.np, table.concat(ais, ", "), math.floor(w.time / 60), math.floor(w.time % 60)),
-        })
+        local total, f = require("src.mods").finalScore(w, 1, levels)
+        f.official = w.official
+        f.lineup = table.concat(ais, ", ")
+        self.finalScore = f
+        if self.log then self.log:finish() end
+        if w.official and not self.opts.autotest then
+          self.highRank = require("src.scores").add({
+            pts = total, result = f.won and "Win" or "Loss", date = os.date("%Y-%m-%d"),
+            desc = string.format("%dp vs %s, %d:%02d", w.np, f.lineup, math.floor(w.time / 60), math.floor(w.time % 60)),
+          })
+        end
       end
     end
   end
@@ -773,6 +828,7 @@ function G:update(dt)
   if tm.lastAttacked > self.lastAttackNotice + 12 and self.world.time - tm.lastAttacked < 0.5 then
     self.lastAttackNotice = self.world.time
     self:notice("Under attack!  (press Space to jump there)", 3)
+    if self.log and not self.firstContact then self.firstContact = true; self.log:event("First enemy attack on you") end
     local nearBase = false
     self.world:query(tm.lastAttackX, tm.lastAttackY, 160, function(o)
       if o.team == 1 and o.def.building then nearBase = true end
@@ -784,6 +840,7 @@ function G:update(dt)
   end
 
   self:updateVoice(dt)
+  if self.log then self.log:update() end
 
   for i = #self.notices, 1, -1 do
     local nt = self.notices[i]
@@ -964,6 +1021,7 @@ end
 -- Input
 
 function G:mousepressed(x, y, button)
+  self.stats.actions = (self.stats.actions or 0) + 1
   if self.naming then return end
   if self.world.over and self.overShown then
     return UI.overClick(self, x, y, button)
@@ -983,6 +1041,11 @@ function G:mousepressed(x, y, button)
       return
     elseif self.mode == "nuke" then
       self.world:launchNuke(self:myCommander(), wx, wy)
+      self.mode = nil
+      return
+    elseif self.mode == "flag" then
+      self.flag = { x = wx, y = wy }
+      self:notice("Retreat flag placed", 1.2)
       self.mode = nil
       return
     end
@@ -1163,6 +1226,7 @@ function G:applyMouseLock()
 end
 
 function G:keypressed(key)
+  self.stats.actions = (self.stats.actions or 0) + 1
   if self.naming then return self:namingKey(key) end
   local ctrl = love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")
   local shift = love.keyboard.isDown("lshift", "rshift")

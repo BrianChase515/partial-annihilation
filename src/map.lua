@@ -76,6 +76,20 @@ function M.generate(opts)
     self.starts[i] = { x = x, y = y }
   end
 
+  -- Outer ocean: most maps are ringed by sea so navies always have somewhere to fight.
+  -- Wetter maps get a wider, more ragged coast. Dry maps sometimes have no ring at all.
+  local ring = opts.ring
+  if ring == nil then ring = waterFrac >= 0.25 or rng:random() < 0.75 end
+  self.ring = ring
+  local ringW = math.max(3, w * (0.02 + waterFrac * 0.07))
+  local function edgeDrop(x, y)
+    if not ring then return 0 end
+    local e = math.min(x, y, w - 1 - x, h - 1 - y)
+    if e >= ringW * 1.8 then return 0 end
+    local k = 1 - e / (ringW * 1.8)
+    return k * k * 0.55
+  end
+
   -- Symmetric height field
   local height = {}
   local vals = {}
@@ -87,6 +101,7 @@ function M.generate(opts)
       v = v / ns
       -- 4-way averaging flattens the terrain; restore some contrast
       if four then v = 0.5 + (v - 0.5) * 1.5 end
+      v = v - edgeDrop(x, y)
       -- raise ground around the starts so bases sit on land
       for _, s in ipairs(self.starts) do
         local d = U.dist(x, y, s.x, s.y)
@@ -119,12 +134,26 @@ function M.generate(opts)
       end
     end
   end
-  -- map border: no rock on edges issue; fine
   self.height = height
   self.terrain = terrain
   self.waterLevel = waterLevel
+  if ring then
+    -- the very edge is always open sea, so the ring is one connected body of water
+    for y = 0, h - 1 do
+      for x = 0, w - 1 do
+        if math.min(x, y, w - 1 - x, h - 1 - y) < 2 then terrain[y * w + x] = M.WATER end
+      end
+    end
+  end
 
+  -- Lakes big enough to matter get a channel cut out to the sea (symmetrically)
+  self:labelComponents()
+  self:channelLakes()
   self:ensureLandConnection()
+  -- No dead lakes: water that can't reach the outer sea becomes land, so a shipyard
+  -- is never stranded somewhere its ships can't fight
+  self:labelComponents()
+  self:fillLakes()
   self:placeDeposits(rng)
 
   self.blocked = {}     -- tile index -> entity occupying it
@@ -284,6 +313,132 @@ function M:ensureLandConnection()
       end
     end
   end
+end
+
+function M:channelLakes()
+  local w, h = self.w, self.h
+  local lab = self.comp.sea
+  local size, edge = {}, {}
+  for i = 0, w * h - 1 do
+    local c = lab[i]
+    if c then
+      size[c] = (size[c] or 0) + 1
+      local x, y = i % w, math.floor(i / w)
+      if x == 0 or y == 0 or x == w - 1 or y == h - 1 then edge[c] = true end
+    end
+  end
+  if not next(edge) then return end
+  -- Dijkstra out from the sea: cheap through low ground, so channels wind like rivers
+  local dist, par, steps = {}, {}, {}
+  local heap = {}
+  local function push(c, i)
+    heap[#heap + 1] = { c, i }
+    local k = #heap
+    while k > 1 do
+      local p = math.floor(k / 2)
+      if heap[p][1] <= heap[k][1] then break end
+      heap[p], heap[k] = heap[k], heap[p]; k = p
+    end
+  end
+  local function pop()
+    local top = heap[1]
+    local last = table.remove(heap)
+    if #heap > 0 then
+      heap[1] = last
+      local k = 1
+      while true do
+        local l, r, m = 2 * k, 2 * k + 1, k
+        if heap[l] and heap[l][1] < heap[m][1] then m = l end
+        if heap[r] and heap[r][1] < heap[m][1] then m = r end
+        if m == k then break end
+        heap[m], heap[k] = heap[k], heap[m]; k = m
+      end
+    end
+    return top
+  end
+  for i = 0, w * h - 1 do
+    if lab[i] and edge[lab[i]] then dist[i] = 0; steps[i] = 0; push(0, i) end
+  end
+  local wl = self.waterLevel
+  while #heap > 0 do
+    local top = pop()
+    local c, i = top[1], top[2]
+    if c <= dist[i] then
+      local x, y = i % w, math.floor(i / w)
+      for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+        local nx, ny = x + d[1], y + d[2]
+        if nx >= 0 and ny >= 0 and nx < w and ny < h then
+          local j = ny * w + nx
+          local nc = c + 1 + math.max(0, self.height[j] - wl) * 60
+          if not dist[j] or nc < dist[j] then
+            dist[j] = nc; par[j] = i; steps[j] = steps[i] + 1; push(nc, j)
+          end
+        end
+      end
+    end
+  end
+  local minSize = math.max(30, w * h * 0.004)
+  local best = {}
+  for i = 0, w * h - 1 do
+    local c = lab[i]
+    if c and not edge[c] and size[c] >= minSize then
+      if not best[c] or dist[i] < dist[best[c]] then best[c] = i end
+    end
+  end
+  local maxLen = w * 0.14
+  for _, start in pairs(best) do
+    local i = start
+    if steps[i] > maxLen then i = nil end -- too far inland: it will be filled instead
+    while i and dist[i] > 0 do
+      local x, y = i % w, math.floor(i / w)
+      for _, o in ipairs({ { 0, 0 }, { 1, 0 }, { 0, 1 } }) do
+        for _, f in ipairs(self.syms) do
+          local sx, sy = f(x + o[1], y + o[2])
+          if self:inBounds(sx, sy) then
+            local k = sy * w + sx
+            if self.terrain[k] ~= M.WATER then
+              self.terrain[k] = M.WATER
+              self.height[k] = math.min(self.height[k], self.waterLevel - 0.01)
+            end
+          end
+        end
+      end
+      i = par[i]
+    end
+  end
+end
+
+function M:fillLakes()
+  local w, h = self.w, self.h
+  local lab = self.comp.sea
+  local size, edge = {}, {}
+  for i = 0, w * h - 1 do
+    local c = lab[i]
+    if c then
+      size[c] = (size[c] or 0) + 1
+      local x, y = i % w, math.floor(i / w)
+      if x == 0 or y == 0 or x == w - 1 or y == h - 1 then edge[c] = true end
+    end
+  end
+  -- the sea that counts: the edge-touching body, or failing that the largest one if it is big
+  local keep = {}
+  local anyEdge = next(edge) ~= nil
+  if anyEdge then keep = edge
+  else
+    local best, bs = nil, 0
+    for c, n in pairs(size) do if n > bs then best, bs = c, n end end
+    if best and bs > w * h * 0.12 then keep[best] = true end
+  end
+  local filled = 0
+  for i = 0, w * h - 1 do
+    local c = lab[i]
+    if c and not keep[c] then
+      self.terrain[i] = M.LAND
+      self.height[i] = math.max(self.height[i], self.waterLevel + 0.01)
+      filled = filled + 1
+    end
+  end
+  self.lakesFilled = filled
 end
 
 function M:placeDeposits(rng)

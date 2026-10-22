@@ -1,0 +1,156 @@
+-- Match log: a plain-text record of each game for balance review.
+-- Written next to PartialAnnihilation.love in a "logs" folder (falls back to LÖVE's save
+-- folder), appended as the game goes so a quit or crash still leaves a usable log.
+local D = require("src.defs")
+local L = {}
+L.__index = L
+
+local function logDir()
+  local base = love.filesystem.getSource()
+  if base and base:match("%.love$") then
+    local dir = love.filesystem.getSourceBaseDirectory() .. "/logs"
+    if love.system.getOS() == "Windows" then os.execute('mkdir "' .. dir .. '" 2>nul')
+    else os.execute("mkdir -p '" .. dir:gsub("'", "'\\''") .. "'") end
+    local probe = io.open(dir .. "/.probe", "w")
+    if probe then probe:close(); os.remove(dir .. "/.probe"); return dir, true end
+  end
+  love.filesystem.createDirectory("logs")
+  return love.filesystem.getSaveDirectory() .. "/logs", false
+end
+
+local function mmss(t) return string.format("%d:%02d", math.floor(t / 60), math.floor(t % 60)) end
+
+function L.start(game)
+  local self = setmetatable({ game = game, lines = {}, nextSnap = 60 }, L)
+  local w = game.world
+  local dir, direct = logDir()
+  local name = string.format("%s_seed%d.txt", os.date("%Y-%m-%d_%H%M%S"), w.map.seed % 100000000)
+  self.direct = direct
+  if direct then self.path = dir .. "/" .. name
+  else self.lpath = "logs/" .. name; self.path = dir .. "/" .. name end
+  local mods = {}
+  for k, v in pairs(w.mods or {}) do if v then mods[#mods + 1] = k end end
+  table.sort(mods)
+  local water, total = 0, w.map.w * w.map.h
+  for i = 0, total - 1 do if w.map.terrain[i] == 0 then water = water + 1 end end
+  self:raw("PARTIAL ANNIHILATION MATCH LOG  v" .. D.VERSION .. "   " .. os.date("%Y-%m-%d %H:%M"))
+  self:raw(string.format("Map: %dx%d seed %d, water %.0f%% (%s), modifiers: %s, official score: %s",
+    w.map.w, w.map.h, w.map.seed, 100 * water / total, w.map.ring and "ocean ring" or "no ring",
+    #mods > 0 and table.concat(mods, ",") or "none", w.official and "yes" or "no"))
+  for i, p in ipairs(game.players) do
+    self:raw(string.format("  P%d %-7s team %d  %s", i, D.teamName[i] or "?", p.team or w.ally[i],
+      p.human and "HUMAN" or (tostring(p.profileName or p.profile) .. " level " .. tostring(p.level))))
+  end
+  self:raw("")
+  self:raw("Snapshots every minute: income m/e per second, banked metal, unit and building counts,")
+  self:raw("army = metal value of combat units, Cmd = Commander level/hp/upgrades, K/L = enemy kills/own losses so far.")
+  self:raw("")
+  self.kills, self.losses = {}, {}
+  for t = 1, w.np do self.kills[t], self.losses[t] = 0, 0 end
+  self:flush()
+  return self
+end
+
+function L:raw(s) self.lines[#self.lines + 1] = s end
+
+function L:event(text)
+  self:raw(string.format("[%s] %s", mmss(self.game.world.time), text))
+end
+
+function L:flush()
+  if #self.lines == 0 then return end
+  local text = table.concat(self.lines, "\n") .. "\n"
+  self.lines = {}
+  if self.direct then
+    local f = io.open(self.path, "a")
+    if f then f:write(text); f:close() end
+  else
+    love.filesystem.append(self.lpath, text)
+  end
+end
+
+function L:onKill(o, attacker)
+  local w = self.game.world
+  if o.team and o.team >= 1 then self.losses[o.team] = (self.losses[o.team] or 0) + 1 end
+  if attacker and attacker.team and attacker.team >= 1 and w:hostile(attacker.team, o.team) then
+    self.kills[attacker.team] = (self.kills[attacker.team] or 0) + 1
+  end
+  if o.key == "commander" then
+    self:event(string.format("%s's Commander destroyed by %s", D.teamName[o.team] or "?",
+      attacker and ((D.teamName[attacker.team] or "?") .. " " .. attacker.key) or "self-destruct/unknown"))
+  end
+end
+
+function L:snapshot()
+  local w = self.game.world
+  local g = self.game
+  self:raw(string.format("--- %s ---", mmss(w.time)))
+  for t = 1, w.np do
+    local tm = w.teams[t]
+    if not tm.dead then
+      local units, blds, army = 0, 0, 0
+      local kinds = {}
+      for _, e in ipairs(w.entities) do
+        if e.team == t then
+          if e.def.building then blds = blds + 1 else units = units + 1 end
+          kinds[e.key] = (kinds[e.key] or 0) + 1
+          if not e.def.building and e.def.weapon and e.key ~= "commander" and e.def.cost then army = army + e.def.cost.metal end
+        end
+      end
+      local ks = {}
+      for k, n in pairs(kinds) do ks[#ks + 1] = k .. " " .. n end
+      table.sort(ks)
+      local c = tm.commander
+      local ups = {}
+      for _, u in ipairs((c and c.upgrades) or {}) do ups[#ups + 1] = u.name or u.key end
+      local extra = ""
+      if t == 1 then extra = string.format("  actions/min %d", g.stats.actions or 0); g.stats.actions = 0 end
+      local sc = w.score and w.score[t]
+      self:raw(string.format("  %-7s m +%.1f e +%.0f bank %d | units %d blds %d army %d | K %d L %d | pts %d | Cmd L%d hp %d%s%s",
+        D.teamName[t] or "?", tm.mIncome or 0, tm.eIncome or 0, tm.metal or 0, units, blds, army,
+        self.kills[t] or 0, self.losses[t] or 0, sc and math.floor(sc.pts) or 0,
+        c and c.clevel or 0, c and c.alive and math.floor(c.hp) or 0, #ups > 0 and (" [" .. table.concat(ups, ", ") .. "]") or "", extra))
+      self:raw("          " .. table.concat(ks, ", "))
+    end
+  end
+  self:flush()
+end
+
+function L:update()
+  local w = self.game.world
+  if w.time >= self.nextSnap then
+    self.nextSnap = self.nextSnap + 60
+    self:snapshot()
+  end
+  if #self.lines > 0 and w.time - (self.lastFlush or 0) > 5 then
+    self.lastFlush = w.time
+    self:flush()
+  end
+end
+
+function L:finish()
+  if self.done then return end
+  self.done = true
+  local g, w = self.game, self.game.world
+  self:snapshot()
+  local won = w.over and w.over.winnerAlly == w.ally[1]
+  self:raw("")
+  self:raw(string.format("RESULT: %s at %s%s", w.over and (won and "VICTORY" or "DEFEAT") or "quit before the end", mmss(w.time),
+    w.parTime and (" (par " .. mmss(w.parTime) .. ")") or ""))
+  local f = g.finalScore
+  if f then
+    local sc = w.score[1]
+    self:raw(string.format("Score: kills %d + streak bonus %d (best x%.1f, streak %d) + building %d + Commander %d = %d pts",
+      sc.killPts, sc.streakPts, sc.bestMult, sc.bestStreak, sc.buildPts, sc.cmdPts, f.pts))
+    self:raw(string.format("       x%.2f difficulty x%.2f opposition x%.2f time = %d %s", f.diffMul, f.oppMul, f.timeMul, f.total,
+      f.official and "(official)" or "(unofficial)"))
+  end
+  for t = 1, w.np do
+    local tm = w.teams[t]
+    self:raw(string.format("  %-7s %s  kills %d losses %d", D.teamName[t] or "?",
+      tm.dead and ("eliminated at " .. mmss(tm.deadTime or 0)) or "survived", self.kills[t] or 0, self.losses[t] or 0))
+  end
+  self:flush()
+end
+
+return L

@@ -26,6 +26,10 @@ end
 function UI.overPanel(game, x, y)
   local w, h = love.graphics.getDimensions()
   if y >= h - UI.PANEL_H or y <= UI.TOP_H then return true end
+  if game.orderBtns and y >= h - UI.PANEL_H - UI.ORDERS_H then
+    local b1, bn = game.orderBtns[1], game.orderBtns[#game.orderBtns]
+    if b1 and x >= b1.x - 6 and x <= bn.x + bn.w + 6 then return true end
+  end
   if game.showSidebar then
     for _, it in ipairs(UI.sidebarItems(game)) do
       if not it.more and x >= it.x and x <= it.x + it.w and y >= it.y and y <= it.y + it.h then return true end
@@ -204,7 +208,7 @@ function UI.drawLeaderboard(game)
   lg.setFont(font(13))
   lg.setColor(1, 0.85, 0.35)
   local t, par = world.time, world.parTime
-  lg.print("SCORE", x + 10, y + 8)
+  lg.print(world.official and "SCORE" or "SCORE*", x + 10, y + 8)
   if t <= par then lg.setColor(0.5, 1, 0.55) else lg.setColor(1, 0.55, 0.35) end
   lg.print(string.format("%d:%02d / par %d:%02d", math.floor(t / 60), math.floor(t % 60), math.floor(par / 60), math.floor(par % 60)), x + 92, y + 8)
   for i, r in ipairs(rows) do
@@ -596,27 +600,101 @@ function UI.cardButtons(game, L)
       }
     end
   end
-  local cmds = {}
-  if #game:selectedMobile() > 0 then
-    cmds = { { "Attack A", "amove" }, { "Stop S", "stop" }, { "Patrol P", "patrol" }, { "Retreat F", "retreat" } }
-  end
-  if #game:selectedFactories() > 0 then cmds[#cmds + 1] = { "Repeat G", "repeat" } end
-  local myc = game:myCommander()
-  if myc and game.selected[myc] and myc.nukeReady then cmds[#cmds + 1] = { "NUKE N", "nuke" } end
-  local n = #game:selectedList()
-  if n >= 2 then cmds[#cmds + 1] = { "Half H", "half" } end
-  cmds[#cmds + 1] = { "All army", "all" }
-  local per = math.max(4, #cmds)
-  if per > 4 then
-    local short = { amove = "Atk A", stop = "Stop S", patrol = "Ptrl P", retreat = "Flee F", ["repeat"] = "Rpt G",
-      half = "Half H", all = "All", nuke = "NUKE N" }
-    for _, c in ipairs(cmds) do c[1] = short[c[2]] or c[1] end
-  end
-  local cw = (L.cardW - 4 * (per - 1)) / per
-  for i, c in ipairs(cmds) do
-    btns[#btns + 1] = { x = L.cardX + (i - 1) * (cw + 4), y = L.cmdY + 2, w = cw, h = 26, kind = "cmd", label = c[1], action = c[2] }
-  end
   return btns
+end
+
+---------------------------------------------------------------------------
+-- Orders bar: every order as a visible button just above the bottom panel, so nobody
+-- has to find the keyboard shortcuts first. Hover for what it does.
+
+local ORDERS = {
+  { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
+  { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
+  { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet." },
+  { "flee", "Flee", "F", "Retreat to your flag at +25% speed. Weapons stay OFF until fully repaired." },
+  { "fleecmd", "To Cmdr", "Shift+F", "Retreat to the Commander (+25% speed, weapons off until repaired)." },
+  { "flag", "Flag", "Ctrl+F", "Plant the retreat flag: click where fleeing units should go." },
+  { "destroy", "Destroy", "Del", "Self-destruct the selection. Unfinished buildings refund. Commander needs 2 presses." },
+  { "army", "Army", "Ctrl+A", "Select every combat unit you have." },
+  { "half", "Half", "H", "Keep half the selection (same mix, nearest the mouse). Shift-click: the other half." },
+  { "builder", "Builder", "Tab", "Jump to the next idle constructor." },
+  { "cmd", "Cmdr", "C", "Jump to and select your Commander." },
+  { "follow", "Follow", "L", "Camera follows the selection. Shift-click: cinematic camera." },
+  { "repeat", "Repeat", "G", "Factory repeats its build queue forever." },
+  { "nuke", "NUKE", "N", "Commander level 5: launch the Nuke, then click a target." },
+  { "help", "Help", "F1", "All controls and tips." },
+}
+UI.ORDERS_H = 38
+
+function UI.orderButtons(game)
+  local w, h = lg.getDimensions()
+  local mobile = #game:selectedMobile() > 0
+  local n = #game:selectedList()
+  local mine = false
+  for _, e in ipairs(game:selectedList()) do if e.team == 1 then mine = true end end
+  local myc = game:myCommander()
+  local enabled = {
+    amove = mobile, stop = mobile, patrol = mobile, flee = mobile, fleecmd = mobile, flag = true,
+    destroy = mine, army = true, half = n >= 2, builder = true, cmd = true, follow = n > 0,
+    ["repeat"] = #game:selectedFactories() > 0, nuke = myc and game.selected[myc] and myc.nukeReady and true or false, help = true,
+  }
+  local bw, gap = 66, 4
+  local list = {}
+  for _, o in ipairs(ORDERS) do
+    if o[1] ~= "nuke" or (myc and (myc.clevel or 0) >= 5) then list[#list + 1] = o end
+  end
+  local total = #list * bw + (#list - 1) * gap
+  local x0 = math.floor(w / 2 - total / 2)
+  local y = h - UI.PANEL_H - UI.ORDERS_H
+  local btns = {}
+  for i, o in ipairs(list) do
+    btns[#btns + 1] = { x = x0 + (i - 1) * (bw + gap), y = y + 3, w = bw, h = UI.ORDERS_H - 6,
+      action = o[1], label = o[2], key = o[3], tip = o[4], on = enabled[o[1]] }
+  end
+  return btns, x0 - 6, y, total + 12
+end
+
+function UI.drawOrders(game)
+  local btns, bx, by, bw = UI.orderButtons(game)
+  game.orderBtns = btns
+  panelBox(bx, by, bw, UI.ORDERS_H + 6, 0.88)
+  local mx, my = love.mouse.getPosition()
+  local hover
+  for _, b in ipairs(btns) do
+    local hv = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
+    if hv then hover = b end
+    local active = game.mode == b.action or (b.action == "flee" and false)
+    if b.action == "repeat" then
+      for _, f in ipairs(game:selectedFactories()) do if f.repeatMode then active = true end end
+    end
+    if b.action == "follow" and game.follow then active = true end
+    if b.action == "help" and game.showHelp then active = true end
+    local a = b.on and 1 or 0.35
+    if active then lg.setColor(0.18, 0.4, 0.28, a)
+    elseif hv and b.on then lg.setColor(0.22, 0.3, 0.4, a)
+    else lg.setColor(0.13, 0.17, 0.22, a) end
+    lg.rectangle("fill", b.x, b.y, b.w, b.h, 5)
+    lg.setColor(0.32, 0.42, 0.52, a)
+    lg.rectangle("line", b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 5)
+    local warn = b.action == "destroy" or b.action == "nuke"
+    lg.setFont(font(12))
+    if warn then lg.setColor(1, 0.55, 0.45, a) else lg.setColor(0.92, 0.95, 1, a) end
+    lg.print(b.label, b.x + b.w / 2 - font(12):getWidth(b.label) / 2, b.y + 3)
+    lg.setFont(font(10))
+    lg.setColor(0.65, 0.72, 0.8, a * 0.9)
+    lg.print(b.key, b.x + b.w / 2 - font(10):getWidth(b.key) / 2, b.y + 18)
+  end
+  if hover then
+    local text = hover.label .. "  (" .. hover.key .. ")  -  " .. hover.tip .. (hover.on and "" or "   [select units first]")
+    lg.setFont(font(13))
+    local tw = math.min(640, font(13):getWidth(text) + 20)
+    local _, lines = font(13):getWrap(text, tw - 20)
+    local th = #lines * 16 + 12
+    local tx = math.max(8, math.min(lg.getWidth() - tw - 8, hover.x + hover.w / 2 - tw / 2))
+    panelBox(tx, by - th - 6, tw, th, 0.96)
+    lg.setColor(1, 1, 1)
+    lg.printf(text, tx + 10, by - th, tw - 20)
+  end
 end
 
 function UI.drawCard(game, L)
@@ -820,76 +898,155 @@ function UI.menuClick(game, x, y, button_)
   end
 end
 
-function UI.overRects()
+local OVER_W, OVER_H = 940, 600
+
+function UI.overRects(game)
   local w, h = lg.getDimensions()
-  return {
-    { x = w / 2 - 345, y = h / 2 + 70, w = 220, h = 46, label = "Play again", action = "again" },
-    { x = w / 2 - 110, y = h / 2 + 70, w = 220, h = 46, label = "Save this map...", action = "savemap" },
-    { x = w / 2 + 125, y = h / 2 + 70, w = 220, h = 46, label = "Title screen", action = "title" },
+  local by = h / 2 + OVER_H / 2 - 64
+  local list = {
+    { label = "Play again", action = "again" },
+    { label = "Save this map...", action = "savemap" },
   }
+  local f = game and game.finalScore
+  if f and f.official and require("src.online").enabled() then
+    list[#list + 1] = { label = game.submitted and "Score submitted" or "Submit score online", action = "submit" }
+  end
+  list[#list + 1] = { label = "Title screen", action = "title" }
+  local bw, gap = 200, 14
+  local x0 = w / 2 - (#list * bw + (#list - 1) * gap) / 2
+  for i, r in ipairs(list) do
+    r.x, r.y, r.w, r.h = x0 + (i - 1) * (bw + gap), by, bw, 44
+  end
+  return list
 end
+
+local function mmss(t) return string.format("%d:%02d", math.floor(t / 60), math.floor(t % 60)) end
 
 function UI.drawOver(game)
   local w, h = lg.getDimensions()
-  local o = game.world.over
+  local world = game.world
+  local o = world.over
   local k = math.min(1, (love.timer.getTime() - (game.overTime or 0)) / 1.5)
-  o.winner = (o.winnerAlly == game.world.ally[1]) and 1 or 2
+  o.winner = (o.winnerAlly == world.ally[1]) and 1 or 2
   lg.setColor(0, 0, 0, 0.6 * k)
   lg.rectangle("fill", 0, 0, w, h)
   if k < 1 then return end
   local win = o.winner == 1
+  local px, py = w / 2 - OVER_W / 2, h / 2 - OVER_H / 2
+  panelBox(px, py, OVER_W, OVER_H, 0.97)
   local title = win and "VICTORY" or "DEFEAT"
-  panelBox(w / 2 - 370, h / 2 - 150, 740, 290, 0.97)
-  lg.setFont(font(48))
+  lg.setFont(font(44))
   if win then lg.setColor(0.4, 1, 0.5) else lg.setColor(1, 0.4, 0.35) end
-  lg.print(title, w / 2 - font(48):getWidth(title) / 2, h / 2 - 130)
-  lg.setFont(font(16))
-  lg.setColor(0.85, 0.9, 0.95)
-  local t = o.time
-  local s = string.format("Game time %d:%02d     Built %d     Destroyed %d     Lost %d", math.floor(t / 60), math.floor(t % 60),
-    game.stats.built, game.stats.killed, game.stats.lost)
-  lg.print(s, w / 2 - font(16):getWidth(s) / 2, h / 2 - 50)
+  lg.print(title, w / 2 - font(44):getWidth(title) / 2, py + 14)
+  lg.setFont(font(14))
+  lg.setColor(0.7, 0.76, 0.84)
   local sub = win and "Every enemy Commander has been annihilated. Partially." or "Your side has been annihilated. Completely."
-  local ais = {}
-  for i, p in ipairs(game.players) do
-    if not p.human then
-      local rel = game.world:hostile(i, 1) and "enemy" or "ally"
-      ais[#ais + 1] = string.format("%s: %s lvl %d (%s)", D.teamName[i], p.profileName or p.profile, p.level, rel)
-    end
+  lg.print(sub, w / 2 - font(14):getWidth(sub) / 2, py + 68)
+
+  local f = game.finalScore
+  local sc = world.score and world.score[1]
+  local st = game.stats
+
+  -- left column: what happened
+  local lx, ly = px + 30, py + 104
+  local function head(x, y, text)
+    lg.setFont(font(13)); lg.setColor(1, 0.85, 0.35); lg.print(text, x, y)
   end
-  local who = table.concat(ais, "    ")
-  if game.world.score then
-    local MOD = require("src.mods")
+  local function row(x, y, label, value, wid, col)
+    lg.setFont(font(14))
+    lg.setColor(0.72, 0.78, 0.86); lg.print(label, x, y)
+    lg.setColor(col and col[1] or 1, col and col[2] or 1, col and col[3] or 1)
+    lg.print(value, x + wid - font(14):getWidth(value), y)
+  end
+  head(lx, ly, "THE MATCH")
+  local rows = {
+    { "Game time", mmss(world.time) .. (world.parTime and ("   (par " .. mmss(world.parTime) .. ")") or "") },
+    { "Opponents", f and f.lineup or "" },
+    { "Units built", tostring(st.built) },
+    { "Buildings built", tostring(sc and sc.built or 0) },
+    { "Enemy units destroyed", tostring(sc and sc.kills or st.killed) },
+    { "Enemy buildings destroyed", tostring(sc and sc.bldKills or 0) },
+    { "Enemy Commanders killed", tostring(sc and sc.cmdKills or 0) },
+    { "Your losses", tostring(st.lost) },
+    { "Commander level", tostring(st.cmdLevel or 0) .. ((st.nukes or 0) > 0 and ("   nukes launched " .. st.nukes) or "") },
+    { "Best kill streak", sc and (sc.bestStreak .. " kills  (x" .. string.format("%.1f", sc.bestMult) .. ")") or "-" },
+  }
+  for i, r in ipairs(rows) do row(lx, ly + 6 + i * 24, r[1], r[2], 410) end
+  -- everyone's points
+  if world.score then
     local parts = {}
-    for _, r in ipairs(MOD.ranking(game.world)) do
+    for _, r in ipairs(require("src.mods").ranking(world)) do
       parts[#parts + 1] = (r.team == 1 and "You" or D.teamName[r.team]) .. " " .. U.fmt(r.pts)
     end
-    who = "Points: " .. table.concat(parts, "   ")
-    if game.finalScore then
-      local f = game.finalScore
-      local final = string.format("Final score %s  =  %s pts  x%.2f difficulty  x%.2f time vs par %d:%02d%s",
-        U.fmt(f.total), U.fmt(f.pts), f.diffMul, f.timeMul, math.floor(game.world.parTime / 60), math.floor(game.world.parTime % 60),
-        game.highRank and ("   (#" .. game.highRank .. " high score)") or "")
-      lg.setFont(font(15))
-      lg.setColor(1, 0.85, 0.35)
-      lg.print(final, w / 2 - font(15):getWidth(final) / 2, h / 2 + 34)
+    lg.setFont(font(12)); lg.setColor(0.6, 0.66, 0.74)
+    lg.printf("Points (before multipliers): " .. table.concat(parts, "   "), lx, ly + 6 + 11 * 24 + 4, 410)
+  end
+
+  -- right column: how the score was made
+  local rx, ry, rw = px + 490, py + 104, 420
+  head(rx, ry, "YOUR SCORE")
+  if f and sc then
+    local y = ry + 30
+    local function line(label, value, col)
+      row(rx, y, label, value, rw, col); y = y + 24
+    end
+    line("Kills  (metal value of what you destroyed)", U.fmt(sc.killPts))
+    line(string.format("Kill-streak bonus  (best x%.1f)", sc.bestMult), "+" .. U.fmt(sc.streakPts), { 1, 0.7, 0.3 })
+    line("Construction  (10% of metal you built)", U.fmt(sc.buildPts))
+    line("Commander promotions", U.fmt(sc.cmdPts))
+    lg.setColor(0.4, 0.48, 0.58); lg.line(rx, y + 2, rx + rw, y + 2); y = y + 8
+    line("Points", U.fmt(f.pts))
+    line(string.format("x %.2f  difficulty  (enemies avg. level %.1f)", f.diffMul, f.avgLevel), "", nil)
+    local oppText
+    if f.enemies <= 1 then oppText = "1 enemy"
+    elseif f.enemyTeams == 1 then oppText = f.enemies .. " enemies teamed up"
+    else oppText = f.enemies .. " enemies, " .. f.enemyTeams .. " sides (they fight each other too)" end
+    if f.allies > 0 then oppText = oppText .. ", " .. f.allies .. (f.allies == 1 and " ally" or " allies") end
+    line(string.format("x %.2f  opposition  (%s)", f.oppMul, oppText), "")
+    local tt
+    if f.won then
+      local pct = math.floor(math.abs(f.dev) * 100 + 0.5)
+      tt = string.format("won in %s vs par %s, %d%% %s", mmss(world.time), mmss(world.parTime), pct, f.dev >= 0 and "faster" or "slower")
+    else tt = "a loss is a flat x0.75" end
+    line(string.format("x %.2f  time  (%s)", f.timeMul, tt), "")
+    lg.setColor(0.4, 0.48, 0.58); lg.line(rx, y + 2, rx + rw, y + 2); y = y + 12
+    lg.setFont(font(26)); lg.setColor(1, 0.85, 0.35)
+    lg.print("FINAL", rx, y)
+    local ft = U.fmt(f.total)
+    lg.print(ft, rx + rw - font(26):getWidth(ft), y)
+    y = y + 40
+    lg.setFont(font(13))
+    if f.official then
+      lg.setColor(0.5, 0.9, 0.55)
+      lg.print(game.highRank and ("Official score  -  #" .. game.highRank .. " on your high-score table (v" .. D.VERSION .. ")")
+        or "Official score", rx, y)
+    else
+      lg.setColor(1, 0.6, 0.35)
+      lg.printf("Unofficial: Alien Tech / Dropships were on, so this doesn't go on the high-score table.", rx, y, rw)
+    end
+    if game.submitMsg then
+      lg.setColor(0.7, 0.8, 0.95)
+      lg.printf(game.submitMsg, rx, y + 20, rw)
     end
   end
-  lg.setFont(font(13))
-  lg.setColor(0.6, 0.68, 0.76)
-  lg.print(who, w / 2 - font(13):getWidth(who) / 2, h / 2 + 10)
-  lg.setFont(font(16))
-  lg.setColor(0.85, 0.9, 0.95)
-  lg.print(sub, w / 2 - font(16):getWidth(sub) / 2, h / 2 - 20)
-  for _, r in ipairs(UI.overRects()) do button(r.x, r.y, r.w, r.h, r.label) end
+  lg.setFont(font(12))
+  lg.setColor(0.55, 0.62, 0.7)
+  lg.printf("How scoring works: every enemy you destroy is worth its metal cost (a Commander is 3000, veterans more). "
+    .. "Each kill within 10 seconds of the last raises your multiplier by 0.1, up to x4; 10 seconds without an enemy death resets it. "
+    .. "Building earns 10% of the metal spent and each Commander promotion pays 150 x level. Then the total is scaled by "
+    .. "how strong the enemies were, how many there were (and whether they were teamed up against you), and how fast you won "
+    .. "compared with par. Games with Alien Tech or Dropships don't count as official.",
+    px + 30, py + OVER_H - 150, OVER_W - 60)
+  for _, r in ipairs(UI.overRects(game)) do button(r.x, r.y, r.w, r.h, r.label) end
 end
 
 function UI.overClick(game, x, y, b)
   if b ~= 1 then return end
-  for _, r in ipairs(UI.overRects()) do
+  for _, r in ipairs(UI.overRects(game)) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "again" then game.playAgain = true
       elseif r.action == "savemap" then game:startNaming()
+      elseif r.action == "submit" then game:submitScore()
       else game.quitToTitle = true end
     end
   end
@@ -913,12 +1070,14 @@ function UI.draw(game)
   game.groupBtn = nil
   UI.drawInfo(game, L)
   UI.drawCard(game, L)
+  UI.drawOrders(game)
 
   -- mode hint
   local hint
   if game.mode == "build" then hint = "Placing " .. D.units[game.buildKey].name .. " - click to place, drag for an area, Shift for more, right-click/Esc cancels"
   elseif game.mode == "amove" then hint = "Attack-move: click a destination (Shift queues)"
   elseif game.mode == "patrol" then hint = "Patrol: click a destination (Shift queues)"
+  elseif game.mode == "flag" then hint = "Retreat flag: click where fleeing units should regroup"
   elseif game.mode == "nuke" then hint = "NUKE: click the target. Buildings in the circle are destroyed, units lose half their health. Esc cancels" end
   if hint then
     lg.setFont(font(14))
@@ -936,7 +1095,7 @@ function UI.draw(game)
     local cw, ch = 330, 96
     local total = #offer * cw + (#offer - 1) * 14
     local ox = w / 2 - total / 2
-    local oy = L.panelY - ch - 34
+    local oy = L.panelY - ch - 34 - UI.ORDERS_H
     lg.setFont(font(15))
     local head = string.format("Commander level %d!  Choose an upgrade%s", myc.clevel - #myc.offers + 1,
       #myc.offers > 1 and string.format("  (%d more waiting)", #myc.offers - 1) or "")
@@ -1072,6 +1231,13 @@ function UI.click(game, x, y, b)
       end
     end
     return true
+  end
+  -- orders bar
+  for _, btn in ipairs(game.orderBtns or {}) do
+    if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+      if b == 1 and btn.on then game:orderAction(btn.action, love.keyboard.isDown("lshift", "rshift")) end
+      return true
+    end
   end
   if y < L.panelY then return UI.sidebarClick(game, x, y, b) end
   -- minimap

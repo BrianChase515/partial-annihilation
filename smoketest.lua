@@ -248,6 +248,33 @@ local function script()
   log("one press on commander alone -> alive", cm.alive)
   key("backspace")
   log("second press -> alive", cm.alive, "over", w.over ~= nil)
+  -- orders bar: select some tanks, hover Flee, click Attack then a spot
+  game = startFn({ size = 128, water = 0.45, seed = 21 })
+  w = game.world
+  local cm2 = w.teams[1].commander
+  local ts = {}
+  for i = 1, 4 do ts[i] = w:spawn("tank", 1, cm2.x + 40 * i, cm2.y - 40) end
+  game:select(ts)
+  frame()
+  local fb
+  for _, b in ipairs(game.orderBtns or {}) do if b.action == "flee" then fb = b end end
+  log("orders bar buttons:", #(game.orderBtns or {}), "flee enabled", fb and fb.on)
+  love.mouse.setPosition(fb.x + 10, fb.y + 10)
+  frame(); shot("orders.png")
+  local ab
+  for _, b in ipairs(game.orderBtns) do if b.action == "amove" then ab = b end end
+  game:mousepressed(ab.x + 5, ab.y + 5, 1); game:mousereleased(ab.x + 5, ab.y + 5, 1)
+  log("mode after Attack button:", game.mode)
+  game:mousepressed(500, 300, 1); game:mousereleased(500, 300, 1)
+  log("tank order:", ts[1].orders[1] and ts[1].orders[1].type)
+  log("check32", require("src.online").check32("abc|partial"))
+  -- force a win to see the score screen
+  local e2b = w.teams[2].commander
+  w:commanderXP(cm2, 600)
+  w:kill(e2b, cm2)
+  local t1 = love.timer.getTime()
+  while love.timer.getTime() - t1 < 1.7 do game:update(1 / 60); frame() end
+  shot("score.png")
   local MUSIC = require("src.music")
   log("music heat", MUSIC.heat, "intensity", math.floor(MUSIC.intensity * 100) / 100)
   log("DONE")

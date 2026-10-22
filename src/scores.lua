@@ -1,6 +1,6 @@
--- Local high-score table for Score mode.
+-- Local high-score table (official games only). A new game version starts a fresh table.
 local S = {}
-local FILE = "high_scores.txt"
+local FILE = "high_scores_v" .. require("src.defs").VERSION .. ".txt"
 
 function S.load()
   local list = {}

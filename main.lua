@@ -156,6 +156,7 @@ function love.update(dt)
     menu:update(dt)
   else
     game:update(dt)
+    if (game.quitToTitle or game.playAgain) and game.log then game.log:finish() end
     if game.quitToTitle then
       menu = Menu.new(lastOpts)
       state = "menu"
@@ -225,4 +226,9 @@ end
 
 function love.resize()
   if state == "game" and game then game:clampCam() end
+end
+
+function love.quit()
+  if game and game.log then pcall(function() game.log:finish() end) end
+  return false
 end

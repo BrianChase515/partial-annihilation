@@ -1,0 +1,43 @@
+name: Leaderboard
+on:
+  issues:
+    types: [opened]
+  push:
+    branches: [main]
+    paths: [VERSION]
+permissions:
+  contents: write
+  issues: write
+concurrency:
+  group: leaderboard
+  cancel-in-progress: false
+jobs:
+  board:
+    if: github.event_name == 'push' || startsWith(github.event.issue.title, '[score]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update board
+        id: run
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            python3 tools/leaderboard.py render
+          else
+            python3 tools/leaderboard.py submit && echo "ok=1" >> "$GITHUB_OUTPUT" || echo "ok=0" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Commit
+        run: |
+          git config user.name "leaderboard-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A leaderboard LEADERBOARD.md
+          git diff --cached --quiet && exit 0
+          git commit -m "Leaderboard update"
+          for i in 1 2 3; do git pull --rebase -q && git push && exit 0; sleep 3; done
+          exit 1
+      - name: Reply and close
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file /tmp/reply.md
+          gh issue close ${{ github.event.issue.number }} --repo ${{ github.repository }}

@@ -8,7 +8,7 @@ local U_fmt = require("src.util").fmt
 local Menu = {}
 Menu.__index = Menu
 
-local SIZES = { { "Small", 72 }, { "Medium", 96 }, { "Large", 128 } }
+local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
 
@@ -54,7 +54,7 @@ function Menu:rects()
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 44, w = 110, h = 34, label = o[1], field = "water", value = i, rowLabel = i == 1 and "Water" or nil }
   end
   -- modifiers (toggles, can combine)
-  local MODLIST = { { "alien", "Alien Tech" }, { "drops", "Dropships" }, { "score", "Score mode" }, { "groovy", "Groovy" } }
+  local MODLIST = { { "alien", "Alien Tech" }, { "drops", "Dropships" }, { "groovy", "Groovy" } }
   for i, m in ipairs(MODLIST) do
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 88, w = 110, h = 34, label = m[2], modkey = m[1],
       active = self.mods[m[1]], rowLabel = i == 1 and "Modifiers" or nil }
@@ -78,7 +78,7 @@ function Menu:rects()
       end
     end
   end
-  local by = ty + 4 * 46 + 40
+  local by = ty + 4 * 46 + 54
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
@@ -86,10 +86,17 @@ function Menu:rects()
   local px = x0 + 580
   r[#r + 1] = { x = px, y = y, w = 300, h = 34, label = "Random new map", action = "random", active = not self.savedMap }
   for i, m in ipairs(self.maps) do
-    if i > 6 then break end
+    if i > 5 then break end
     local yy = y + 44 + (i - 1) * 40
     r[#r + 1] = { x = px, y = yy, w = 262, h = 34, label = m.name, map = m, active = self.savedMap and self.savedMap.name == m.name }
     r[#r + 1] = { x = px + 268, y = yy, w = 32, h = 34, label = "x", delmap = m }
+  end
+  -- game update (top-right), when GitHub has a newer version
+  local ON = require("src.online")
+  if ON.state == "available" or ON.state == "downloading" or ON.state == "updated" or ON.state == "failed" then
+    local label = ({ available = "Update to v" .. tostring(ON.latest), downloading = "Downloading...",
+      updated = "Restart to finish update", failed = "Update failed - retry" })[ON.state]
+    r[#r + 1] = { x = w - 300, y = 16, w = 284, h = 40, label = label, action = "update", active = ON.state ~= "failed" }
   end
   return r
 end
@@ -111,6 +118,9 @@ end
 
 function Menu:update(dt)
   self.t = self.t + dt
+  local ON = require("src.online")
+  if not self.noOnline then ON.check() end
+  ON.poll()
   local w = love.graphics.getWidth()
   for _, s in ipairs(self.shapes) do
     s.x = s.x + s.vx * dt * (s.team % 2 == 1 and 1 or -1)
@@ -212,37 +222,63 @@ function Menu:draw()
   lg.setColor(0.65, 0.72, 0.8)
   local desc
   local MODDESC = {
-    alien = "Alien Tech: a huge alien walker lands near the middle. Hold its zone 15s with no enemies inside to claim it. Repeats.",
-    score = "Score mode: kill-streak multiplier (holds until 10s with no enemy deaths), par time, difficulty bonus, leaderboard, high scores.",
-    drops = "Dropships: from 3:00, alien crews drop near the middle and wander. When you meet one, a coin flip decides: join you or attack.",
-    groovy = "Groovy: flower-power explosions, far-out colors and a slowly tripping landscape. Purely cosmetic.",
+    alien = "Alien Tech: a huge alien walker lands near the middle. Hold its zone 15s to claim it. Repeats. (Score becomes unofficial.)",
+    drops = "Dropships: from 3:00, alien crews drop and wander. Meet one and a coin flip decides: join you or attack. (Unofficial score.)",
+    groovy = "Groovy: flower-power explosions, far-out colors and a slowly tripping landscape. Cosmetic, so score stays official.",
   }
   if hoverMod then desc = MODDESC[hoverMod]
   elseif hoverProf then desc = D.profiles[hoverProf.prof].key .. ": " .. D.profiles[hoverProf.prof].desc
   else desc = "Same team number = allies. Hover a personality to see what it does." end
-  lg.print(desc, x0, ty + 4 * 46 + 8)
+  lg.printf(desc, x0, ty + 4 * 46 + 4, 520)
   if self.savedMap then
     lg.setColor(0.6, 0.85, 0.65)
-    lg.print("Playing saved map: " .. self.savedMap.name .. "  (seed " .. self.savedMap.seed .. ")", x0 + 580, y + 44 + math.min(6, #self.maps) * 40 + 8)
+    lg.printf("Playing saved map: " .. self.savedMap.name .. "  (seed " .. self.savedMap.seed .. ")", x0 + 580, y + 44 + math.min(5, #self.maps) * 40 + 2, 300)
   elseif #self.maps == 0 then
     lg.setColor(0.5, 0.56, 0.64)
     lg.printf("No saved maps yet. In a game, open the menu (Esc) and choose \"Save this map\" to keep one you like.", x0 + 580, y + 48, 300)
   end
   -- high scores (Score mode)
   self.scores = self.scores or require("src.scores").load()
-  local hy = y + 44 + 6 * 40 + 40
+  local hy = y + 44 + 5 * 40 + 34
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("HIGH SCORES (Score mode)", x0 + 580, hy)
+  lg.print("HIGH SCORES  v" .. D.VERSION, x0 + 580, hy)
+  local official = not (self.mods.alien or self.mods.drops)
+  if official then lg.setColor(0.5, 0.9, 0.55) else lg.setColor(1, 0.6, 0.35) end
+  local ot = official and "this game counts" or "modifiers on: unofficial"
+  lg.print(ot, x0 + 580 + 300 - R.font(13):getWidth(ot), hy)
   if #self.scores == 0 then
     lg.setColor(0.45, 0.5, 0.58)
-    lg.print("None yet - turn on Score mode and play.", x0 + 580, hy + 22)
+    lg.print("None yet - win a game with no Alien Tech or Dropships.", x0 + 580, hy + 22)
   end
   for i, sc in ipairs(self.scores) do
     if i > 5 then break end
     lg.setColor(i == 1 and 1 or 0.85, i == 1 and 0.85 or 0.88, i == 1 and 0.35 or 0.92)
     lg.print(string.format("%d. %s  %s  %s", i, U_fmt(sc.pts), sc.result, sc.date), x0 + 580, hy + 4 + i * 20)
   end
+  -- online leaderboard for this version (fetched from GitHub in the background)
+  local ON = require("src.online")
+  local oy = hy + 4 + 6 * 20 + 14
+  lg.setColor(0.55, 0.62, 0.7)
+  lg.print("ONLINE LEADERBOARD  v" .. D.VERSION, x0 + 580, oy)
+  if not ON.board or #ON.board == 0 then
+    lg.setColor(0.45, 0.5, 0.58)
+    lg.print(ON.board and "No scores yet this version - be the first." or "(offline)", x0 + 580, oy + 22)
+  else
+    for i, e in ipairs(ON.board) do
+      if i > 5 then break end
+      lg.setColor(i == 1 and 1 or 0.85, i == 1 and 0.85 or 0.88, i == 1 and 0.35 or 0.92)
+      local nm = tostring(e.name or "?")
+      if #nm > 14 then nm = nm:sub(1, 13) .. "." end
+      lg.print(string.format("%d. %s  %s  %s", i, U_fmt(e.score), nm, tostring(e.result or "")), x0 + 580, oy + 4 + i * 20)
+    end
+  end
+  if ON.msg and (ON.state == "failed" or ON.state == "noupdate" or ON.state == "updated") then
+    lg.setColor(0.8, 0.85, 0.95)
+    lg.printf(ON.msg, w - 300, 62, 284)
+  end
+  lg.setColor(0.4, 0.45, 0.52)
+  lg.print("v" .. D.VERSION, 12, h - 24)
   lg.setFont(R.font(13))
   lg.setColor(0.5, 0.56, 0.64)
   local tip = "Tip: build Metal Extractors on the yellow deposits and Solar Collectors for energy, then a Vehicle Plant. Kill enemy Commanders to win."
@@ -279,6 +315,10 @@ function Menu:mousepressed(x, y, b)
       elseif r.action == "start" and b == 1 then
         if self:validTeams() then return "start" end
       elseif r.action == "help" then self.showHelp = true
+      elseif r.action == "update" then
+        local ON = require("src.online")
+        if ON.state == "updated" then love.event.quit("restart")
+        elseif ON.state ~= "downloading" then ON.update() end
       elseif r.action == "quit" then love.event.quit() end
       return
     end
@@ -303,7 +343,7 @@ function Menu:options()
   local o = {
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
-    mods = { alien = self.mods.alien, drops = self.mods.drops, score = self.mods.score, groovy = self.mods.groovy },
+    mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy },
   }
   if self.savedMap then
     o.seed = self.savedMap.seed
