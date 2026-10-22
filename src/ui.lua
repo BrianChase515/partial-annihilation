@@ -728,7 +728,9 @@ Orders (hold Shift to queue)
   Shift+F ................... retreat to the Commander
   Ctrl+F .................... plant the retreat flag at the mouse
                               Units out of combat near your Commander or a factory slowly repair
-  Backspace ................. drop the last queued order
+  Delete .................... SELF-DESTRUCT selected units/buildings (unfinished ones refund)
+                              Commander alone: press twice (you lose the game)
+  Shift+Delete .............. drop the last queued order
 
 Building
   Select a constructor, press Q W E R T Y U I (or click), then click the map
@@ -744,7 +746,7 @@ Camera
   F9 = keep mouse inside window (on by default, for edge panning),  F8 = edge panning on/off
 
 Game
-  Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound on/off
+  Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
   F11 = fullscreen,  F1 = this help
 
 Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20

@@ -2,7 +2,7 @@
 
 **A lightweight real-time strategy game for the Mac, in the spirit of Total Annihilation, where the units are shapes and numbers.**
 
-Land, sea and air. Up to 4 players with teams. Procedural maps. The whole game is about 80 KB of compressed Lua, and it runs on the tiny [LÖVE](https://love2d.org) engine, which runs natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
+Land, sea and air. Up to 4 players with teams. Procedural maps. The whole game is about 80 KB of compressed Lua plus about 3 MB of music, and it runs on the tiny [LÖVE](https://love2d.org) engine, which runs natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
 
 ![A 2v2 battle: green's veteran tanks push into red's base](screenshots/battle-2v2.png)
 
@@ -27,6 +27,7 @@ Land, sea and air. Up to 4 players with teams. Procedural maps. The whole game i
 - **Drag-to-build, nearest first.** Drag a box to fill it with extractors on every deposit, or with buildings in a grid. Each constructor takes the closest jobs first.
 - **Factory output joins control groups**, and **every unit has veterancy**, including towers.
 - **Total Annihilation-style economy, and maps you can keep.** If you overspend, every project slows down by the same amount instead of the oldest one hogging everything. Maps are procedurally generated and symmetric, and you can save the ones you like by name.
+- **A dynamic orchestral score and a robotic announcer.** Three tempo-locked orchestral layers loop in sync and crossfade with how much fighting you're in: strings, choir and harp when it's quiet; cellos, tremolo strings and timpani when enemies are in sight; full brass and percussion in a real battle. Victory and defeat get their own fanfare. A robot voice calls out base attacks, a Commander under fire, incoming nukes, dropships, alien tech, a stalled economy and more.
 - **Quality-of-life touches:**
   - a sidebar listing every factory and builder
   - a follow camera and a cinematic camera
@@ -63,7 +64,7 @@ Shapes tell you the domain, and the number tells you the type:
 ## Playing on a Mac
 
 1. Install **LÖVE 11.5** from [love2d.org](https://love2d.org) (the macOS download is a universal app). Move `love.app` into Applications.
-2. Build the game file. Run `tools/build.sh`, or zip the contents of this folder (`main.lua`, `conf.lua`, `src/`) into `PartialAnnihilation.love`.
+2. Build the game file. Run `tools/build.sh`, or zip the contents of this folder (`main.lua`, `conf.lua`, `src/`, `assets/`) into `PartialAnnihilation.love`.
 3. Run it with `open -n -a love PartialAnnihilation.love`, or drag the `.love` file onto `love.app`.
 
 The same `.love` file runs on Windows and Linux with LÖVE 11.5.
@@ -75,6 +76,8 @@ The same `.love` file runs on Windows and Linux with LÖVE 11.5.
 | Select / add | Left-click or drag; Shift adds; double-click selects all of a type on screen |
 | Move / attack / assist | Right-click (Shift queues) |
 | Attack-move, Stop, Patrol | `A` then click, `S`, `P` then click |
+| Self-destruct selection | `Delete` (unfinished buildings refund their metal; the Commander needs two presses) |
+| Drop last queued order | `Shift+Delete` |
 | Retreat to flag / Commander | `F` / `Shift+F`; plant the flag with `Ctrl+F` |
 | Commander upgrade choice | `Z` / `X` (or click a card) |
 | Nuke (Commander level 5) | `N`, then click the target |
@@ -88,6 +91,7 @@ The same `.love` file runs on Windows and Linux with LÖVE 11.5.
 | Jump to Commander / last attack | `C` / `Space` |
 | Idle constructor | `Tab` |
 | Sidebar, speed, pause | `B`; `+`/`-`; `F3` (the top bar is clickable too) |
+| Sound effects / music / announcer | `M` / `Shift+M` / `V` |
 | Help | `F1` |
 
 ## How it's built
@@ -105,7 +109,9 @@ Plain Lua on LÖVE 11.5, with no other dependencies.
 | `src/scores.lua` | Local high-score table |
 | `src/game.lua`, `src/ui.lua`, `src/render.lua` | Input, the HUD and drawing |
 | `src/menu.lua`, `src/maps.lua` | Lobby and saved maps |
-| `src/sfx.lua` | Procedurally generated sound effects (no audio files) |
+| `src/sfx.lua` | Procedurally generated sound effects |
+| `src/music.lua`, `src/voice.lua` | Intensity-driven music crossfading and the announcer queue |
+| `tools/compose.py`, `tools/voices.py` | Compose the score as MIDI and render it with FluidSynth (FluidR3 GM soundfont, MIT); render the announcer with espeak-ng plus a ring-modulator robot filter |
 
 ### Testing
 

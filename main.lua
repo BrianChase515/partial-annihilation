@@ -148,8 +148,11 @@ function love.update(dt)
     if not ok then print("ERROR", err); love.event.quit() end
     return
   end
+  local MUSIC = require("src.music")
+  MUSIC.update(dt, state == "menu" and "menu" or nil)
   if state == "menu" then
     love.mouse.setGrabbed(false)
+    MUSIC.menu()
     menu:update(dt)
   else
     game:update(dt)

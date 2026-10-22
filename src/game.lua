@@ -6,6 +6,8 @@ local R = require("src.render")
 local UI = require("src.ui")
 local AI = require("src.ai")
 local SFX = require("src.sfx")
+local VOICE = require("src.voice")
+local MUSIC = require("src.music")
 
 local G = {}
 G.__index = G
@@ -48,6 +50,7 @@ function G.new(opts)
       else
         self:notice("Commander level 5: NUKE ARMED.  Select him and press N", 5)
       end
+      VOICE.say(offer and "commander_level" or "nuke_ready")
       SFX.play("ready", 0.7, 0)
     elseif e.clevel >= 5 and world:hostile(e.team, 1) then
       self:notice(D.teamName[e.team] .. "'s Commander now has a NUKE.", 4)
@@ -61,6 +64,8 @@ function G.new(opts)
     local secs = math.floor(U.dist(e.x, e.y, x, y) / require("src.commander").NUKE_SPEED + 0.5)
     local who = e.team == 1 and "You" or D.teamName[e.team]
     self:notice("NUKE LAUNCHED by " .. who .. "!  Impact in " .. secs .. "s  (red circle)", 5)
+    VOICE.say(world:hostile(e.team, 1) and "nuke_incoming" or "nuke_launched")
+    MUSIC.bump(1.2)
     SFX.play("alert", 1, 0)
   end
   world.onDetonate = function(n)
@@ -72,22 +77,27 @@ function G.new(opts)
   world.onAlien = function(what, a, team)
     if what == "announce" then
       self:notice("ALIEN TECH incoming! Lands in 60s at the purple marker. Hold its zone for 15s to claim it.", 6)
+      VOICE.say("alien_signal")
       SFX.play("alert", 0.8, 0)
     elseif what == "land" then
       self:notice("The Alien Walker has landed. Clear the zone and hold it!", 4)
+      VOICE.say("alien_landed")
     elseif what == "claim" then
       local who = team == 1 and "You" or ((world:hostile(team, 1) and "Enemy " or "Your ally ") .. D.teamName[team])
       self:notice(who .. " claimed the Alien Walker!", 5)
+      VOICE.say(world:hostile(team, 1) and "alien_lost" or "alien_claimed")
       SFX.play(team == 1 and "ready" or "alert", 0.9, 0)
     end
   end
   world.onDrop = function(sq)
     self:notice("Alien dropship spotted near the middle of the map. Its crew is undecided...", 4)
+    VOICE.say("dropship")
   end
   self.flips = {}
   world.onDropEncounter = function(sq)
     if sq.team == 1 then
       self.flips[#self.flips + 1] = { sq = sq, t = 0 }
+      VOICE.say("drop_contact")
       SFX.play("alert", 0.5, 0)
       return true -- wait for the coin flip
     end
@@ -110,8 +120,10 @@ function G.new(opts)
       self.spectating = true
     elseif world:hostile(team, 1) then
       self:notice(name .. " has been eliminated!", 4)
+      VOICE.say("enemy_eliminated")
     else
       self:notice("Your ally " .. name .. " has been eliminated.", 4)
+      VOICE.say("ally_eliminated")
     end
   end
 
@@ -149,6 +161,9 @@ function G.new(opts)
     end
   end
   world.onFire = function(e, o)
+    if o and o.team and (world:allied(e.team, 1) and world:hostile(o.team, 1) or world:allied(o.team, 1) and world:hostile(e.team, 1)) then
+      MUSIC.bump(o.key == "commander" and 0.05 or 0.02)
+    end
     if self:onScreen(e.x, e.y) and (e.team == 1 or world:isVisible(e)) then
       local w = e.def.weapon
       local heavy = w.damage >= 60 or w.ballistic
@@ -159,6 +174,9 @@ function G.new(opts)
     if e.team == 1 and self:onScreen(e.x, e.y) then SFX.play("ready", 0.35, 0) end
   end
   world.onKill = function(o, attacker)
+    if attacker and attacker.team and (world:allied(o.team, 1) or world:allied(attacker.team, 1)) then
+      MUSIC.bump(o.def.building and 0.15 or (o.key == "commander" and 0.6 or 0.07))
+    end
     if self:onScreen(o.x, o.y) and (o.team == 1 or world:isVisible(o)) then
       local big = o.def.building or o.key == "commander" or o.def.radius >= 14
       SFX.play("boom", big and 0.9 or 0.5, 0.3)
@@ -166,7 +184,17 @@ function G.new(opts)
     if o.team == 1 then self.stats.lost = self.stats.lost + 1
     elseif attacker and attacker.team == 1 then self.stats.killed = self.stats.killed + 1 end
   end
+  world.onBuilt = function(b)
+    if b.team == 1 and b.def.building then VOICE.say("construction") end
+  end
   self.lastAttackNotice = -100
+  self.voiceState = { cmdHp = c.hp, nukeReady = false, lowM = 0, lowE = 0 }
+  if not self.opts.autotest then VOICE.say("commander_online") end
+  if not self.opts.autotest then
+    MUSIC.reset()
+    MUSIC.start()
+  end
+  self.musicScan = 0
   return self
 end
 
@@ -417,6 +445,40 @@ function G:rightClick(wx, wy, queue)
   self:commandMove(wx, wy, "move", queue)
 end
 
+-- Delete / Backspace: self-destruct the selected units and buildings you own.
+-- The Commander is skipped unless he is the only thing selected and you press twice.
+function G:selfDestruct()
+  local w = self.world
+  local list, cmd = {}, nil
+  for _, e in ipairs(self:selectedList()) do
+    if e.team == 1 and e.alive then
+      if e.key == "commander" then cmd = e else list[#list + 1] = e end
+    end
+  end
+  if #list == 0 and cmd then
+    if self.confirmCmdDelete and love.timer.getTime() - self.confirmCmdDelete < 2.5 then
+      self.confirmCmdDelete = nil
+      w:kill(cmd)
+    else
+      self.confirmCmdDelete = love.timer.getTime()
+      self:notice("Press Delete again to self-destruct your Commander (you lose)", 2.5)
+    end
+    return
+  end
+  if #list == 0 then return end
+  local tm = w.teams[1]
+  for _, e in ipairs(list) do
+    -- unfinished construction is cancelled: refund the metal already spent
+    if e.built < 1 and e.def.cost then
+      tm.metal = math.min(tm.mStore, tm.metal + e.def.cost.metal * e.built)
+    end
+    w:kill(e)
+  end
+  self.selected = {}
+  VOICE.say("self_destruct")
+  self:notice(#list == 1 and "Self-destructed" or (#list .. " self-destructed"), 1.2)
+end
+
 function G:stop()
   for _, u in ipairs(self:selectedMobile()) do
     u.orders = {}
@@ -581,6 +643,38 @@ function G:activateSlot(i, shift, right)
   end
 end
 
+-- Announcer checks that aren't tied to a single world event
+function G:updateVoice(dt)
+  local vs, w = self.voiceState, self.world
+  VOICE.update()
+  -- music: hostile units in sight keep at least a low simmer of tension
+  self.musicScan = (self.musicScan or 0) - dt
+  if self.musicScan <= 0 then
+    self.musicScan = 1
+    local seen = 0
+    for _, e in ipairs(w.entities) do
+      if e.alive and not e.def.building and e.team ~= 0 and w:hostile(e.team, 1) and w:isVisible(e) then seen = seen + 1 end
+    end
+    MUSIC.floor = math.min(0.32, seen * 0.025)
+  end
+  local c = w.teams[1].commander
+  if c and c.alive then
+    if c.hp < vs.cmdHp - 1 then
+      if c.hp < c.maxhp * 0.3 then VOICE.say("commander_low") else VOICE.say("commander_attack") end
+    end
+    vs.cmdHp = c.hp
+    if c.nukeReady and not vs.nukeReady and (c.clevel or 0) >= 5 and vs.sawNukeCycle then VOICE.say("nuke_ready") end
+    if c.nukeReady and (c.clevel or 0) >= 5 then vs.sawNukeCycle = true end
+    vs.nukeReady = c.nukeReady
+  end
+  -- stalled economy: demand outstrips supply for a few seconds
+  local tm = w.teams[1]
+  vs.lowM = (tm.mRatio < 0.5 and tm.mDemand > 0) and vs.lowM + dt or 0
+  vs.lowE = (tm.eRatio < 0.5 and tm.eDemand > 0) and vs.lowE + dt or 0
+  if vs.lowM > 6 then VOICE.say("low_metal"); vs.lowM = 0 end
+  if vs.lowE > 6 then VOICE.say("low_energy"); vs.lowE = 0 end
+end
+
 function G:notice(text, life, x, y)
   self.notices[#self.notices + 1] = { text = text, t = 0, life = life or 2.5, x = x, y = y }
   if #self.notices > 4 then table.remove(self.notices, 1) end
@@ -594,6 +688,9 @@ function G:update(dt)
     if not self.overShown then
       self.overShown = true
       self.overTime = love.timer.getTime()
+      local won = self.world.over.winnerAlly == self.world.ally[1]
+      VOICE.say(won and "victory" or "defeat")
+      MUSIC.finale(won)
       local w = self.world
       if w.score and not self.opts.autotest then
         local ais, levels = {}, {}
@@ -626,8 +723,10 @@ function G:update(dt)
       if flip.sq.result == "join" then
         self:notice("Heads! The drop crew joins you (" .. #flip.sq.units .. " units)", 3)
         SFX.play("ready", 0.9, 0)
+        VOICE.say("drop_join")
       else
         self:notice("Tails! The drop crew attacks!", 3)
+        VOICE.say("drop_hostile")
         SFX.play("boom", 0.7, 0)
       end
     end
@@ -674,9 +773,17 @@ function G:update(dt)
   if tm.lastAttacked > self.lastAttackNotice + 12 and self.world.time - tm.lastAttacked < 0.5 then
     self.lastAttackNotice = self.world.time
     self:notice("Under attack!  (press Space to jump there)", 3)
+    local nearBase = false
+    self.world:query(tm.lastAttackX, tm.lastAttackY, 160, function(o)
+      if o.team == 1 and o.def.building then nearBase = true end
+    end)
+    VOICE.say(nearBase and "under_attack" or "units_attacked")
+    MUSIC.bump(0.2)
     self.attackX, self.attackY = tm.lastAttackX, tm.lastAttackY
     if not self:onScreen(tm.lastAttackX, tm.lastAttackY) then SFX.play("alert", 0.6, 0) end
   end
+
+  self:updateVoice(dt)
 
   for i = #self.notices, 1, -1 do
     local nt = self.notices[i]
@@ -1135,6 +1242,7 @@ function G:keypressed(key)
       self:notice("Retreat flag placed", 1.2)
     else
       self:retreat(shift and "commander" or "flag")
+      VOICE.say("retreat")
     end
     return
   end
@@ -1152,6 +1260,8 @@ function G:keypressed(key)
     if #self:selectedMobile() > 0 then self.mode = "amove" end
   elseif key == "s" then
     self:stop()
+  elseif (key == "delete" or key == "backspace") and not shift then
+    self:selfDestruct()
   elseif key == "p" then
     if #self:selectedMobile() > 0 then self.mode = "patrol" end
   elseif key == "space" then
@@ -1180,16 +1290,23 @@ function G:keypressed(key)
     self:setSpeed(self.speed - 0.5)
   elseif key == "b" and not ctrl then
     self.showSidebar = not self.showSidebar
-  elseif key == "delete" or key == "backspace" then
+  elseif (key == "delete" or key == "backspace") and shift then
     -- cancel last queued order
     for _, u in ipairs(self:selectedMobile()) do
       if #u.orders > 0 then table.remove(u.orders); u.path = nil end
     end
   elseif key == "g" then
     for _, f in ipairs(self:selectedFactories()) do f.repeatMode = not f.repeatMode end
+  elseif key == "m" and shift then
+    MUSIC.setMuted(not MUSIC.muted)
+    self:notice(MUSIC.muted and "Music off" or "Music on", 1)
   elseif key == "m" then
     SFX.muted = not SFX.muted
-    self:notice(SFX.muted and "Sound off" or "Sound on", 1)
+    self:notice(SFX.muted and "Sound effects off" or "Sound effects on", 1)
+  elseif key == "v" then
+    VOICE.muted = not VOICE.muted
+    if VOICE.muted then VOICE.stopAll() end
+    self:notice(VOICE.muted and "Announcer off" or "Announcer on", 1)
   end
 end
 

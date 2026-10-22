@@ -1058,6 +1058,7 @@ function W:applyBuild(e, b, power, dt)
   e.nanoTimer = 0.1
   if b.built >= 1 then
     MODS.onBuilt(self, b)
+    if self.onBuilt then self.onBuilt(b) end
     b.hp = math.min(b.maxhp, math.max(b.hp, b.maxhp * 0.98))
     self.economyDirty = true
     if b.def.factory and not b.rally then

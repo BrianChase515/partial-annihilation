@@ -233,6 +233,23 @@ local function script()
   for _ = 1, 30 * 3 do game:update(1 / 30) end
   log("after flip: state", sq.state, "result", sq.result, "unit team", sq.units[1] and sq.units[1].team, "world advanced", math.floor((w.time - t0) * 10) / 10)
   frame(); shot("after_flip.png")
+  -- Delete key: self-destruct, with the Commander guard
+  game = startFn({ size = 96, water = 0.30, seed = 11 })
+  w = game.world
+  local cm = w.teams[1].commander
+  local s1 = w:spawn("tank", 1, cm.x + 60, cm.y)
+  local s2 = w:spawn("solar", 1, cm.x - 80, cm.y + 40); s2.built = 0.5
+  local m0 = w.teams[1].metal
+  game:select({ s1, s2, cm })
+  key("delete")
+  log("delete: tank alive", s1.alive, "half-built solar alive", s2.alive, "commander alive", cm.alive,
+    "refund", math.floor(w.teams[1].metal - m0))
+  game:select({ cm }); key("backspace")
+  log("one press on commander alone -> alive", cm.alive)
+  key("backspace")
+  log("second press -> alive", cm.alive, "over", w.over ~= nil)
+  local MUSIC = require("src.music")
+  log("music heat", MUSIC.heat, "intensity", math.floor(MUSIC.intensity * 100) / 100)
   log("DONE")
 end
 
