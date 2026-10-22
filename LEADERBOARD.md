@@ -10,4 +10,6 @@ _No scores yet this version._
 
 ## Commander Arena
 
-_No scores yet this version._
+| # | Player | Score | Result | Time | Players | Opponents | Date |
+|---|---|---|---|---|---|---|---|
+| 1 | [BrianChase515](https://github.com/BrianChase515) | 29,249 | Win | 6:10 | 2 | reclaimer 5 | 2026-10-22 |
