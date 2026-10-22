@@ -252,33 +252,101 @@ function M.generateArena(opts)
   self.arena = true
   local rng = love.math.newRandomGenerator(self.seed)
   self.rng = rng
-  self.syms = {
-    function(x, y) return x, y end,
-    function(x, y) return w - 1 - x, h - 1 - y end,
-  }
+
+  -- sides: one per alliance, the human's alliance first
+  local players = opts.players or { { ally = 1 }, { ally = 2 } }
+  local sideOfAlly, nSides = {}, 0
+  self.teamSide = {}
+  for t, p in ipairs(players) do
+    local a = p.ally or t
+    if not sideOfAlly[a] then nSides = nSides + 1; sideOfAlly[a] = nSides end
+    self.teamSide[t] = sideOfAlly[a]
+  end
+  nSides = math.max(2, math.min(4, nSides))
+  self.nSides = nSides
+  local ffa = nSides > 2
+
+  if nSides == 3 then
+    -- three bases on a fair triangle, mirror-symmetric left to right
+    self.syms = {
+      function(x, y) return x, y end,
+      function(x, y) return w - 1 - x, y end,
+    }
+  elseif ffa then
+    self.syms = {
+      function(x, y) return x, y end,
+      function(x, y) return w - 1 - x, h - 1 - y end,
+      function(x, y) return w - 1 - y, x end,
+      function(x, y) return y, h - 1 - x end,
+    }
+  else
+    self.syms = {
+      function(x, y) return x, y end,
+      function(x, y) return w - 1 - x, h - 1 - y end,
+    }
+  end
   local n1, n2 = makeNoise(rng, 64), makeNoise(rng, 64)
   local ox, oy = rng:random() * 50, rng:random() * 50
   local function raw(x, y)
     local s = 1 / (w / 9)
     return n1(ox + x * s, oy + y * s) * 0.65 + n2(ox + x * s * 2.3, oy + y * s * 2.3) * 0.35
   end
-  local A = { math.floor(w * 0.11), math.floor(h * 0.89) }
-  local B = { w - 1 - A[1], h - 1 - A[2] }
-  local lanes = {
-    top = { A, { A[1], math.floor(h * 0.11) }, { B[1], B[2] } },
-    mid = { A, B },
-    bot = { A, { math.floor(w * 0.89), A[2] }, { B[1], B[2] } },
-  }
-  -- the bends of the side lanes are pulled in a little so the corners aren't hugging the edge
-  lanes.top[2] = { math.floor(w * 0.11), math.floor(h * 0.11) }
-  lanes.bot[2] = { math.floor(w * 0.89), math.floor(h * 0.89) }
+  local lo, hi = math.floor(w * 0.11), w - 1 - math.floor(w * 0.11)
+  -- corners: side 1 bottom-left, 2 top-right, 3 top-left, 4 bottom-right
+  local corner = { { lo, hi }, { hi, lo }, { lo, lo }, { hi, hi } }
+  if nSides == 3 then corner = { { lo, hi }, { math.floor(w / 2), lo }, { hi, hi } } end
+  self.corner = corner
+  -- lanes: { id, name, a, b, pts (from side a to side b) }
+  local lanes = {}
+  if not ffa then
+    local A, B = corner[1], corner[2]
+    lanes[1] = { id = "top", name = "top", a = 1, b = 2, pts = { A, corner[3], B } }
+    lanes[2] = { id = "mid", name = "mid", a = 1, b = 2, pts = { A, B } }
+    lanes[3] = { id = "bot", name = "bot", a = 1, b = 2, pts = { A, corner[4], B } }
+  else
+    -- free-for-all: a lane between every pair of bases (edges and the diagonals)
+    for i = 1, nSides do
+      for j = i + 1, nSides do
+        lanes[#lanes + 1] = { id = i .. "-" .. j, name = i .. "-" .. j, a = i, b = j, pts = { corner[i], corner[j] } }
+      end
+    end
+  end
+  -- map templates (2-side and free-for-all alike)
+  local template = opts.template or "classic"
+  self.template = template
+  local laneR, rockAt, hillAt = 2.6, 0.6, 0.52
+  if template == "gauntlet" and not ffa then
+    -- a single wide lane straight through the middle
+    lanes = { { id = "mid", name = "mid", a = 1, b = 2, pts = { corner[1], corner[2] } } }
+    laneR = 3.8
+    rockAt, hillAt = 0.45, 0.4
+  elseif template == "longroad" then
+    -- winding lanes: resample each lane and swing it from side to side
+    for _, L in ipairs(lanes) do
+      local pts, n = {}, 26
+      for k = 0, n do
+        local f = k / n
+        local x, y, dx, dy = polyAt(L.pts, f)
+        local amp = w * 0.055 * math.sin(f * math.pi * 3) * math.min(1, math.min(f, 1 - f) * 6)
+        pts[#pts + 1] = { math.floor(x - dy * amp + 0.5), math.floor(y + dx * amp + 0.5) }
+      end
+      pts[1], pts[#pts] = L.pts[1], L.pts[#L.pts]
+      L.pts = pts
+    end
+    -- rock walls between the lanes, so the long way round is the only way
+    rockAt, hillAt = 0.47, 0.42
+  elseif template == "open" then
+    rockAt, hillAt = 0.8, 0.6
+  end
   self.lanes = lanes
+  self.lanesByName = {}
+  for _, L in ipairs(lanes) do self.lanesByName[L.name] = L end
 
   local height, terrain = {}, {}
-  -- distance from (x,y) to the nearest lane centerline, in tiles
   local function laneDist(x, y)
     local best = math.huge
-    for _, pts in pairs(lanes) do
+    for _, L in ipairs(lanes) do
+      local pts = L.pts
       for i = 2, #pts do
         local ax, ay, bx, by = pts[i - 1][1], pts[i - 1][2], pts[i][1], pts[i][2]
         local vx, vy = bx - ax, by - ay
@@ -289,19 +357,23 @@ function M.generateArena(opts)
     end
     return best
   end
+  local ns = #self.syms
   for y = 0, h - 1 do
     for x = 0, w - 1 do
-      local v = (raw(x, y) + raw(w - 1 - x, h - 1 - y)) / 2
-      v = 0.5 + (v - 0.5) * 1.6
+      local v = 0
+      for _, f in ipairs(self.syms) do v = v + raw(f(x, y)) end
+      v = v / ns
+      v = 0.5 + (v - 0.5) * (ffa and 2.0 or 1.6)
       local i = y * w + x
       height[i] = v
       local edge = math.min(x, y, w - 1 - x, h - 1 - y)
       local ld = laneDist(x, y)
-      local base = math.min(U.dist(x, y, A[1], A[2]), U.dist(x, y, B[1], B[2]))
+      local base = math.huge
+      for sd = 1, nSides do base = math.min(base, U.dist(x, y, corner[sd][1], corner[sd][2])) end
       if edge < 2 then terrain[i] = M.ROCK
-      elseif ld <= 2.6 or base <= 9 then terrain[i] = M.LAND
-      elseif v > 0.6 then terrain[i] = M.ROCK
-      elseif v > 0.52 then terrain[i] = M.HILL
+      elseif ld <= laneR or base <= 9 then terrain[i] = M.LAND
+      elseif v > rockAt then terrain[i] = M.ROCK
+      elseif v > hillAt then terrain[i] = M.HILL
       else terrain[i] = M.LAND end
     end
   end
@@ -309,16 +381,24 @@ function M.generateArena(opts)
   self.waterLevel = -1
   self.deposits, self.deposit, self.blocked = {}, {}, {}
 
-  -- structures: per side, an outer and an inner tower on each lane, and the Core
+  -- structures: on every lane, an outer and an inner tower at each end, and a Core per side
   self.towers = {}
-  local tiers = { { "outer", 0.36 }, { "inner", 0.2 } }
-  for lane, pts in pairs(lanes) do
-    for _, tier in ipairs(tiers) do
-      local x, y, dx, dy = polyAt(pts, tier[2])
-      -- set the tower beside the lane, not in it
-      local px, py = math.floor(x - dy * 3 + 0.5), math.floor(y + dx * 3 + 0.5)
-      self.towers[#self.towers + 1] = { side = 1, lane = lane, tier = tier[1], x = px, y = py }
-      self.towers[#self.towers + 1] = { side = 2, lane = lane, tier = tier[1], x = w - 1 - px, y = h - 1 - py }
+  local tiers = { { "outer", ffa and 0.3 or 0.36 }, { "inner", ffa and 0.16 or 0.2 } }
+  if template == "longroad" or template == "gauntlet" then
+    tiers = { { "outer", ffa and 0.34 or 0.42 }, { "middle", ffa and 0.24 or 0.3 }, { "inner", ffa and 0.14 or 0.17 } }
+  end
+  for _, L in ipairs(lanes) do
+    for _, endSide in ipairs({ L.a, L.b }) do
+      local pts = L.pts
+      if endSide == L.b then
+        pts = {}
+        for k = #L.pts, 1, -1 do pts[#pts + 1] = L.pts[k] end
+      end
+      for _, tier in ipairs(tiers) do
+        local x, y, dx, dy = polyAt(pts, tier[2])
+        local px, py = math.floor(x - dy * 3 + 0.5), math.floor(y + dx * 3 + 0.5)
+        self.towers[#self.towers + 1] = { side = endSide, lane = L.id, tier = tier[1], x = px, y = py }
+      end
     end
   end
   for _, t in ipairs(self.towers) do
@@ -328,27 +408,27 @@ function M.generateArena(opts)
       end
     end
   end
-  self.cores = { { x = A[1], y = A[2] }, { x = B[1], y = B[2] } }
+  self.cores = {}
+  for sd = 1, nSides do self.cores[sd] = { x = corner[sd][1], y = corner[sd][2] } end
 
-  -- start spots around each Core; player t uses side (1 or 2) by alliance
+  -- start spots around each Core, on the side facing the map center
   local spots = {}
-  for side = 1, 2 do
-    spots[side] = {}
-    local c = self.cores[side]
-    local dir = side == 1 and 1 or -1
-    for k, off in ipairs({ { 4, -4 }, { 6, -1 }, { 1, -6 } }) do
-      spots[side][k] = { x = c.x + off[1] * dir, y = c.y + off[2] * dir }
+  for sd = 1, nSides do
+    spots[sd] = {}
+    local c = self.cores[sd]
+    local dx = c.x < w / 2 and 1 or -1
+    local dy = c.y < h / 2 and 1 or -1
+    for k, off in ipairs({ { 4, 4 }, { 6, 1 }, { 1, 6 } }) do
+      spots[sd][k] = { x = c.x + off[1] * dx, y = c.y + off[2] * dy }
     end
   end
   self.starts = {}
-  local players = opts.players or { { ally = 1 }, { ally = 2 } }
-  local used = { 0, 0 }
-  local ally1 = players[1].ally or 1
-  for t, p in ipairs(players) do
-    local side = (p.ally or t) == ally1 and 1 or 2
-    used[side] = used[side] + 1
-    self.starts[t] = spots[side][math.min(3, used[side])]
-    self.starts[t].side = side
+  local used = {}
+  for t = 1, #players do
+    local sd = self.teamSide[t]
+    used[sd] = (used[sd] or 0) + 1
+    self.starts[t] = spots[sd][math.min(3, used[sd])]
+    self.starts[t].side = sd
   end
   self:labelComponents()
   return self

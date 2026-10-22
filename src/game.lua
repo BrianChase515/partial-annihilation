@@ -43,7 +43,7 @@ function G.new(opts)
   for i, p in ipairs(players) do income[i] = p.human and 1 or D.aiLevel(p.level).income end
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
-    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena,
+    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, template = opts.template,
   })
   local world = self.world
   world.humanTeams = {}

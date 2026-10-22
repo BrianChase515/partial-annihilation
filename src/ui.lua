@@ -145,11 +145,16 @@ function UI.drawArenaTop(game)
   local xt = hi and string.format("XP %d / %d", c.cxp or 0, hi) or "MAX LEVEL"
   lg.print(xt, x0 + 80 - font(11):getWidth(xt) / 2, 12)
   -- kills, towers, next wave
-  local towers = { 0, 0 }
-  for _, s in ipairs(st.structures) do if s.alive and s.key ~= "core" then towers[s.side] = towers[s.side] + 1 end end
+  local mine, theirs = 0, 0
+  for _, s in ipairs(st.structures) do
+    if s.alive and s.key ~= "core" then if s.side == 1 then mine = mine + 1 else theirs = theirs + 1 end end
+  end
+  local deaths = 0
+  for _, t in ipairs(st.sideTeams[1]) do deaths = deaths + (st.deaths[t] or 0) end
   lg.setFont(font(14))
   lg.setColor(0.85, 0.9, 0.95)
-  local txt = string.format("Kills %d - %d     Towers %d vs %d     Next wave %ds", st.kills[1], st.kills[2], towers[1], towers[2],
+  local txt = string.format("Kills %d  Deaths %d     Towers %d vs %d%s     Next wave %ds", st.kills[1], deaths, mine, theirs,
+    st.ffa and string.format("  (%d rivals left)", (function() local n = 0; for sd = 2, st.nSides do if not st.sideDead[sd] then n = n + 1 end end; return n end)()) or "",
     math.max(0, math.ceil(st.waveAt - w.time)))
   if not c.alive and c.respawnAt then
     txt = txt .. string.format("     RESPAWN IN %ds", math.ceil(c.respawnAt - w.time))
@@ -968,8 +973,8 @@ The sea: Shipyards build Sea Constructors for them and
 local ARENA_HELP = [[
 COMMANDER ARENA - CONTROLS
 
-Goal: destroy the enemy Core. Each lane has an outer and an inner tower per side:
-  outer first, then inner, then the Core (shielded structures glow blue).
+Goal: destroy the enemy Core (in free-for-all: be the last Core standing). Each lane has towers per side:
+  outer first, then middle (Long Road / Gauntlet), then inner, then the Core (shielded ones glow blue).
   Towers shoot creeps first - and you, if you attack an enemy Commander under them.
   A lane whose enemy towers are down sends super creeps.
 
@@ -1130,7 +1135,7 @@ function UI.drawOver(game)
   if world.arena then
     local ast = world.arena
     local towersDown = 0
-    for _, s2 in ipairs(ast.structures) do if not s2.alive and s2.side == 2 and s2.key ~= "core" then towersDown = towersDown + 1 end end
+    for _, s2 in ipairs(ast.structures) do if not s2.alive and s2.side ~= 1 and s2.key ~= "core" then towersDown = towersDown + 1 end end
     local c = world.teams[1].commander
     rows = {
       { "Game time", mmss(world.time) .. "   (par " .. mmss(world.parTime) .. ")" },

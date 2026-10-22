@@ -556,17 +556,20 @@ for _, c in ipairs(A.CLASSES) do A.byClass[c.key] = c end
 
 function A.setup(w, opts)
   local map = w.map
-  local st = { pending = {}, wrecks = {}, waveAt = A.WAVE_FIRST, wave = 0, kills = { 0, 0 }, deaths = {}, structures = {} }
+  local n = map.nSides or 2
+  local st = { pending = {}, wrecks = {}, waveAt = A.WAVE_FIRST, wave = 0, kills = {}, deaths = {}, structures = {},
+    nSides = n, ffa = n > 2, sideDead = {}, cores = {} }
   w.arena = st
-  -- sides by alliance: side 1 = the human's alliance
-  st.teamSide, st.sideTeams = {}, { {}, {} }
+  -- sides by alliance (worked out by the map): side 1 = the human's alliance
+  st.teamSide, st.sideTeams, st.sideOwner = {}, {}, {}
+  for side = 1, n do st.sideTeams[side] = {}; st.kills[side] = 0 end
   for t = 1, w.np do
-    local side = w.ally[t] == w.ally[1] and 1 or 2
+    local side = map.teamSide[t]
     st.teamSide[t] = side
     table.insert(st.sideTeams[side], t)
   end
-  st.sideOwner = { st.sideTeams[1][1], st.sideTeams[2][1] }
-  for side = 1, 2 do
+  for side = 1, n do st.sideOwner[side] = st.sideTeams[side][1] end
+  for side = 1, n do
     local cpos = map.cores[side]
     local x, y = map:center(cpos.x, cpos.y)
     local core = w:spawn("core", st.sideOwner[side], x, y)
@@ -574,6 +577,7 @@ function A.setup(w, opts)
     core.side = side
     st.structures[#st.structures + 1] = core
     st["core" .. side] = core
+    st.cores[side] = core
   end
   for _, t in ipairs(map.towers) do
     local x, y = map:center(t.x, t.y)
@@ -609,11 +613,13 @@ function A.updateProtection(w)
   for _, s in ipairs(st.structures) do
     if s.alive then
       if s.tier == "inner" then
+        s.protected = (alive[s.side .. s.lane .. "outer"] or alive[s.side .. s.lane .. "middle"]) or nil
+      elseif s.tier == "middle" then
         s.protected = alive[s.side .. s.lane .. "outer"] or nil
       elseif s.key == "core" then
         local anyInnerDown = false
-        for _, lane in ipairs({ "top", "mid", "bot" }) do
-          if not alive[s.side .. lane .. "inner"] then anyInnerDown = true end
+        for _, L in ipairs(w.map.lanes) do
+          if (L.a == s.side or L.b == s.side) and not alive[s.side .. L.id .. "inner"] then anyInnerDown = true end
         end
         s.protected = (not anyInnerDown) or nil
       else
@@ -703,14 +709,16 @@ function A.onKill(w, o, attacker)
   if o.def.building then
     if o.arenaTower then
       -- every Commander on the destroying side shares the reward
-      local side = 3 - o.side
-      for _, t in ipairs(st.sideTeams[side]) do
-        local c = w.teams[t].commander
-        if c then A.commanderXP(w, c, o.key == "core" and 0 or 260) end
+      local side = attacker and attacker.team and st.teamSide[attacker.team]
+      if side and side ~= o.side then
+        for _, t in ipairs(st.sideTeams[side]) do
+          local c = w.teams[t].commander
+          if c then A.commanderXP(w, c, o.key == "core" and 0 or 260) end
+        end
       end
       if w.onTowerDown then w.onTowerDown(o) end
       A.updateProtection(w)
-      if o.key == "core" then A.finish(w, side) end
+      if o.key == "core" then A.eliminateSide(w, o.side) end
     end
     return
   end
@@ -738,8 +746,8 @@ end
 
 function A.commanderDied(w, c, attacker)
   local st = w.arena
-  local side = st.teamSide[c.team]
-  st.kills[3 - side] = st.kills[3 - side] + 1
+  local killer = attacker and attacker.team and st.teamSide[attacker.team]
+  if killer and killer ~= st.teamSide[c.team] then st.kills[killer] = st.kills[killer] + 1 end
   st.deaths[c.team] = (st.deaths[c.team] or 0) + 1
   local mins = w.time / 60
   c.respawnAt = w.time + 5 + 2 * (c.clevel or 0) + mins * 0.6
@@ -764,19 +772,25 @@ function A.respawn(w, c)
   if w.onRespawn then w.onRespawn(c) end
 end
 
-function A.finish(w, winnerSide)
+-- a side whose Core falls is out; the last side standing wins
+function A.eliminateSide(w, side)
   local st = w.arena
-  if w.over then return end
-  local loser = 3 - winnerSide
-  for _, t in ipairs(st.sideTeams[loser]) do
+  if st.sideDead[side] then return end
+  st.sideDead[side] = true
+  for _, t in ipairs(st.sideTeams[side]) do
     local tm = w.teams[t]
     tm.dead = true
     tm.deadTime = w.time
     for _, e in ipairs(w.entities) do
       if e.alive and e.team == t then e.doom = w.time + 0.5 + math.random() * 3 end
     end
+    if w.onEliminate then w.onEliminate(t) end
   end
-  w.over = { winnerAlly = w.ally[st.sideTeams[winnerSide][1]], time = w.time }
+  local alive = {}
+  for sd = 1, st.nSides do if not st.sideDead[sd] then alive[#alive + 1] = sd end end
+  if #alive <= 1 and not w.over then
+    w.over = { winnerAlly = alive[1] and w.ally[st.sideTeams[alive[1]][1]] or -1, time = w.time }
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -829,32 +843,35 @@ function A.spawnWave(w)
   for _, sx in ipairs(st.structures) do
     if sx.alive and sx.tier then towersUp[sx.side .. sx.lane] = (towersUp[sx.side .. sx.lane] or 0) + 1 end
   end
-  for side = 1, 2 do
-    local team = st.sideOwner[side]
-    for lane, pts in pairs(map.lanes) do
-      local superMul = (towersUp[(3 - side) .. lane] or 0) == 0 and 1.6 or 1
-      local route = {}
-      if side == 1 then
-        for i = 1, #pts do route[i] = pts[i] end
-      else
-        for i = #pts, 1, -1 do route[#route + 1] = pts[i] end
-      end
-      local sx, sy = Map.polyAt(route, 0.07)
-      for i, key in ipairs(comp) do
-        local x, y = map:center(math.floor(sx + (i % 3) - 1), math.floor(sy + math.floor(i / 3) - 1))
-        local u = w:spawn(key, team, x, y)
-        u.creep = true
-        u.lane = lane
-        if level > 0 then A.setLevel(u, level) end
-        -- after 8 minutes the armies keep growing, so games always reach an end
-        local m = superMul * (k > 14 and (1 + 0.12 * (k - 14)) or 1)
-        if m > 1 then
-          u.maxhp = math.floor(u.maxhp * m); u.hp = u.maxhp; u.dmgMul = m
-          u.super = superMul > 1
+  for _, L in ipairs(map.lanes) do
+    for _, side in ipairs({ L.a, L.b }) do
+      local other = side == L.a and L.b or L.a
+      if not st.sideDead[side] and not st.sideDead[other] then
+        local team = st.sideOwner[side]
+        local route = {}
+        if side == L.a then
+          for i = 1, #L.pts do route[i] = L.pts[i] end
+        else
+          for i = #L.pts, 1, -1 do route[#route + 1] = L.pts[i] end
         end
-        for j = 2, #route do
-          local px, py = map:center(route[j][1], route[j][2])
-          w:issue(u, { type = "amove", x = px, y = py, arrive = 60 }, j > 2)
+        local superMul = ((towersUp[other .. L.id] or 0) == 0 and not st.sideDead[other]) and 1.6 or 1
+        local sx, sy = Map.polyAt(route, 0.07)
+        for i, key in ipairs(comp) do
+          local x, y = map:center(math.floor(sx + (i % 3) - 1), math.floor(sy + math.floor(i / 3) - 1))
+          local u = w:spawn(key, team, x, y)
+          u.creep = true
+          u.lane = L.id
+          if level > 0 then A.setLevel(u, level) end
+          -- after 7 minutes the armies keep growing, so games always reach an end
+          local m = superMul * (k > 14 and (1 + 0.12 * (k - 14)) or 1)
+          if m > 1 then
+            u.maxhp = math.floor(u.maxhp * m); u.hp = u.maxhp; u.dmgMul = m
+            u.super = superMul > 1
+          end
+          for j = 2, #route do
+            local px, py = map:center(route[j][1], route[j][2])
+            w:issue(u, { type = "amove", x = px, y = py, arrive = 60 }, j > 2)
+          end
         end
       end
     end
@@ -881,7 +898,7 @@ function A.update(w, dt)
   -- respawns
   for tt = 1, w.np do
     local c = w.teams[tt].commander
-    if c and not c.alive and c.respawnAt and t >= c.respawnAt then A.respawn(w, c) end
+    if c and not c.alive and c.respawnAt and t >= c.respawnAt and not st.sideDead[st.teamSide[tt]] then A.respawn(w, c) end
   end
   -- wrecks fade after 40 seconds
   for i = #st.wrecks, 1, -1 do if t - st.wrecks[i].t > 40 then table.remove(st.wrecks, i) end end
@@ -912,8 +929,8 @@ function A.update(w, dt)
 
   if tick then
     -- fountain: heal friendly Commanders at their Core
-    for side = 1, 2 do
-      local core = st["core" .. side]
+    for side = 1, st.nSides do
+      local core = st.cores[side]
       if core and core.alive then
         for _, tt in ipairs(st.sideTeams[side]) do
           local c = w.teams[tt].commander
@@ -962,10 +979,13 @@ end
 ---------------------------------------------------------------------------
 -- Score par for the Arena: 14 minutes, +3 per extra enemy
 
+A.TEMPLATE_PAR = { classic = 14, longroad = 17, gauntlet = 12, open = 13 }
+
 function A.par(w)
-  local enemies = #w.arena.sideTeams[2]
-  local allies = #w.arena.sideTeams[1] - 1
-  return (14 + 3 * (enemies - 1) - 2 * allies) * 60
+  local base = A.TEMPLATE_PAR[w.map.template or "classic"] or 14
+  local enemies, allies = 0, 0
+  for t = 2, w.np do if w:hostile(t, 1) then enemies = enemies + 1 else allies = allies + 1 end end
+  return (base + 3 * (enemies - 1) - 2 * allies) * 60
 end
 
 return A

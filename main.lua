@@ -81,13 +81,20 @@ function love.load(args)
       local lvl = tonumber(args[i + 5]) or 5
       local classes = {}
       for k in (args[i + 6] or ""):gmatch("[^,]+") do classes[#classes + 1] = k end
-      local a1, a2 = fmt:match("(%d)v(%d)")
-      a1, a2 = tonumber(a1) or 1, tonumber(a2) or 1
       local players = {}
-      for p = 1, a1 do players[#players + 1] = { ally = 1, level = lvl } end
-      for p = 1, a2 do players[#players + 1] = { ally = 2, level = lvl } end
+      local nffa = tonumber(fmt:match("^ffa(%d)"))
+      if nffa then
+        for p = 1, nffa do players[#players + 1] = { ally = p, level = lvl } end
+      else
+        local a1, a2 = fmt:match("(%d)v(%d)")
+        a1, a2 = tonumber(a1) or 1, tonumber(a2) or 1
+        for p = 1, a1 do players[#players + 1] = { ally = 1, level = lvl } end
+        for p = 1, a2 do players[#players + 1] = { ally = 2, level = lvl } end
+      end
       for p, pl in ipairs(players) do pl.class = classes[p] end
-      startGame({ size = autotest.size, seed = autotest.seed, autotest = true, players = players, mode = "arena" })
+      local tmpl
+      for k, x in ipairs(args) do if x == "--template" then tmpl = args[k + 1] end end
+      startGame({ size = autotest.size, seed = autotest.seed, autotest = true, players = players, mode = "arena", template = tmpl })
       return
     end
   end
@@ -131,15 +138,18 @@ local function runAutotest()
     if world.arena and world.time >= nextReport then
       nextReport = nextReport + 60
       local st = world.arena
-      local alive = { 0, 0 }
+      local alive = {}
+      for sd = 1, st.nSides do alive[sd] = 0 end
       for _, s in ipairs(st.structures) do if s.alive then alive[s.side] = alive[s.side] + 1 end end
+      local kl = {}
+      for sd = 1, st.nSides do kl[sd] = st.kills[sd] end
       local parts = {}
       for t = 1, world.np do
         local c = world.teams[t].commander
         parts[#parts + 1] = string.format("T%d %s L%d %s deaths %d", t, c.class, c.clevel or 0, c.alive and ("hp" .. math.floor(c.hp)) or "DEAD", st.deaths[t] or 0)
       end
-      print(string.format("[%4ds] wave %d kills %d-%d towers %d/%d units %d | %s", world.time, st.wave, st.kills[1], st.kills[2],
-        alive[1], alive[2], #world.entities, table.concat(parts, " | ")))
+      print(string.format("[%4ds] wave %d kills %s towers %s units %d | %s", world.time, st.wave, table.concat(kl, "-"),
+        table.concat(alive, "/"), #world.entities, table.concat(parts, " | ")))
       io.stdout:flush()
     elseif world.time >= nextReport then
       nextReport = nextReport + 60

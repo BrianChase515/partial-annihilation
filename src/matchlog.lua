@@ -34,7 +34,10 @@ function L.start(game)
   local water, total = 0, w.map.w * w.map.h
   for i = 0, total - 1 do if w.map.terrain[i] == 0 then water = water + 1 end end
   self:raw("PARTIAL ANNIHILATION MATCH LOG  v" .. D.VERSION .. "   " .. os.date("%Y-%m-%d %H:%M"))
-  if w.arena then self:raw("Mode: COMMANDER ARENA") end
+  if w.arena then
+    self:raw(string.format("Mode: COMMANDER ARENA   map %s %dx%d seed %d, %d sides%s, official score: %s", w.map.template or "classic",
+      w.map.w, w.map.h, w.map.seed, w.arena.nSides, w.arena.ffa and " (free-for-all)" or "", w.official and "yes" or "no"))
+  else
   self:raw(string.format("Map: %dx%d seed %d, water %.0f%% (%s), modifiers: %s, official score: %s",
     w.map.w, w.map.h, w.map.seed, 100 * water / total, w.map.ring and "ocean ring" or "no ring",
     #mods > 0 and table.concat(mods, ",") or "none", w.official and "yes" or "no"))
@@ -43,14 +46,19 @@ function L.start(game)
     if dp.sea then sea = sea + 1 elseif dp.rich then rich = rich + 1 else land = land + 1 end
   end
   self:raw(string.format("Metal deposits: %d land, %d rich land (center), %d rich offshore", land, rich, sea))
+  end
   for i, p in ipairs(game.players) do
     self:raw(string.format("  P%d %-7s team %d  %s%s", i, D.teamName[i] or "?", p.team or w.ally[i],
       p.human and "HUMAN" or (tostring(p.profileName or p.profile) .. " level " .. tostring(p.level)),
       w.arena and ("  class " .. tostring(w.teams[i].commander.class)) or ""))
   end
   self:raw("")
+  if w.arena then
+    self:raw("Snapshots every minute: each Commander's class, level, health, deaths, skills and upgrades.")
+  else
   self:raw("Snapshots every minute: income m/e per second, banked metal, unit and building counts,")
   self:raw("army = metal value of combat units, Cmd = Commander level/hp/upgrades, K/L = enemy kills/own losses so far.")
+  end
   self:raw("")
   self.kills, self.losses = {}, {}
   for t = 1, w.np do self.kills[t], self.losses[t] = 0, 0 end
@@ -94,10 +102,11 @@ function L:snapshot()
   self:raw(string.format("--- %s ---", mmss(w.time)))
   if w.arena then
     local st = w.arena
-    local towers = { 0, 0 }
+    local towers, kills = {}, {}
+    for sd = 1, st.nSides do towers[sd] = 0; kills[sd] = tostring(st.kills[sd] or 0) end
     for _, s in ipairs(st.structures) do if s.alive and s.key ~= "core" then towers[s.side] = towers[s.side] + 1 end end
-    self:raw(string.format("  wave %d   Commander kills %d - %d   towers standing %d vs %d   actions/min %d",
-      st.wave, st.kills[1], st.kills[2], towers[1], towers[2], g.stats.actions or 0))
+    self:raw(string.format("  wave %d   Commander kills by side %s   towers standing by side %s   actions/min %d",
+      st.wave, table.concat(kills, "/"), table.concat(towers, "/"), g.stats.actions or 0))
     g.stats.actions = 0
     for t = 1, w.np do
       local c = w.teams[t].commander

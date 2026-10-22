@@ -15,8 +15,14 @@ local THEMES = {
   arena = { bg = { 0.08, 0.04, 0.08 }, title = { 1, 0.86, 0.6 }, sub = { 0.85, 0.62, 0.72 }, field = { 0.16, 0.08, 0.14 },
     active = { 0.62, 0.2, 0.38 }, btn = { 0.2, 0.1, 0.18 }, hover = { 0.32, 0.15, 0.27 }, line = { 0.8, 0.45, 0.62 } },
 }
+local ATEMPLATES = {
+  { "classic", "Classic", "Classic: three lanes, two towers each. The standard match." },
+  { "longroad", "Long Road", "Long Road: winding lanes and three towers per lane. Longer, more strategic games (par +3 min)." },
+  { "gauntlet", "Gauntlet", "Gauntlet: one wide lane, three towers deep. A brutal brawl down the middle (par 12 min). Free-for-all keeps its lanes." },
+  { "open", "Open Field", "Open Field: three lanes with almost no rock between them, so roaming and ganks rule." },
+}
 local ASIZES = { { "Small", 64 }, { "Medium", 80 }, { "Large", 96 } }
-local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2, 1 } }
+local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2, 1 }, { "FFA 3", 1, 0, ffa = 3 }, { "FFA 4", 1, 0, ffa = 4 } }
 
 local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
@@ -70,6 +76,7 @@ end
 -- which arena slots are in play for the chosen format: you, ally, enemy 1, enemy 2
 function Menu:arenaActive()
   local f = AFORMATS[self.arena.format]
+  if f.ffa then return { true, f.ffa >= 4, true, true } end
   return { true, f[2] >= 2, true, f[3] >= 2 }
 end
 
@@ -87,14 +94,19 @@ function Menu:arenaRects()
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y, w = 110, h = 34, label = o[1], afield = "size", value = i, active = A.size == i, rowLabel = i == 1 and "Arena size" or nil }
   end
   for i, o in ipairs(AFORMATS) do
-    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 44, w = 110, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
+    r[#r + 1] = { x = x0 + (i - 1) * 88, y = y + 44, w = 82, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
+  end
+  for i, o in ipairs(ATEMPLATES) do
+    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 88, w = 110, h = 34, label = o[2], afield = "template", value = i,
+      active = (A.template or 1) == i, rowLabel = i == 1 and "Map" or nil, tmpl = i }
   end
   local ty = y + 160
-  local names = { "You", "Ally", "Enemy", "Enemy 2" }
+  local ffa = AFORMATS[A.format].ffa
+  local names = ffa and { "You", "Rival 3", "Rival 1", "Rival 2" } or { "You", "Ally", "Enemy", "Enemy 2" }
   local colorSlot = { 1, 3, 2, 4 }
   local act = self:arenaActive()
   local row = 0
-  for i = 1, 4 do
+  for _, i in ipairs(ffa and { 1, 3, 4, 2 } or { 1, 2, 3, 4 }) do
     if act[i] then
       local yy = ty + row * 46
       row = row + 1
@@ -262,7 +274,7 @@ function Menu:draw()
   end
 
   local mx, my = love.mouse.getPosition()
-  local hoverProf, hoverMod, hoverClass
+  local hoverProf, hoverMod, hoverClass, hoverTmpl
   for _, r in ipairs(self:rects()) do
     if r.rowLabel then
       lg.setFont(R.font(16))
@@ -279,6 +291,7 @@ function Menu:draw()
       hoverClass = k > 0 and k or -1
     end
     if r.afield then active = r.active end
+    if hover and r.tmpl then hoverTmpl = r.tmpl end
     if r.kind == "chip" then
       local c = D.teamColor[r.slot]
       local on = r.on
@@ -323,7 +336,7 @@ function Menu:draw()
     end
   end
   if self.mode == "arena" then
-    self:drawArenaInfo(x0, y, w, h, hoverClass)
+    self:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   else
   -- personality description
   lg.setFont(R.font(14))
@@ -402,13 +415,15 @@ function Menu:draw()
   if self.showHelp then UI.drawHelp(self.mode == "arena") end
 end
 
-function Menu:drawArenaInfo(x0, y, w, h, hoverClass)
+function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   local lg = love.graphics
   local ty = y + 160
   lg.setFont(R.font(14))
   lg.setColor(0.65, 0.72, 0.8)
   local desc
-  if hoverClass and hoverClass > 0 then
+  if hoverTmpl then
+    desc = ATEMPLATES[hoverTmpl][3]
+  elseif hoverClass and hoverClass > 0 then
     local c = ARENA.CLASSES[hoverClass]
     local names = {}
     for _, k in ipairs(c.skills) do names[#names + 1] = ARENA.SKILLS[k].name end
@@ -576,7 +591,7 @@ function Menu:options()
     local A = self.arena
     local act = self:arenaActive()
     local players = {}
-    local allyOf = { 1, 1, 2, 2 }
+    local allyOf = AFORMATS[A.format].ffa and { 1, 4, 2, 3 } or { 1, 1, 2, 2 }
     for i = 1, 4 do
       if act[i] then
         local sl = A.slots[i]
@@ -585,6 +600,7 @@ function Menu:options()
       end
     end
     return { mode = "arena", size = ASIZES[A.size][2], players = players, menuMode = "arena", arenaSetup = A,
+      template = ATEMPLATES[A.template or 1][1],
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end
   local players = {}

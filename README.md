@@ -23,7 +23,13 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
 - **Roguelike levels to 10.** Levels 2, 4 and 8 offer 1 of 2 class skills (cast with Q/W/E at the mouse), level 6 unlocks your ultimate (R), and the other levels offer upgrade cards.
 - **Death isn't the end.** Your Commander respawns at your Core. Towers must fall in order (outer, inner, then the Core), and a lane whose towers are down sends super creeps.
 - **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal, dive a weakened Commander, gang up with allies and use their skills.
-- **1v1, 1v2, 2v2 or 2v1**, with its own scoring, high scores and online leaderboard.
+- **1v1, 1v2, 2v2, 2v1, or a 3- or 4-way free-for-all** (bases on a triangle or in every corner, with a lane between each pair of bases), with its own scoring, high scores and online leaderboard.
+- **Four map templates:**
+  - **Classic:** three lanes, two towers each.
+  - **Long Road:** winding lanes walled in by rock, with three towers each, for longer games.
+  - **Gauntlet:** one wide lane, three towers deep.
+  - **Open Field:** almost no rock between the lanes, so roaming and ganks rule.
+- **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy.
 
 ![Commander Arena: an Elementalist calls down a Meteor](screenshots/arena-fight.png)
 

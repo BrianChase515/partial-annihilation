@@ -24,8 +24,14 @@ function AI.new(world, team, level, opts)
   -- lane: spread the side's Commanders over the lanes
   local idx = 1
   for i, t in ipairs(st.sideTeams[self.side]) do if t == team then idx = i end end
-  local order = #st.sideTeams[self.side] == 1 and { "mid" } or { "top", "bot", "mid" }
-  self.lane = opts and opts.lane or order[(idx - 1) % #order + 1]
+  if st.ffa then
+    self:pickLane()
+  else
+    local order = #st.sideTeams[self.side] == 1 and { "mid" } or { "top", "bot", "mid" }
+    local name = opts and opts.lane or order[(idx - 1) % #order + 1]
+    self.laneObj = world.map.lanesByName[name] or world.map.lanes[(idx - 1) % #world.map.lanes + 1]
+    self.lane = self.laneObj.id
+  end
   self.profileName = "Arena " .. (world.teams[team].commander.class or "")
   self.mode = "lane"
   return self
@@ -33,12 +39,33 @@ end
 
 function AI:commander() return self.world.teams[self.team].commander end
 
+-- free-for-all: push the lane toward a living rival, preferring the one with the fewest towers left
+function AI:pickLane()
+  local w = self.world
+  local st = w.arena
+  local best, bs
+  for _, L in ipairs(w.map.lanes) do
+    if L.a == self.side or L.b == self.side then
+      local other = L.a == self.side and L.b or L.a
+      if not st.sideDead[other] then
+        local towers = 0
+        for _, sx in ipairs(st.structures) do if sx.alive and sx.side == other then towers = towers + 1 end end
+        local score = towers + self.rng:random() * 2.5
+        if not bs or score < bs then best, bs = L, score end
+      end
+    end
+  end
+  self.laneObj = best or self.laneObj or w.map.lanes[1]
+  self.lane = self.laneObj.id
+  self.lanePicked = w.time
+end
+
 -- lane route from our base toward the enemy
 function AI:route()
-  local pts = self.world.map.lanes[self.lane]
+  local L = self.laneObj
   local r = {}
-  if self.side == 1 then for i = 1, #pts do r[i] = pts[i] end
-  else for i = #pts, 1, -1 do r[#r + 1] = pts[i] end end
+  if L.a == self.side then for i = 1, #L.pts do r[i] = L.pts[i] end
+  else for i = #L.pts, 1, -1 do r[#r + 1] = L.pts[i] end end
   return r
 end
 
@@ -203,6 +230,10 @@ function AI:update(dt)
   if self.think > 0 then return end
   self.think = self.thinkEvery * (0.8 + self.rng:random() * 0.4)
   if not c.alive then self.mode = "lane"; return end
+  if w.arena.ffa then
+    local other = self.laneObj.a == self.side and self.laneObj.b or self.laneObj.a
+    if w.arena.sideDead[other] or w.time - (self.lanePicked or 0) > 90 then self:pickLane() end
+  end
   if #c.offers > 0 then self:pickOffer(c) end
 
   local hpf = c.hp / c.maxhp
