@@ -117,7 +117,7 @@ local function dash(w, e, tx, ty, maxD)
   fx(w, "beam", e.x, e.y, 6, 0.3, { x2 = bx, y2 = by, color = { 0.8, 0.9, 1 } })
   e.x, e.y = bx, by
   e.path, e.destX, e.chase = nil, nil, nil
-  e.orders = {}
+  if not w:isFleeing(e) then e.orders = {} end
   e.homeX, e.homeY = bx, by
 end
 
@@ -257,7 +257,8 @@ A.SKILLS = {
       if not nx then return false end
       fx(w, "levelup", c.x, c.y, 30, 0.4)
       c.x, c.y = map:center(nx, ny)
-      c.path, c.destX, c.chase, c.orders = nil, nil, nil, {}
+      c.path, c.destX, c.chase = nil, nil, nil
+      if not w:isFleeing(c) then c.orders = {} end
       c.homeX, c.homeY = c.x, c.y
       fx(w, "levelup", c.x, c.y, 30, 0.4)
     end },
@@ -715,6 +716,12 @@ function A.onKill(w, o, attacker)
   end
   local value = A.xpValue(o)
   if value <= 0 then return end
+  -- denied: finished off by its own side - nobody gets anything
+  if attacker and attacker.team and w.ally[attacker.team] == w.ally[o.team] then
+    fx(w, "ring", o.x, o.y, 30, 0.6, { color = { 1, 1, 1 } })
+    if w.onDeny then w.onDeny(o, attacker) end
+    return
+  end
   -- the killer's Commander gets it all; other enemy Commanders nearby get a share
   local victimSide = st.teamSide[o.team]
   for t = 1, w.np do

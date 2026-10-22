@@ -118,6 +118,24 @@ Shapes tell you the domain, and the number tells you the type:
 - Gun Tower
 - AA Tower
 
+## Download
+
+| Platform | Download | How to run |
+|---|---|---|
+| **Windows** | [PartialAnnihilation-windows.zip](dist/PartialAnnihilation-windows.zip) | Unzip and double-click `PartialAnnihilation.exe`. If Windows warns about an unknown publisher, click *More info*, then *Run anyway*. |
+| **Linux / Steam Deck** | [PartialAnnihilation-x86_64.AppImage](dist/PartialAnnihilation-x86_64.AppImage) | Make it executable (`chmod +x`, or *Properties, Permissions, Is executable*) and run it. |
+| **Mac (or any OS with LÖVE 11.5)** | [PartialAnnihilation.love](dist/PartialAnnihilation.love) | See below. This version also updates itself from the title screen. |
+
+The game fits itself to your screen: small displays such as the Steam Deck's 1280x800 run fullscreen automatically. `F11` toggles fullscreen.
+
+### Steam Deck
+1. In **Desktop Mode**, download the AppImage and mark it executable.
+2. In Steam (still in Desktop Mode), choose **Games, Add a Non-Steam Game to My Library**, browse to the AppImage, and add it.
+3. Back in **Gaming Mode**, open the game's controller settings and pick the **Keyboard and Mouse** (or **Web Browser**) template. The right trackpad moves the mouse, R2 left-clicks, L2 right-clicks, and the touchscreen works as a mouse too.
+4. Map a few buttons to the keys you use most: `F` (flee), `D` (hold fire), `Z` / `X` (pick upgrades), `Q` `W` `E` `R` (Arena skills), `Space` (jump to the action) and `Esc` (menu).
+
+The Windows and Linux builds can't replace themselves while running, so their update button opens this page instead.
+
 ## Playing on a Mac
 
 1. Install **LÖVE 11.5** from [love2d.org](https://love2d.org) (the macOS download is a universal app). Move `love.app` into your **Applications** folder. If you run it straight from Downloads, macOS launches it from a temporary hidden copy, so any folder permission you grant doesn't stick and you'll be asked again on every launch.
@@ -141,6 +159,8 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Guard a unit / factory output follows a unit | Right-click a friendly unit with army / a factory selected |
 | Commander flees home (repairs only there) | `F` with the Commander selected |
 | Arena skills / ultimate | `Q` `W` `E` / `R` at the mouse (Arena) |
+| Hold fire (time your last hits) | Hold `D` (or click Hold) |
+| Deny your own creep (Arena) | Right-click your creep under 35% health |
 | Self-destruct selection | `Delete` (unfinished buildings refund their metal; the Commander needs two presses) |
 | Drop last queued order | `Shift+Delete` |
 | Retreat to flag / Commander | `F` / `Shift+F`; plant the flag with `Ctrl+F` |

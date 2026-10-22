@@ -330,6 +330,25 @@ local function script()
   end
   for _ = 1, 30 do game:update(1 / 30) end
   frame(); shot("arena_fight.png")
+  -- hold fire and denial
+  game:select({ ac })
+  game.holdToggle = true
+  game:update(1 / 30)
+  log("hold fire flag on commander:", ac.holdFire)
+  game.holdToggle = false
+  game:update(1 / 30)
+  log("hold fire released:", ac.holdFire)
+  local mine
+  for _, e in ipairs(w.entities) do if e.alive and e.creep and e.team == 1 then mine = e; break end end
+  if mine then
+    mine.hp = mine.maxhp * 0.2
+    log("can deny own low creep:", w:canDeny(ac, mine), "can deny healthy:", (function() local hp = mine.hp; mine.hp = mine.maxhp; local r = w:canDeny(ac, mine); mine.hp = hp; return r end)())
+    local xp0 = ac.cxp
+    mine.x, mine.y = ac.x + 60, ac.y
+    w:issue(ac, { type = "attack", target = mine })
+    for _ = 1, 30 * 4 do w:update(1 / 30) end
+    log("denied creep alive:", mine.alive, "commander xp change:", math.floor(ac.cxp - xp0))
+  end
   -- end it
   local core2 = w.arena.core2
   core2.protected = nil

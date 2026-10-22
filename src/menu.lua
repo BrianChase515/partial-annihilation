@@ -114,7 +114,8 @@ function Menu:arenaRects()
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
   -- class roster (hover for details)
   for i, c in ipairs(ARENA.CLASSES) do
-    r[#r + 1] = { x = x0 + 580, y = y + (i - 1) * 34, w = 300, h = 30, label = c.name, roster = i, kind = "roster" }
+    r[#r + 1] = { x = x0 + 580, y = y + (i - 1) * 34, w = 300, h = 30, label = c.name, roster = i, kind = "roster",
+      active = A.slots[1].class == i }
   end
   self:updateRect(r, w)
   return r
@@ -251,7 +252,7 @@ function Menu:draw()
     lg.print("Commanders", x0 - 130, ty - 22)
     lg.print("Class (click to cycle)", x0, ty - 22)
     lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
-    lg.print("CLASSES", x0 + 580, y - 22)
+    lg.print("CLASSES  (click one to play it)", x0 + 580, y - 22)
   else
     lg.print("Players", x0 - 130, ty - 22)
     lg.print("Team", x0 + 78, ty - 22)
@@ -380,11 +381,15 @@ function Menu:draw()
       lg.print(string.format("%d. %s  %s  %s", i, U_fmt(e.score), nm, tostring(e.result or "")), x0 + 580, oy + 4 + i * 20)
     end
   end
-  if ON.msg and (ON.state == "failed" or ON.state == "noupdate" or ON.state == "updated") then
-    lg.setColor(0.8, 0.85, 0.95)
-    lg.printf(ON.msg, w - 300, 62, 284)
-  end
   end -- rts info
+  do
+    local ON = require("src.online")
+    if ON.msg and (ON.state == "failed" or ON.state == "noupdate" or ON.state == "updated") then
+      lg.setFont(R.font(13))
+      lg.setColor(0.8, 0.85, 0.95)
+      lg.printf(ON.msg, w - 300, 62, 284)
+    end
+  end
   lg.setColor(0.4, 0.45, 0.52)
   lg.print("v" .. D.VERSION, 12, h - 24)
   lg.setFont(R.font(13))
@@ -518,7 +523,10 @@ function Menu:mousepressed(x, y, b)
       elseif r.kind == "alvdown" then as.level = math.max(1, as.level - 1)
       elseif r.kind == "alvup" then as.level = math.min(10, as.level + 1)
       elseif r.kind == "lvlabel" and r.alevel then as.level = (as.level - 1 + dir) % 10 + 1
-      elseif r.kind == "roster" then -- hover only
+      elseif r.kind == "roster" then
+        -- pick this class for yourself (click again for Random)
+        local you = self.arena.slots[1]
+        you.class = (you.class == r.roster) and 0 or r.roster
       elseif r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
       elseif r.field then self[r.field] = r.value; self.savedMap = nil
       elseif r.kind == "toggle" then

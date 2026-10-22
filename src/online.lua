@@ -59,9 +59,18 @@ function O.check()
 end
 
 -- replace the .love we were launched from with the newest build
+O.DOWNLOAD_PAGE = "https://github.com/" .. O.REPO .. "#download"
+
 function O.update()
   local dst = lovePath()
-  if not dst then O.state = "noupdate"; O.msg = "Updating only works from PartialAnnihilation.love"; return end
+  if not dst then
+    -- standalone builds (Windows .exe, Linux AppImage) can't replace themselves while
+    -- running: send the player to the download page instead
+    love.system.openURL(O.DOWNLOAD_PAGE)
+    O.state = "noupdate"
+    O.msg = "Opened the download page in your browser - grab the new build there."
+    return
+  end
   O.state = "downloading"
   O.tmp = dst .. ".download"
   run("download", "curl -fsSL --max-time 120 -o " .. shellQuote(O.tmp) .. " " .. O.LOVE_URL .. " && echo OK")

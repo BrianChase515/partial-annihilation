@@ -335,12 +335,21 @@ function W:issue(e, order, queue)
     end
     return
   end
+  -- a flee can't be cancelled: the speed boost has to be paid for by actually leaving
+  local cur = e.orders[1]
+  if cur and cur.type == "retreat" and self.time - (cur.issued or self.time) < 45 then return end
+  if order.type == "retreat" then order.issued = self.time end
   if not queue then
     e.orders = {}
     e.path = nil
     e.chase = nil
   end
   e.orders[#e.orders + 1] = order
+end
+
+function W:isFleeing(e)
+  local o = e.orders and e.orders[1]
+  return o and o.type == "retreat" and self.time - (o.issued or self.time) < 45
 end
 
 function W:currentOrder(e) return e.orders[1] end
@@ -686,6 +695,12 @@ function W:gainXP(e, amount)
   end
 end
 
+-- Arena denial: a Commander (or his summons) may finish off his own side's badly hurt creep
+function W:canDeny(e, o)
+  return self.arena and o.alive and o.creep and self.ally[o.team] == self.ally[e.team]
+    and o.hp < o.maxhp * 0.35 and (e.key == "commander" or e.owner) and e.def.weapon ~= nil
+end
+
 function W:canTarget(e, o)
   if not o.alive or o.dormant or o.neutral or self.ally[o.team] == self.ally[e.team] then return false end
   if o.fadeUntil and self.time < o.fadeUntil then return false end
@@ -888,6 +903,9 @@ function W:updateProjectiles(dt)
     if len <= step then
       -- impact
       if p.splash > 0 then
+        if p.target and p.target.alive and not self:hostile(p.target.team, p.team) then
+          self:damage(p.target, p.damage, p.source) -- a deny shot
+        end
         self:query(p.tx, p.ty, p.splash + 30, function(o)
           if o.alive and self:hostile(o.team, p.team) and (D.canHit(p.weapon, o.def.domain) or (p.hitsAir and o.def.domain == "air")) then
             local d = U.dist(p.tx, p.ty, o.x, o.y) - o.def.radius * 0.5
@@ -923,7 +941,8 @@ function W:updateWeapon(e, dt, focus)
   e.reload = math.max(0, e.reload - dt)
   e.scanTimer = e.scanTimer - dt
   local tgt = nil
-  if focus and focus.alive and self:canTarget(e, focus) and self:inRange(e, focus) then
+  if e.holdFire then return end
+  if focus and focus.alive and (self:canTarget(e, focus) or self:canDeny(e, focus)) and self:inRange(e, focus) then
     tgt = focus
   else
     if e.autoTarget and (not e.autoTarget.alive or not self:inRange(e, e.autoTarget, 10)) then
@@ -1090,7 +1109,7 @@ function W:updateUnit(e, dt)
     local t = o.target
     if not t or not t.alive then
       self:popOrder(e)
-    elseif not e.def.weapon or not self:canTarget(e, t) then
+    elseif not e.def.weapon or not (self:canTarget(e, t) or self:canDeny(e, t)) then
       self:popOrder(e)
     else
       focus = t
@@ -1101,7 +1120,7 @@ function W:updateUnit(e, dt)
     e.retreating = true
     if e.def.weapon then e.disarmed = true end
     if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
-    if self:followPath(e, dt, 40) then
+    if self:followPath(e, dt, 40) or self.time - (o.issued or self.time) > 45 then
       e.retreating = false
       self:popOrder(e)
     end

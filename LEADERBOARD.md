@@ -1,4 +1,4 @@
-# Partial Annihilation leaderboard - v0.8
+# Partial Annihilation leaderboard - v0.8.1
 
 Each new game version starts a fresh board. Submit from the end-of-game screen (**Submit score online**).
 

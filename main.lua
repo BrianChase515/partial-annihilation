@@ -24,7 +24,30 @@ local function parseMods(args)
   end
 end
 
+-- Fit the window to the display: small screens (Steam Deck 1280x800, laptops) go
+-- borderless fullscreen; --window WxH forces a windowed size (for testing).
+local function fitWindow(args)
+  local forced
+  for i, a in ipairs(args or {}) do
+    if a == "--window" and args[i + 1] then
+      local w, h = args[i + 1]:match("(%d+)x(%d+)")
+      forced = { tonumber(w), tonumber(h) }
+    end
+  end
+  local flags = { resizable = true, minwidth = 960, minheight = 600, vsync = 1, msaa = 4, highdpi = true }
+  if forced then
+    love.window.setMode(forced[1], forced[2], flags)
+    return
+  end
+  local dw, dh = love.window.getDesktopDimensions()
+  if dw and (dw < 1650 or dh < 1010) then
+    flags.fullscreen, flags.fullscreentype = true, "desktop"
+    love.window.setMode(dw, dh, flags)
+  end
+end
+
 function love.load(args)
+  fitWindow(args)
   love.graphics.setDefaultFilter("linear", "linear")
   love.keyboard.setKeyRepeat(false)
   require("src.sfx").init()

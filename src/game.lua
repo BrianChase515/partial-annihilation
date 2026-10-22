@@ -265,6 +265,9 @@ function G.new(opts)
       MUSIC.bump(0.4)
       if self.log then self.log:event((mine and "Lost " or "Destroyed ") .. what) end
     end
+    world.onDeny = function(o, by)
+      if by and by.team == 1 then self:notice("Denied!", 0.8, o.x, o.y) end
+    end
     world.onWave = function(k)
       if k == 1 then self:notice("The creeps are marching. Push a lane!", 3); VOICE.say("creeps") end
     end
@@ -510,6 +513,16 @@ function G:rightClick(wx, wy, queue)
     end
     return
   end
+  if self.arena and target and target.creep and world:allied(target.team, 1) then
+    local ok = false
+    for _, u in ipairs(units) do
+      if world:canDeny(u, target) then world:issue(u, { type = "attack", target = target }, queue); ok = true end
+    end
+    if ok then
+      world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 1, g = 1, b = 1 }
+      return
+    end
+  end
   if target and target.team ~= 1 and not world:hostile(target.team, 1) then target = nil end
   if target and target.team ~= 1 then
     for _, u in ipairs(units) do
@@ -561,6 +574,11 @@ function G:orderAction(action, shift)
     return self:useSkill(slot)
   end
   if action == "home" then return self:goHome() end
+  if action == "hold" then
+    self.holdToggle = not self.holdToggle
+    self:notice(self.holdToggle and "Holding fire (click Hold again or press D to release)" or "Weapons free", 1.5)
+    return
+  end
   if self.arena and (action == "amove" or action == "stop") and #self:selectedMobile() == 0 then
     local c = self:myCommander()
     if c then self:select({ c }) end
@@ -586,6 +604,21 @@ function G:orderAction(action, shift)
   end
 end
 
+-- Hold fire: while D is held (or the Hold button is on), your selected units - in the
+-- Arena, your Commander - don't shoot, so you can time the killing shot
+function G:updateHoldFire()
+  local on = self.holdToggle or (not self.naming and love.keyboard.isDown("d"))
+  local want = {}
+  if on then
+    for _, e in ipairs(self:selectedList()) do if e.team == 1 then want[e] = true end end
+    if self.arena then local c = self:myCommander(); if c then want[c] = true end end
+  end
+  for e in pairs(self.held or {}) do if not want[e] then e.holdFire = nil end end
+  for e in pairs(want) do e.holdFire = true end
+  self.held = want
+  self.holdingFire = on
+end
+
 -- Arena: use the skill in a slot at the mouse position
 function G:useSkill(slot)
   local c = self.world.teams[1].commander
@@ -599,8 +632,8 @@ end
 function G:goHome()
   local c = self.world.teams[1].commander
   if not c or not c.alive then return end
-  self.world:issue(c, { type = "move", x = c.respawnX, y = c.respawnY, arrive = 80 })
-  self:notice("Heading home to heal", 1)
+  self.world:issue(c, { type = "retreat", x = c.respawnX, y = c.respawnY })
+  self:notice("Fleeing home: +50% speed, no shooting, can't be cancelled", 1.5)
 end
 
 -- Open a pre-filled GitHub issue with this game's official score
@@ -656,10 +689,12 @@ end
 
 function G:stop()
   for _, u in ipairs(self:selectedMobile()) do
+    if self.world:isFleeing(u) then goto continue end
     u.orders = {}
     u.path = nil
     u.chase = nil
     u.homeX, u.homeY = u.x, u.y
+    ::continue::
   end
 end
 
@@ -997,6 +1032,7 @@ function G:update(dt)
   end
 
   self:updateVoice(dt)
+  self:updateHoldFire()
   if self.log then self.log:update() end
 
   for i = #self.notices, 1, -1 do
@@ -1466,6 +1502,7 @@ function G:keypressed(key)
     self:pickUpgrade(key == "z" and 1 or 2)
     return
   end
+  if key == "d" and self.holdToggle then self.holdToggle = false end
   if self.arena then
     -- Arena: Q W E R fire skills at the mouse; F heads home to heal
     for slot, k in ipairs(ARENA.KEYS) do

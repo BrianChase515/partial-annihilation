@@ -676,6 +676,7 @@ end
 local ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
+  { "hold", "Hold", "D", "Hold fire: selected units stop shooting while you hold D (or until you click again), so you can time the killing shot." },
   { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet." },
   { "flee", "Flee", "F", "Retreat to your flag at +25% speed. Weapons stay OFF until fully repaired." },
   { "fleecmd", "To Cmdr", "Shift+F", "Retreat to the Commander (+25% speed, weapons off until repaired)." },
@@ -695,7 +696,8 @@ UI.ORDERS_H = 38
 local ARENA_ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; your Commander fights anything on the way." },
   { "stop", "Stop", "S", "Stop and hold position." },
-  { "home", "Home", "F", "Head back to your Core to heal quickly." },
+  { "hold", "Hold", "D", "Hold fire while D is held (or click to toggle) - time your last hits. Right-click your own creep under 35% health to deny it: nobody gets its XP." },
+  { "home", "Flee", "F", "Flee to your Core at +50% speed: no shooting, and it can't be cancelled. The Core heals you fast." },
   { "skill1", nil, "Q" }, { "skill2", nil, "W" }, { "skill3", nil, "E" }, { "skill4", nil, "R" },
   { "cmd", "Cmdr", "C", "Jump to and select your Commander." },
   { "follow", "Follow", "L", "Camera follows your Commander. Shift-click: cinematic camera." },
@@ -747,7 +749,7 @@ function UI.orderButtons(game)
   for _, e in ipairs(game:selectedList()) do if e.team == 1 then mine = true end end
   local myc = game:myCommander()
   local enabled = {
-    amove = mobile, stop = mobile, patrol = mobile, flee = mobile, fleecmd = mobile, flag = true,
+    amove = mobile, stop = mobile, patrol = mobile, hold = n > 0, flee = mobile, fleecmd = mobile, flag = true,
     destroy = mine, army = true, half = n >= 2, builder = true, cmd = true, follow = n > 0,
     ["repeat"] = #game:selectedFactories() > 0, nuke = myc and game.selected[myc] and myc.nukeReady and true or false, help = true,
   }
@@ -782,6 +784,7 @@ function UI.drawOrders(game)
     end
     if b.action == "follow" and game.follow then active = true end
     if b.action == "help" and game.showHelp then active = true end
+    if b.action == "hold" and game.holdingFire then active = true end
     local a = b.on and 1 or 0.35
     if active then lg.setColor(0.18, 0.4, 0.28, a)
     elseif hv and b.on then lg.setColor(0.22, 0.3, 0.4, a)
@@ -923,7 +926,8 @@ Orders (hold Shift to queue)
   A then click .............. attack-move (fight anything on the way)
   P then click .............. patrol
   S ......................... stop
-  F ......................... retreat to your flag (+25% speed, weapons OFF until fully repaired)
+  Hold D .................... hold fire (selected units stop shooting until you let go)
+  F ......................... retreat to your flag (+25% speed, weapons OFF until fully repaired; can't be cancelled)
   Shift+F ................... retreat to the Commander
   Ctrl+F .................... plant the retreat flag at the mouse
   F on the Commander ........ he flees home (+50% speed), weapons off until fully repaired.
@@ -971,14 +975,16 @@ Goal: destroy the enemy Core. Each lane has an outer and an inner tower per side
 
 Your Commander
   Right-click ............... move / attack        A then click ... attack-move
-  S ......................... stop                 F .............. head home (your Core heals you fast)
+  S ......................... stop                 F .............. flee home (+50% speed, can't be cancelled)
+  Hold D .................... hold fire, to time last hits.  Right-click your own creep under 35% health: DENY it
   Q W E ..................... your skills, cast at the mouse (or click the button, then the map)
   R ......................... your ultimate (unlocks at level 6)
   Z / X ..................... choose a level-up card
   C / Space ................. jump to your Commander      L ... follow camera
 
 Leveling
-  Experience comes from creeps (most of it if your Commander or his summons land the kill),
+  Experience comes from creeps (the full value if your Commander or his summons land the killing shot,
+  a smaller share if you're just nearby; denied creeps give nothing),
   enemy Commanders and towers. Every level: +6% health, +5% damage and a card:
   levels 2, 4, 8 offer a class skill; level 6 unlocks the class ultimate; the rest offer upgrades.
   When your Commander dies he respawns at your Core after a timer that grows with level and time.

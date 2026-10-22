@@ -2,3 +2,4 @@
 !dist/PartialAnnihilation.love
 .DS_Store
 __pycache__/
+tools/cache/
