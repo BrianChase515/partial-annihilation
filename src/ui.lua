@@ -833,6 +833,8 @@ Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out 
 Goal: destroy the enemy Commanders. Lose yours and you're out.
 Veterancy: units level up (gold chevrons, max 5) from damage and kills: more damage, HP, fire rate, range.
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.
+The sea: teal-ringed offshore deposits are rich (+2.6 metal). Shipyards build Sea Constructors for them and
+  for Tidal Generators (+24 energy). Battleships (shipyard 4) shell anything within 25 tiles - hunt them down.
 ]]
 
 function UI.drawHelp()
@@ -1032,7 +1034,8 @@ function UI.drawOver(game)
   lg.setFont(font(12))
   lg.setColor(0.55, 0.62, 0.7)
   lg.printf("How scoring works: every enemy you destroy is worth its metal cost (a Commander is 3000, veterans more). "
-    .. "Each kill within 10 seconds of the last raises your multiplier by 0.1, up to x4; 10 seconds without an enemy death resets it. "
+    .. "Each kill soon after the last raises your multiplier by 0.1, up to x3; it resets after 10 seconds without an enemy death "
+    .. "(the window shrinks to 5s as the streak grows). "
     .. "Building earns 10% of the metal spent and each Commander promotion pays 150 x level. Then the total is scaled by "
     .. "how strong the enemies were, how many there were (and whether they were teamed up against you), and how fast you won "
     .. "compared with par. Games with Alien Tech or Dropships don't count as official.",

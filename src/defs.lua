@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.5"  -- bump to start a fresh high-score season
+D.VERSION = "0.6"  -- bump to start a fresh high-score season
 
 D.units = {
   commander = {
@@ -90,6 +90,22 @@ D.units = {
     cost = { metal = 260, energy = 1700, work = 200 },
     desc = "Heavy warship. Long guns and depth charges for subs.",
   },
+  battleship = {
+    name = "Battleship", short = "4", domain = "sea", shape = "circle",
+    radius = 22, hp = 4200, speed = 36, sight = 420,
+    weapon = { damage = 55, range = 820, minRange = 160, reload = 3.6, speed = 340, splash = 48, ballistic = true,
+      targets = { land = true, sea = true } },
+    cost = { metal = 800, energy = 5500, work = 520 },
+    desc = "Siege ship. Shells anything within 25 tiles, but slowly. Can't hit aircraft or subs. Everyone will hunt it.",
+  },
+  seabuilder = {
+    name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",
+    radius = 12, hp = 500, speed = 80, sight = 300,
+    buildPower = 8, buildRange = 110,
+    builds = { "mex", "tidal", "shipyard" },
+    cost = { metal = 90, energy = 700, work = 75 },
+    desc = "Builds offshore extractors, tidal generators and shipyards.",
+  },
   sub = {
     name = "Submarine", short = "3", domain = "sub", shape = "circle",
     radius = 12, hp = 700, speed = 82, sight = 300,
@@ -112,7 +128,7 @@ D.units = {
     w = 1, h = 1, place = "deposit", hp = 400,
     income = { metal = 1.6 },
     cost = { metal = 50, energy = 300, work = 45 },
-    desc = "Build on a metal deposit. +1.6 metal per second.",
+    desc = "Build on a metal deposit. +1.6 metal per second (+2.6 on a rich offshore deposit).",
   },
   solar = {
     name = "Solar Collector", short = "E", domain = "building", building = true,
@@ -120,6 +136,13 @@ D.units = {
     income = { energy = 14 },
     cost = { metal = 70, energy = 0, work = 55 },
     desc = "+14 energy per second.",
+  },
+  tidal = {
+    name = "Tidal Generator", short = "TG", domain = "building", building = true,
+    w = 2, h = 2, place = "water", hp = 450,
+    income = { energy = 24 },
+    cost = { metal = 80, energy = 0, work = 60 },
+    desc = "+24 energy per second. Must be built on water (Sea Constructor).",
   },
   storage = {
     name = "Storage", short = "S", domain = "building", building = true,
@@ -145,7 +168,7 @@ D.units = {
   shipyard = {
     name = "Shipyard", short = "SY", domain = "building", building = true,
     w = 3, h = 3, place = "water", hp = 2400, factory = true, buildPower = 10,
-    builds = { "boat", "destroyer", "sub" },
+    builds = { "seabuilder", "boat", "destroyer", "sub", "battleship" },
     cost = { metal = 300, energy = 1000, work = 210 },
     desc = "Builds ships. Must be placed on water.",
   },

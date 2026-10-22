@@ -457,7 +457,8 @@ function AI:baseTile()
   return self.world.map:tileAt(self.baseX, self.baseY)
 end
 
-function AI:nearestFreeDeposit(fromX, fromY, maxDist)
+function AI:nearestFreeDeposit(fromX, fromY, maxDist, layer)
+  layer = layer or "land"
   local world = self.world
   local map = world.map
   local claimed = {}
@@ -477,7 +478,8 @@ function AI:nearestFreeDeposit(fromX, fromY, maxDist)
       -- stay on our half-ish of the map, avoid enemy base
       local de = U.dist(self.enemyX, self.enemyY, x, y)
       local db = U.dist(self.baseX, self.baseY, x, y)
-      if d <= maxDist and de > 500 and db < de * 1.25 and map:canReach("land", fromX, fromY, x, y, 90)
+      local okLayer = (layer == "sea") == (dp.sea == true) or (layer == "land" and dp.sea and (dp.shore or 9) <= 2)
+      if okLayer and d <= maxDist and de > 500 and db < de * 1.25 and map:canReach(layer, fromX, fromY, x, y, 90)
         and self:threatAt(x, y, 350) == 0 then
         if not bd or d < bd then best, bd = dp, d end
       end
@@ -524,7 +526,9 @@ function AI:thinkEconomy()
   local enemyAir = self:enemyAirCount()
 
   for _, b in ipairs(builders) do
-    if #b.orders == 0 and not (b.key == "commander" and self.cmdMode and self.cmdMode ~= "build") then
+    if b.def.domain == "sea" then
+      if #b.orders == 0 then self:seaBuilderTask(b) end
+    elseif #b.orders == 0 and not (b.key == "commander" and self.cmdMode and self.cmdMode ~= "build") then
       local isCmd = b.key == "commander"
       local task = nil
       local bx, by = self:baseTile()
@@ -533,8 +537,9 @@ function AI:thinkEconomy()
       local needEnergy = eFuture < mFuture * 9 + 8 or (tm.energy < tm.eStore * 0.15 and eFuture < mFuture * 14)
       local p = self.profile
       local hasWater = self.waterTX and (self.waterSize or 0) > 120
-      if factories == 0 and mexes >= (p.airFirst and 3 or 2) and solars >= (p.airFirst and 2 or 1) then
-        task = p.airFirst and "airfac" or "landfac"
+      if factories == 0 and mexes >= 2 and solars >= 1 then
+        -- everyone opens with a vehicle plant: it's the only source of constructors
+        task = "landfac"
       elseif needEnergy and solars < 60 then
         task = "solar"
       else
@@ -548,6 +553,7 @@ function AI:thinkEconomy()
       if not task then
         local wantAA = math.min(6, (enemyAir > 2 and 1 + math.floor(enemyAir / 4) or 0) + (t > 300 and self.diff.aaBonus or 0))
         if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 then task = "shipyard"
+        elseif p.airFirst and airfacs == 0 and factories >= 1 and mFuture > 4 then task = "airfac"
         elseif landfacs == 0 and factories >= 1 and mFuture > 6 then task = "landfac"
         elseif airfacs == 0 and mFuture > 6.5 and t > 150 then task = "airfac"
         elseif yards == 0 and hasWater and mFuture > 7.5 and t > 200 then task = "shipyard"
@@ -613,6 +619,26 @@ function AI:thinkEconomy()
   end
 end
 
+-- Sea Constructor: claim rich offshore deposits, then add tidal power near home water
+function AI:seaBuilderTask(b)
+  local world = self.world
+  local dp = self:nearestFreeDeposit(b.x, b.y, 4000, "sea")
+  if dp then
+    world:issue(b, { type = "build", key = "mex", tx = dp.x, ty = dp.y })
+    return
+  end
+  local tidals = self:countPlanned("tidal")
+  if self.waterTX and tidals < math.min(14, 3 + math.floor(world.time / 150)) then
+    local tx, ty = self:findSite("tidal", self.waterTX, self.waterTY, 1, 12)
+    if tx then
+      world:issue(b, { type = "build", key = "tidal", tx = tx, ty = ty })
+      return
+    end
+  end
+  local hurt = self:findDamaged(b)
+  if hurt then world:issue(b, { type = "assist", target = hurt }) end
+end
+
 ---------------------------------------------------------------------------
 -- Production
 
@@ -645,13 +671,28 @@ function AI:pickUnit(f)
     })
   elseif f.key == "shipyard" then
     -- without a sea route to the enemy, keep only a small home-defense fleet
+    local seaB = self:countPlanned("seabuilder") + self:queued("seabuilder")
+    local wantSeaB = (self.profile.navalFirst and 2 or 1) + (t > 600 and 1 or 0)
+    if seaB < wantSeaB then return "seabuilder" end
     local ships = self:countPlanned("boat") + self:countPlanned("destroyer") + self:countPlanned("sub")
       + self:queued("boat") + self:queued("destroyer") + self:queued("sub")
-    if not self.navalReach and ships >= 5 + enemyShips then return nil end
+    local bships = self:countPlanned("battleship") + self:queued("battleship")
+    local tm = world.teams[self.team]
+    local canBB = t > 420 and tm.mIncome > 24 and bships < (self.profile.navalFirst and 3 or 1)
+      and self.diff.level and self.diff.level >= 3
+    if not self.navalReach and ships >= 5 + enemyShips then
+      if canBB and bships == 0 then return "battleship" end -- a harbor guard
+      return nil
+    end
+    local enemyBB = 0
+    for _, e in ipairs(world.entities) do
+      if e.alive and e.key == "battleship" and self:isHostile(e.team) then enemyBB = enemyBB + 1 end
+    end
     return self:pick({
       boat = 35,
       destroyer = 30 + (enemySubs > 0 and 30 or 0),
-      sub = enemyShips > 0 and 35 or 15,
+      sub = (enemyShips > 0 and 35 or 15) + enemyBB * 25,
+      battleship = canBB and 14 or 0,
     })
   end
 end
@@ -746,6 +787,80 @@ end
 
 -- Choose an attack point: the enemy structure closest to our base, else their commander.
 -- Returns x, y (for ships: a water tile next to a reachable target) or nil.
+-- Battleships: siege from the water nearest the enemy when we have a route and an escort,
+-- otherwise guard our own harbor. Up to 3 nearby warships stay with each one.
+function AI:thinkBattleships(army)
+  local world = self.world
+  local ctl = {}
+  local bbs = {}
+  for _, u in ipairs(army) do if u.key == "battleship" then bbs[#bbs + 1] = u; ctl[u] = true end end
+  if #bbs == 0 then return ctl end
+  self.bbTimer = (self.bbTimer or 0) - 1
+  local reorder = self.bbTimer <= 0
+  if reorder then self.bbTimer = 8 end
+  for _, b in ipairs(bbs) do
+    -- escorts: nearest free destroyers / boats
+    local esc = {}
+    for _, u in ipairs(army) do
+      if #esc < 3 and not ctl[u] and (u.key == "destroyer" or u.key == "boat") and not self.wave[u]
+        and U.dist(u.x, u.y, b.x, b.y) < 1400 then
+        esc[#esc + 1] = u; ctl[u] = true
+      end
+    end
+    if reorder then
+      local tx, ty
+      if b.hp < b.maxhp * 0.4 and self.waterTX then
+        tx, ty = world.map:center(self.waterTX, self.waterTY)
+        world:issue(b, { type = "retreat", x = tx, y = ty })
+      else
+        local siege = self.navalReach and (#esc >= 2 or self.profile.navalFirst)
+        if siege then
+          tx, ty = self:waterNear(self.enemyX, self.enemyY, 30)
+        end
+        if not tx then
+          tx, ty = self:waterNear(self.baseX + self.dirX * 500, self.baseY + self.dirY * 500, 20)
+        end
+        if tx and U.dist(b.x, b.y, tx, ty) > 200 then
+          world:issue(b, { type = "amove", x = tx, y = ty })
+        end
+      end
+      for i, u in ipairs(esc) do
+        if U.dist(u.x, u.y, b.x, b.y) > 220 then
+          local a = i * 2.1
+          world:issue(u, { type = "amove", x = b.x + math.cos(a) * 110, y = b.y + math.sin(a) * 110 })
+        end
+      end
+    end
+  end
+  return ctl
+end
+
+-- Any enemy battleship near our side is a priority target: send aircraft and subs at it
+function AI:huntBattleships(army)
+  local world = self.world
+  self.huntTimer = (self.huntTimer or 0) - 1
+  if self.huntTimer > 0 then return end
+  self.huntTimer = 12
+  local target, bd
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.key == "battleship" and self:isHostile(e.team) then
+      local d = U.dist(e.x, e.y, self.baseX, self.baseY)
+      if d < 3200 and (not bd or d < bd) then target, bd = e, d end
+    end
+  end
+  if not target then return end
+  local sent = 0
+  for _, u in ipairs(army) do
+    if sent >= 10 then break end
+    local ok = u.key == "bomber" or u.key == "gunship" or (u.key == "sub" and self.seaSet)
+    if ok and not (self.alienSquad and self.alienSquad[u]) and not u.disarmed then
+      world:issue(u, { type = "attack", target = target })
+      self.wave[u] = true
+      sent = sent + 1
+    end
+  end
+end
+
 function AI:pickTarget(domain)
   local world = self.world
   local best, bd, bx, by
@@ -856,6 +971,14 @@ function AI:thinkArmy()
   local army = self:mine(function(e)
     return not e.def.building and e.def.weapon and e.key ~= "commander" and e.built >= 1
   end)
+  -- battleships (and their escorts) follow their own orders
+  local navalCtl = self:thinkBattleships(army)
+  if next(navalCtl) then
+    local rest = {}
+    for _, u in ipairs(army) do if not navalCtl[u] then rest[#rest + 1] = u end end
+    army = rest
+  end
+  self:huntBattleships(army)
 
   -- clean wave set
   local inWave = {}

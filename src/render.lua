@@ -209,6 +209,33 @@ function R.drawEntity(e, cam, selected)
         x + math.cos(a - 2.5) * r, y + math.sin(a - 2.5) * r)
       lg.setColor(0, 0, 0, 0.9)
       drawLabel(d.short, x, y, 10, zoom)
+    elseif e.key == "battleship" then
+      -- a long rounded hull with two gun turrets: easy to spot, as it should be
+      local a = e.angle
+      lg.push()
+      lg.translate(x, y)
+      lg.rotate(a)
+      lg.setColor(1, 1, 1, 0.12)
+      lg.ellipse("fill", 0, 0, r * 1.5 + 4, r * 0.8 + 4)
+      lg.setColor(cr, cg, cb)
+      lg.ellipse("fill", 0, 0, r * 1.5, r * 0.8)
+      lg.setColor(0.04, 0.04, 0.06)
+      lg.setLineWidth(2)
+      lg.ellipse("line", 0, 0, r * 1.5, r * 0.8)
+      lg.setColor(1, 1, 1, 0.7)
+      lg.line(r * 1.2, 0, r * 1.7, 0)
+      lg.pop()
+      local ta = e.turret or a
+      for _, off in ipairs({ -0.75, 0.75 }) do
+        local gx, gy = x + math.cos(a) * r * off, y + math.sin(a) * r * off
+        lg.setColor(0.06, 0.06, 0.08)
+        lg.setLineWidth(3)
+        lg.line(gx, gy, gx + math.cos(ta) * 15, gy + math.sin(ta) * 15)
+        lg.setColor(cr * 0.7, cg * 0.7, cb * 0.7)
+        lg.circle("fill", gx, gy, 6)
+      end
+      lg.setColor(0, 0, 0, 0.9)
+      drawLabel(d.short, x, y, 13, zoom)
     elseif dom == "sea" or dom == "sub" then
       local alpha = dom == "sub" and 0.55 or 1
       lg.setColor(1, 1, 1, 0.12 * alpha)
@@ -363,6 +390,12 @@ function R.drawWorld(cam, game)
   for _, dpos in ipairs(map.deposits) do
     local cx, cy = (dpos.x + 0.5) * T, (dpos.y + 0.5) * T
     if cx > x0 - T and cx < x1 + T and cy > y0 - T and cy < y1 + T then
+      if dpos.sea then
+        -- rich offshore deposit: teal ring
+        lg.setColor(0.35, 0.95, 0.9, 0.7)
+        lg.setLineWidth(2)
+        lg.circle("line", cx, cy, 14)
+      end
       lg.setColor(0.12, 0.12, 0.12, 0.85)
       lg.circle("fill", cx, cy, 11)
       lg.setColor(0.85, 0.75, 0.35, 0.9)

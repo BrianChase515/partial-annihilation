@@ -1,3 +1,4 @@
+local U_dist = require("src.util").dist
 -- Scripted "fake player" that drives the real input handlers. Not shipped.
 local D = require("src.defs")
 local S = {}
@@ -275,6 +276,32 @@ local function script()
   local t1 = love.timer.getTime()
   while love.timer.getTime() - t1 < 1.7 do game:update(1 / 60); frame() end
   shot("score.png")
+  -- v0.6 sea: battleship, sea constructor, tidal, offshore extractor
+  game = startFn({ size = 128, water = 0.45, seed = 5 })
+  w = game.world
+  local map = w.map
+  local sea
+  for _, dp in ipairs(map.deposits) do
+    if dp.sea and (not sea or U_dist(dp.x, dp.y, map.starts[1].x, map.starts[1].y) < U_dist(sea.x, sea.y, map.starts[1].x, map.starts[1].y)) then sea = dp end
+  end
+  local nsea = 0
+  for _, dp in ipairs(map.deposits) do if dp.sea then nsea = nsea + 1 end end
+  log("sea deposits:", nsea, "nearest at", sea and sea.x, sea and sea.y, "shore", sea and sea.shore)
+  local sx, sy = map:center(sea.x, sea.y)
+  local m = w:spawn("mex", 1, sx, sy, 1)
+  w.economyDirty = true
+  local bb = w:spawn("battleship", 1, sx + 60, sy + 60)
+  local sb = w:spawn("seabuilder", 1, sx - 50, sy + 40)
+  log("can place tidal near:", w:canPlace("tidal", sea.x + 3, sea.y + 2, 1))
+  local enemyTank = w:spawn("tank", 2, sx + 500, sy - 300)
+  local tgt = w:findTarget(bb, w:rangeOf(bb))
+  log("battleship range", w:rangeOf(bb), "auto-target", tgt and tgt.key)
+  for _ = 1, 240 do w:update(1 / 30) end
+  log("enemy tank hp after 2s near battleship:", math.floor(enemyTank.hp), "/", enemyTank.maxhp, "bb target", bb.target and bb.target.key)
+  log("offshore mex income mods", m.mods and m.mods.income.metal, "team income", w.teams[1].mIncome)
+  game:centerOn(sx, sy); game.cam.zoom = 0.8; game:centerOn(sx, sy)
+  game:select({ bb })
+  frame(); shot("sea.png")
   local MUSIC = require("src.music")
   log("music heat", MUSIC.heat, "intensity", math.floor(MUSIC.intensity * 100) / 100)
   log("DONE")

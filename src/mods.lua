@@ -13,9 +13,14 @@ M.ALIEN_HOLD = 15
 M.ALIEN_FIRST = 300      -- first landing (seconds)
 M.ALIEN_WARN = 60        -- announced this long before landing
 M.ALIEN_REPEAT = 300     -- next landing this long after a capture
-M.STREAK_WINDOW = 10     -- multiplier holds until 10s pass with no enemy deaths
+M.STREAK_WINDOW = 10     -- multiplier holds until 10s pass with no enemy deaths...
+M.STREAK_WINDOW_MIN = 5  -- ...and the window shrinks as the streak grows (1s per 10 kills, down to 5s)
 M.STREAK_STEP = 0.1
-M.STREAK_MAX = 4
+M.STREAK_MAX = 3
+
+function M.streakWindow(sc)
+  return math.max(M.STREAK_WINDOW_MIN, M.STREAK_WINDOW - (sc.streak or 0) * 0.1)
+end
 
 M.DROP_FIRST = 180
 M.DROP_EVERY = 150
@@ -46,11 +51,25 @@ function M.init(world, mods)
         killPts = 0, streakPts = 0, buildPts = 0, cmdPts = 0,
         kills = 0, bldKills = 0, cmdKills = 0, bestStreak = 0, bestMult = 1, built = 0, lost = 0 }
     end
-    -- par time: bigger maps and more opponents take longer
+    -- par time (from the human's side): bigger maps take longer, and so do more enemies -
+    -- +4 min for each extra enemy teamed up with another, +3 min for each extra free-for-all
+    -- side (they thin each other out), -2 min for each computer ally
     local size = world.map.w
     local par = (size <= 96 and 10) or (size <= 128 and 13) or 17
-    par = par + 2 * math.max(0, world.np - 2)
-    world.parTime = par * 60
+    local groups, allies = {}, 0
+    for t = 2, world.np do
+      if world:hostile(t, 1) then
+        local a = world.ally[t]
+        groups[a] = (groups[a] or 0) + 1
+      else allies = allies + 1 end
+    end
+    local sides = 0
+    for _, n in pairs(groups) do
+      sides = sides + 1
+      par = par + 4 * (n - 1)
+    end
+    par = par + 3 * math.max(0, sides - 1) - 2 * allies
+    world.parTime = math.max(6, par) * 60
   end
 end
 
@@ -276,7 +295,7 @@ function M.addPoints(world, team, pts, streaky, kind)
   local sc = world.score and world.score[team]
   if not sc or not team or team < 1 then return end
   if streaky then
-    if world.time - sc.last > M.STREAK_WINDOW then sc.streak = 0 end
+    if world.time - sc.last > M.streakWindow(sc) then sc.streak = 0 end
     sc.streak = sc.streak + 1
     sc.mult = math.min(M.STREAK_MAX, 1 + M.STREAK_STEP * (sc.streak - 1))
     sc.last = world.time
@@ -319,7 +338,7 @@ function M.updateScore(world, dt)
   if not world.score then return end
   for t = 1, world.np do
     local sc = world.score[t]
-      if world.time - sc.last > M.STREAK_WINDOW then sc.streak, sc.mult = 0, 1 end
+      if world.time - sc.last > M.streakWindow(sc) then sc.streak, sc.mult = 0, 1 end
   end
 end
 

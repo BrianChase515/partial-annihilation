@@ -103,6 +103,9 @@ function W:spawn(key, team, x, y, built)
       e.progress = 0
       e.rally = nil
     end
+    -- extractor on a rich offshore deposit
+    local dp = d.place == "deposit" and self.map.deposit[self.map:idx(e.tx, e.ty)]
+    if dp and dp.sea then e.mods = { income = { metal = 1.0, energy = 0 } } end
     e.angle = 0
     -- nudge any ground/sea units standing on the footprint out of the way
     if self.grid then
@@ -272,7 +275,8 @@ function W:canPlace(key, tx, ty, team)
       if d.place == "water" then
         if t ~= Map.WATER then return false end
       elseif d.place == "deposit" then
-        if not map.deposit[i] or t ~= Map.LAND then return false end
+        local dp = map.deposit[i]
+        if not dp or (t ~= Map.LAND and not (dp.sea and t == Map.WATER)) then return false end
       else
         if t ~= Map.LAND then return false end
       end
@@ -662,7 +666,7 @@ function W:findTarget(e, range)
       if d <= range and d >= w.minRange then
         -- prefer armed units, then units, then buildings
         local isUnit = not o.def.building
-        local score = d - (isUnit and 150 or 0) - (o.def.weapon and 100 or 0)
+        local score = d - (isUnit and 150 or 0) - (o.def.weapon and 100 or 0) - (o.key == "battleship" and 400 or 0)
         if not bd or score < bd then best, bd = o, score end
       end
     end

@@ -19,7 +19,7 @@ Lose him and you lose the game, but he only grows by fighting. He levels up **on
 **Level 5 is always the Nuke.** Every player hears the warning and watches the slow missile and its target circle. It flattens every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune, and it takes 10 minutes to recharge. Every fight that makes him stronger is also a chance to lose everything.
 
 ### Every match is a scored run on a seasonal online leaderboard
-Kills pay out the metal value of what you destroy. A kill-streak multiplier climbs to x4 and only resets after 10 seconds without an enemy death. At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
+Kills pay out the metal value of what you destroy. A kill-streak multiplier climbs to x3 and resets after 10 seconds without an enemy death (the window tightens as the streak grows). At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
 
 ### A soundtrack that follows the fighting, and a robot announcer
 The score is three tempo-locked orchestral layers that crossfade with the action:
@@ -36,6 +36,11 @@ Victory and defeat get their own fanfares. A robotic voice calls out "Warning. N
 
 Combine them however you like. Score keeps running, but only games without Alien Tech or Dropships count as official.
 
+### A navy worth fighting for
+Most maps are ringed by ocean, and every body of water connects. The richest metal in the game sits offshore (teal rings), and only Sea Constructors can reach most of it. They also build Tidal Generators, which outproduce solar. A player who hides inland is leaving that economy to whoever controls the sea.
+
+The **Battleship** brings the sea to the land. It shells anything within 25 tiles: not much damage per shot, but constant pressure on a whole base. It's slow and expensive, and it can't hit aircraft or submarines, so everyone hunts it. The computer players send bombers and subs after any battleship near their base, escort their own with destroyers, and either besiege your coast or keep it home as a harbor guard.
+
 ### Retreat has a price
 `F` pulls units back at +25% speed, but their weapons stay offline until they're fully repaired. Fleeing saves units, and it also leaves them defenseless if the enemy gives chase.
 
@@ -47,7 +52,7 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 
 ## Also included
 - **Up to 4 players and any teams:** free-for-all, 2v2, 1v3, or you with a computer ally, sharing vision.
-- **Maps built for land, sea and air:** procedural and symmetric, usually ringed by ocean with bays and rivers, and every body of water connects. Save the seeds you like by name.
+- **Procedural, symmetric maps:** an ocean ring with bays and rivers on most of them. Save the seeds you like by name.
 - **Total Annihilation-style economy:** overspending slows every project by the same amount.
 - **Veterancy for every unit, including towers.**
 - **Every order is a button**, with its shortcut and a tooltip.
@@ -69,11 +74,12 @@ Shapes tell you the domain, and the number tells you the type:
 |---|---|---|
 | Square | Land | Constructor (B), Scout (1), Tank (2), Artillery (3), Flak Truck (4), Commander (CMD) |
 | Triangle | Air | Fighter (1), Bomber (2), Gunship (3) |
-| Circle | Sea | Patrol Boat (1), Destroyer (2), Submarine (3, only ships can hit it) |
+| Circle | Sea | Sea Constructor (B), Patrol Boat (1), Destroyer (2), Submarine (3, only ships can hit it), Battleship (4, long oval hull) |
 
 **Buildings:**
 - Metal Extractor
 - Solar Collector
+- Tidal Generator (on water)
 - Storage
 - Vehicle Plant
 - Aircraft Plant

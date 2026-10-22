@@ -501,6 +501,74 @@ function M:placeDeposits(rng)
     end
   end
   self.deposits = deps
+  self:placeSeaDeposits(rng)
+end
+
+-- Rich offshore deposits: worth more than land ones, and only reachable by sea
+-- (a few sit close enough to the shore for land constructors). Whoever rules the
+-- sea gets this income, so even an inland base has a reason to fight for the water.
+function M:placeSeaDeposits(rng)
+  local w, h = self.w, self.h
+  -- distance (in tiles) from each water tile to the nearest land
+  local dist, q, qh = {}, {}, 1
+  for i = 0, w * h - 1 do
+    if self.terrain[i] ~= M.WATER then dist[i] = 0; q[#q + 1] = i end
+  end
+  while qh <= #q do
+    local i = q[qh]; qh = qh + 1
+    local x, y = i % w, math.floor(i / w)
+    for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+      local nx, ny = x + d[1], y + d[2]
+      if nx >= 0 and ny >= 0 and nx < w and ny < h then
+        local j = ny * w + nx
+        if not dist[j] then dist[j] = dist[i] + 1; q[#q + 1] = j end
+      end
+    end
+  end
+  self.shoreDist = dist
+  local water = 0
+  for i = 0, w * h - 1 do if self.terrain[i] == M.WATER then water = water + 1 end end
+  local deps = self.deposits
+  local syms = self.syms
+  local function ok(x, y)
+    if x < 3 or y < 3 or x >= w - 3 or y >= h - 3 then return false end
+    local i = y * w + x
+    if self.terrain[i] ~= M.WATER or dist[i] < 1 or dist[i] > 7 then return false end
+    for _, d in ipairs(deps) do
+      if math.abs(d.x - x) + math.abs(d.y - y) < 3 then return false end
+    end
+    return true
+  end
+  local function okAll(x, y)
+    for _, f in ipairs(syms) do if not ok(f(x, y)) then return false end end
+    for i = 2, #syms do
+      local sx, sy = syms[i](x, y)
+      if math.abs(sx - x) + math.abs(sy - y) < 6 then return false end
+    end
+    return true
+  end
+  local function add(x, y)
+    for _, f in ipairs(syms) do
+      local sx, sy = f(x, y)
+      deps[#deps + 1] = { x = sx, y = sy, sea = true, shore = dist[sy * w + sx] }
+    end
+  end
+  local target = math.floor(water / 420 / #syms)  -- fields per symmetric copy
+  local fields, tries = 0, 0
+  while fields < target and tries < 4000 do
+    tries = tries + 1
+    local x, y = rng:random(3, w - 4), rng:random(3, h - 4)
+    if okAll(x, y) then
+      add(x, y); fields = fields + 1
+      -- rich fields come in clusters of 2-3
+      for _ = 1, rng:random(1, 2) do
+        for _ = 1, 12 do
+          local bx, by = x + rng:random(-3, 3), y + rng:random(-3, 3)
+          if okAll(bx, by) then add(bx, by); break end
+        end
+      end
+    end
+  end
 end
 
 -- Nearest tile that satisfies pred, searching outward from (tx, ty)
