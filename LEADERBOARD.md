@@ -12,4 +12,4 @@ _No scores yet this version._
 
 | # | Player | Score | Result | Time | Players | Opponents | Date |
 |---|---|---|---|---|---|---|---|
-| 1 | [BrianChase515](https://github.com/BrianChase515) | 29,249 | Win | 6:10 | 2 | reclaimer 5 | 2026-10-22 |
+| 1 | [BrianChase515](https://github.com/BrianChase515) | 88,169 | Win | 6:47 | 3 | shifter 6, shifter 6 | 2026-10-22 |
