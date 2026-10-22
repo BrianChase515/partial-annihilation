@@ -82,6 +82,7 @@ local function runAutotest()
     for _, ai in ipairs(game.ais) do ai:update(dt) end
     if world.time >= nextReport then
       nextReport = nextReport + 60
+      print(string.format("MEM lua %.1f MB  texture %.1f MB", collectgarbage("count") / 1024, love.graphics.getStats().texturememory / 1048576))
       local s = {}
       for t = 1, world.np do
         local tm = world.teams[t]
