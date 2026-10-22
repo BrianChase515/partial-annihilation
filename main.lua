@@ -50,6 +50,24 @@ function love.load(args)
       return
     end
   end
+  for i, a in ipairs(args or {}) do
+    -- love . --arenatest <minutes> <seed> <size> <1v1|2v2|1v2> <level> [class1,class2,...]
+    if a == "--arenatest" then
+      autotest = { minutes = tonumber(args[i + 1]) or 20, seed = tonumber(args[i + 2]) or 5, size = tonumber(args[i + 3]) or 80, arena = true }
+      local fmt = args[i + 4] or "1v1"
+      local lvl = tonumber(args[i + 5]) or 5
+      local classes = {}
+      for k in (args[i + 6] or ""):gmatch("[^,]+") do classes[#classes + 1] = k end
+      local a1, a2 = fmt:match("(%d)v(%d)")
+      a1, a2 = tonumber(a1) or 1, tonumber(a2) or 1
+      local players = {}
+      for p = 1, a1 do players[#players + 1] = { ally = 1, level = lvl } end
+      for p = 1, a2 do players[#players + 1] = { ally = 2, level = lvl } end
+      for p, pl in ipairs(players) do pl.class = classes[p] end
+      startGame({ size = autotest.size, seed = autotest.seed, autotest = true, players = players, mode = "arena" })
+      return
+    end
+  end
   if autotest then
     startGame({ size = autotest.size, water = 0.30, seed = autotest.seed, autotest = true, mods = parseMods(args),
       level = autotest.level2, profile = autotest.profile2, level1 = autotest.level1, profile1 = autotest.profile1 })
@@ -66,6 +84,13 @@ function love.load(args)
   end
   menu = Menu.new()
   state = "menu"
+  for i, a in ipairs(args or {}) do
+    if a == "--menushot" then
+      menu.mode = args[i + 1] or "rts"
+      menu.noOnline = true
+      menuShot = 0
+    end
+  end
 end
 
 -- Headless-ish accelerated simulation for testing: AI vs AI
@@ -80,7 +105,20 @@ local function runAutotest()
   while world.time < maxSec and not world.over do
     world:update(dt)
     for _, ai in ipairs(game.ais) do ai:update(dt) end
-    if world.time >= nextReport then
+    if world.arena and world.time >= nextReport then
+      nextReport = nextReport + 60
+      local st = world.arena
+      local alive = { 0, 0 }
+      for _, s in ipairs(st.structures) do if s.alive then alive[s.side] = alive[s.side] + 1 end end
+      local parts = {}
+      for t = 1, world.np do
+        local c = world.teams[t].commander
+        parts[#parts + 1] = string.format("T%d %s L%d %s deaths %d", t, c.class, c.clevel or 0, c.alive and ("hp" .. math.floor(c.hp)) or "DEAD", st.deaths[t] or 0)
+      end
+      print(string.format("[%4ds] wave %d kills %d-%d towers %d/%d units %d | %s", world.time, st.wave, st.kills[1], st.kills[2],
+        alive[1], alive[2], #world.entities, table.concat(parts, " | ")))
+      io.stdout:flush()
+    elseif world.time >= nextReport then
       nextReport = nextReport + 60
       print(string.format("MEM lua %.1f MB  texture %.1f MB", collectgarbage("count") / 1024, love.graphics.getStats().texturememory / 1048576))
       local s = {}
@@ -184,6 +222,11 @@ function love.draw()
   end
   if state == "menu" then menu:draw() else game:draw() end
   if smoke then smoke.afterDraw() end
+  if menuShot then
+    menuShot = menuShot + 1
+    if menuShot == 20 then love.graphics.captureScreenshot("menu_" .. menu.mode .. ".png") end
+    if menuShot == 24 then love.event.quit() end
+  end
 end
 
 function love.mousepressed(x, y, b)

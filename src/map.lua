@@ -81,7 +81,7 @@ function M.generate(opts)
   local ring = opts.ring
   if ring == nil then ring = waterFrac >= 0.25 or rng:random() < 0.75 end
   self.ring = ring
-  local ringW = math.max(3, w * (0.02 + waterFrac * 0.07))
+  local ringW = math.max(3, w * (0.02 + waterFrac * 0.1))
   local function edgeDrop(x, y)
     if not ring then return 0 end
     local e = math.min(x, y, w - 1 - x, h - 1 - y)
@@ -144,6 +144,55 @@ function M.generate(opts)
         if math.min(x, y, w - 1 - x, h - 1 - y) < 2 then terrain[y * w + x] = M.WATER end
       end
     end
+    -- an inlet on every side: a winding bay that brings the sea part-way inland
+    local lots = waterFrac >= 0.4
+    local depth = math.floor(w * (lots and 0.44 or (0.14 + waterFrac * 0.24)))
+    local half = waterFrac >= 0.4 and 2.6 or (waterFrac >= 0.25 and 2.1 or 1.6)
+    local function carve(cx, cy, r)
+      for yy = math.floor(cy - r), math.ceil(cy + r) do
+        for xx = math.floor(cx - r), math.ceil(cx + r) do
+          if U.dist(xx, yy, cx, cy) <= r then
+            for _, f in ipairs(self.syms) do
+              local sx, sy = f(xx, yy)
+              if sx >= 0 and sy >= 0 and sx < w and sy < h then
+                local i = sy * w + sx
+                terrain[i] = M.WATER
+                height[i] = math.min(height[i], waterLevel - 0.02)
+              end
+            end
+          end
+        end
+      end
+    end
+    local sides = four and { "left" } or { "left", "top" }
+    -- wet maps get two long inlets per side, reaching deep into the map
+    if lots then
+      local more = {}
+      for _, sd in ipairs(sides) do more[#more + 1] = { sd, 0.22 + rng:random() * 0.1 }; more[#more + 1] = { sd, 0.62 + rng:random() * 0.12 } end
+      sides = more
+    else
+      for i, sd in ipairs(sides) do sides[i] = { sd, 0.35 + rng:random() * 0.3 } end
+    end
+    for _, sdef in ipairs(sides) do
+      local side, along = sdef[1], sdef[2]
+      local x, y, dx, dy
+      if side == "left" then x, y, dx, dy = 0, along * h, 1, 0 else x, y, dx, dy = along * w, 0, 0, 1 end
+      local phase = rng:random() * 6.28
+      for step = 0, depth do
+        local t = step / depth
+        local wob = math.sin(phase + t * 5) * 0.9
+        x, y = x + dx + dy * wob, y + dy + dx * wob
+        local near = false
+        for _, st in ipairs(self.starts) do
+          for _, f in ipairs(self.syms) do
+            local sx, sy = f(x, y)
+            if U.dist(sx, sy, st.x, st.y) < 13 then near = true end
+          end
+        end
+        if near then break end
+        carve(x, y, half * (1 - t * 0.45))
+      end
+    end
   end
 
   -- Lakes big enough to matter get a channel cut out to the sea (symmetrically)
@@ -165,6 +214,176 @@ function M.generate(opts)
 end
 
 -- Connected regions of land and of water (ignoring buildings), for quick reachability checks
+---------------------------------------------------------------------------
+-- Commander Arena map: two bases in opposite corners joined by three lanes
+-- (top, middle, bottom), with rocky "jungle" between them. Point-symmetric.
+
+local function polyLen(pts)
+  local L = 0
+  for i = 2, #pts do L = L + U.dist(pts[i - 1][1], pts[i - 1][2], pts[i][1], pts[i][2]) end
+  return L
+end
+
+-- point (and direction) at fraction f along a polyline
+local function polyAt(pts, f)
+  local total = polyLen(pts)
+  local want = total * f
+  for i = 2, #pts do
+    local a, b = pts[i - 1], pts[i]
+    local seg = U.dist(a[1], a[2], b[1], b[2])
+    if want <= seg or i == #pts then
+      local t = seg > 0 and math.min(1, want / seg) or 0
+      local dx, dy = (b[1] - a[1]) / math.max(seg, 1e-6), (b[2] - a[2]) / math.max(seg, 1e-6)
+      return a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, dx, dy
+    end
+    want = want - seg
+  end
+  return pts[#pts][1], pts[#pts][2], 0, 0
+end
+M.polyAt = polyAt
+
+function M.generateArena(opts)
+  local self = setmetatable({}, M)
+  local w = opts.size or 80
+  local h = w
+  self.w, self.h = w, h
+  self.T = D.TILE
+  self.seed = opts.seed or os.time()
+  self.arena = true
+  local rng = love.math.newRandomGenerator(self.seed)
+  self.rng = rng
+  self.syms = {
+    function(x, y) return x, y end,
+    function(x, y) return w - 1 - x, h - 1 - y end,
+  }
+  local n1, n2 = makeNoise(rng, 64), makeNoise(rng, 64)
+  local ox, oy = rng:random() * 50, rng:random() * 50
+  local function raw(x, y)
+    local s = 1 / (w / 9)
+    return n1(ox + x * s, oy + y * s) * 0.65 + n2(ox + x * s * 2.3, oy + y * s * 2.3) * 0.35
+  end
+  local A = { math.floor(w * 0.11), math.floor(h * 0.89) }
+  local B = { w - 1 - A[1], h - 1 - A[2] }
+  local lanes = {
+    top = { A, { A[1], math.floor(h * 0.11) }, { B[1], B[2] } },
+    mid = { A, B },
+    bot = { A, { math.floor(w * 0.89), A[2] }, { B[1], B[2] } },
+  }
+  -- the bends of the side lanes are pulled in a little so the corners aren't hugging the edge
+  lanes.top[2] = { math.floor(w * 0.11), math.floor(h * 0.11) }
+  lanes.bot[2] = { math.floor(w * 0.89), math.floor(h * 0.89) }
+  self.lanes = lanes
+
+  local height, terrain = {}, {}
+  -- distance from (x,y) to the nearest lane centerline, in tiles
+  local function laneDist(x, y)
+    local best = math.huge
+    for _, pts in pairs(lanes) do
+      for i = 2, #pts do
+        local ax, ay, bx, by = pts[i - 1][1], pts[i - 1][2], pts[i][1], pts[i][2]
+        local vx, vy = bx - ax, by - ay
+        local L2 = vx * vx + vy * vy
+        local t = L2 > 0 and math.max(0, math.min(1, ((x - ax) * vx + (y - ay) * vy) / L2)) or 0
+        best = math.min(best, U.dist(x, y, ax + vx * t, ay + vy * t))
+      end
+    end
+    return best
+  end
+  for y = 0, h - 1 do
+    for x = 0, w - 1 do
+      local v = (raw(x, y) + raw(w - 1 - x, h - 1 - y)) / 2
+      v = 0.5 + (v - 0.5) * 1.6
+      local i = y * w + x
+      height[i] = v
+      local edge = math.min(x, y, w - 1 - x, h - 1 - y)
+      local ld = laneDist(x, y)
+      local base = math.min(U.dist(x, y, A[1], A[2]), U.dist(x, y, B[1], B[2]))
+      if edge < 2 then terrain[i] = M.ROCK
+      elseif ld <= 2.6 or base <= 9 then terrain[i] = M.LAND
+      elseif v > 0.6 then terrain[i] = M.ROCK
+      elseif v > 0.52 then terrain[i] = M.HILL
+      else terrain[i] = M.LAND end
+    end
+  end
+  self.height, self.terrain = height, terrain
+  self.waterLevel = -1
+  self.deposits, self.deposit, self.blocked = {}, {}, {}
+
+  -- structures: per side, an outer and an inner tower on each lane, and the Core
+  self.towers = {}
+  local tiers = { { "outer", 0.36 }, { "inner", 0.2 } }
+  for lane, pts in pairs(lanes) do
+    for _, tier in ipairs(tiers) do
+      local x, y, dx, dy = polyAt(pts, tier[2])
+      -- set the tower beside the lane, not in it
+      local px, py = math.floor(x - dy * 3 + 0.5), math.floor(y + dx * 3 + 0.5)
+      self.towers[#self.towers + 1] = { side = 1, lane = lane, tier = tier[1], x = px, y = py }
+      self.towers[#self.towers + 1] = { side = 2, lane = lane, tier = tier[1], x = w - 1 - px, y = h - 1 - py }
+    end
+  end
+  for _, t in ipairs(self.towers) do
+    for yy = t.y - 2, t.y + 2 do
+      for xx = t.x - 2, t.x + 2 do
+        if self:inBounds(xx, yy) and math.min(xx, yy, w - 1 - xx, h - 1 - yy) >= 2 then terrain[yy * w + xx] = M.LAND end
+      end
+    end
+  end
+  self.cores = { { x = A[1], y = A[2] }, { x = B[1], y = B[2] } }
+
+  -- start spots around each Core; player t uses side (1 or 2) by alliance
+  local spots = {}
+  for side = 1, 2 do
+    spots[side] = {}
+    local c = self.cores[side]
+    local dir = side == 1 and 1 or -1
+    for k, off in ipairs({ { 4, -4 }, { 6, -1 }, { 1, -6 } }) do
+      spots[side][k] = { x = c.x + off[1] * dir, y = c.y + off[2] * dir }
+    end
+  end
+  self.starts = {}
+  local players = opts.players or { { ally = 1 }, { ally = 2 } }
+  local used = { 0, 0 }
+  local ally1 = players[1].ally or 1
+  for t, p in ipairs(players) do
+    local side = (p.ally or t) == ally1 and 1 or 2
+    used[side] = used[side] + 1
+    self.starts[t] = spots[side][math.min(3, used[side])]
+    self.starts[t].side = side
+  end
+  self:labelComponents()
+  return self
+end
+
+-- Mirror the whole map left-to-right (used to vary which corner you start in)
+function M:flipX()
+  local w, h = self.w, self.h
+  local function flipArr(a)
+    if not a then return end
+    local out = {}
+    for y = 0, h - 1 do
+      for x = 0, w - 1 do out[y * w + (w - 1 - x)] = a[y * w + x] end
+    end
+    for k, v in pairs(out) do a[k] = v end
+  end
+  flipArr(self.terrain)
+  flipArr(self.height)
+  flipArr(self.shoreDist)
+  for _, d in ipairs(self.deposits) do d.x = w - 1 - d.x end
+  self.deposit = {}
+  for _, d in ipairs(self.deposits) do self.deposit[d.y * w + d.x] = d end
+  for _, st in ipairs(self.starts) do st.x = w - 1 - st.x end
+  if self.syms then
+    local old = self.syms
+    -- symmetries conjugated by the flip still map the flipped map onto itself
+    local new = {}
+    for i, f in ipairs(old) do
+      new[i] = function(x, y) local fx, fy = f(w - 1 - x, y); return w - 1 - fx, fy end
+    end
+    self.syms = new
+  end
+  self:labelComponents()
+end
+
 function M:labelComponents()
   local w, h = self.w, self.h
   self.comp = { land = {}, sea = {} }

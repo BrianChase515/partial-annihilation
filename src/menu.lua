@@ -7,9 +7,20 @@ local U_fmt = require("src.util").fmt
 
 local Menu = {}
 Menu.__index = Menu
+local ARENA = require("src.arena")
+-- per-mode color themes: RTS steel blue, Arena crimson and violet
+local THEMES = {
+  rts = { bg = { 0.05, 0.07, 0.1 }, title = { 0.95, 0.97, 1 }, sub = { 0.6, 0.7, 0.8 }, field = { 0.1, 0.13, 0.17 },
+    active = { 0.2, 0.42, 0.62 }, btn = { 0.13, 0.17, 0.23 }, hover = { 0.2, 0.26, 0.34 }, line = { 0.4, 0.55, 0.7 } },
+  arena = { bg = { 0.08, 0.04, 0.08 }, title = { 1, 0.86, 0.6 }, sub = { 0.85, 0.62, 0.72 }, field = { 0.16, 0.08, 0.14 },
+    active = { 0.62, 0.2, 0.38 }, btn = { 0.2, 0.1, 0.18 }, hover = { 0.32, 0.15, 0.27 }, line = { 0.8, 0.45, 0.62 } },
+}
+local ASIZES = { { "Small", 64 }, { "Medium", 80 }, { "Large", 96 } }
+local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2, 1 } }
 
 local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
+local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
 
 function Menu.new(prev)
@@ -18,11 +29,16 @@ function Menu.new(prev)
   self.water = prev and prev.waterI or 2
   self.slots = prev and prev.slots or {
     { on = true, human = true, team = 1 },
-    { on = true, team = 2, level = 5, prof = 1 },
-    { on = false, team = 3, level = 5, prof = 1 },
-    { on = false, team = 4, level = 5, prof = 1 },
+    { on = true, team = 2, level = 5, prof = RANDOM_PROF },
+    { on = false, team = 3, level = 5, prof = RANDOM_PROF },
+    { on = false, team = 4, level = 5, prof = RANDOM_PROF },
   }
   self.savedMap = prev and prev.savedMap or nil
+  self.mode = prev and prev.menuMode or "rts"
+  self.arena = prev and prev.arenaSetup or {
+    size = 2, format = 1,
+    slots = { { human = true, class = 0 }, { class = 0, level = 5 }, { class = 0, level = 5 }, { class = 0, level = 5 } },
+  }
   self.mods = prev and prev.mods or { alien = false, drops = false, score = false, groovy = false }
   self.maps = Maps.load()
   self.t = 0
@@ -44,9 +60,80 @@ function Menu:layout()
   return x0, y, w, h
 end
 
-function Menu:rects()
+function Menu:tabRects(r)
+  local x0, y, w, h = self:layout()
+  local ty = math.max(14, y - 240)
+  r[#r + 1] = { x = w / 2 - 316, y = ty, w = 310, h = 50, label = "RTS", tab = "rts", big = true, active = self.mode ~= "arena" }
+  r[#r + 1] = { x = w / 2 + 6, y = ty, w = 310, h = 50, label = "COMMANDER ARENA", tab = "arena", big = true, active = self.mode == "arena" }
+end
+
+-- which arena slots are in play for the chosen format: you, ally, enemy 1, enemy 2
+function Menu:arenaActive()
+  local f = AFORMATS[self.arena.format]
+  return { true, f[2] >= 2, true, f[3] >= 2 }
+end
+
+function Menu:className(k)
+  if k == 0 then return "Random" end
+  return ARENA.CLASSES[k].name
+end
+
+function Menu:arenaRects()
   local x0, y, w, h = self:layout()
   local r = {}
+  self:tabRects(r)
+  local A = self.arena
+  for i, o in ipairs(ASIZES) do
+    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y, w = 110, h = 34, label = o[1], afield = "size", value = i, active = A.size == i, rowLabel = i == 1 and "Arena size" or nil }
+  end
+  for i, o in ipairs(AFORMATS) do
+    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 44, w = 110, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
+  end
+  local ty = y + 160
+  local names = { "You", "Ally", "Enemy", "Enemy 2" }
+  local colorSlot = { 1, 3, 2, 4 }
+  local act = self:arenaActive()
+  local row = 0
+  for i = 1, 4 do
+    if act[i] then
+      local yy = ty + row * 46
+      row = row + 1
+      local sl = A.slots[i]
+      r[#r + 1] = { x = x0 - 130, y = yy, w = 118, h = 36, label = names[i], slot = colorSlot[i], kind = "chip", on = true }
+      r[#r + 1] = { x = x0, y = yy, w = 168, h = 36, label = self:className(sl.class), aslot = i, kind = "aclass" }
+      if not sl.human then
+        r[#r + 1] = { x = x0 + 176, y = yy, w = 32, h = 36, label = "-", aslot = i, kind = "alvdown" }
+        r[#r + 1] = { x = x0 + 212, y = yy, w = 132, h = 36, label = sl.level .. "  " .. LEVEL_NAMES[sl.level], aslot = i, kind = "lvlabel", alevel = true }
+        r[#r + 1] = { x = x0 + 348, y = yy, w = 32, h = 36, label = "+", aslot = i, kind = "alvup" }
+      end
+    end
+  end
+  local by = ty + 4 * 46 + 54
+  r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
+  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
+  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  -- class roster (hover for details)
+  for i, c in ipairs(ARENA.CLASSES) do
+    r[#r + 1] = { x = x0 + 580, y = y + (i - 1) * 34, w = 300, h = 30, label = c.name, roster = i, kind = "roster" }
+  end
+  self:updateRect(r, w)
+  return r
+end
+
+function Menu:updateRect(r, w)
+  local ON = require("src.online")
+  if ON.state == "available" or ON.state == "downloading" or ON.state == "updated" or ON.state == "failed" then
+    local label = ({ available = "Update to v" .. tostring(ON.latest), downloading = "Downloading...",
+      updated = "Restart to finish update", failed = "Update failed - retry" })[ON.state]
+    r[#r + 1] = { x = w - 300, y = 16, w = 284, h = 40, label = label, action = "update", active = ON.state ~= "failed" }
+  end
+end
+
+function Menu:rects()
+  if self.mode == "arena" then return self:arenaRects() end
+  local x0, y, w, h = self:layout()
+  local r = {}
+  self:tabRects(r)
   for i, o in ipairs(SIZES) do
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y, w = 110, h = 34, label = o[1], field = "size", value = i, rowLabel = i == 1 and "Map size" or nil }
   end
@@ -74,7 +161,7 @@ function Menu:rects()
         r[#r + 1] = { x = x0 + 176, y = yy, w = 32, h = 36, label = "-", slot = i, kind = "lvdown" }
         r[#r + 1] = { x = x0 + 212, y = yy, w = 132, h = 36, label = s.level .. "  " .. LEVEL_NAMES[s.level], slot = i, kind = "lvlabel" }
         r[#r + 1] = { x = x0 + 348, y = yy, w = 32, h = 36, label = "+", slot = i, kind = "lvup" }
-        r[#r + 1] = { x = x0 + 388, y = yy, w = 132, h = 36, label = D.profiles[s.prof].key, slot = i, kind = "prof" }
+        r[#r + 1] = { x = x0 + 388, y = yy, w = 132, h = 36, label = D.profiles[s.prof].key .. "  v", slot = i, kind = "prof" }
       end
     end
   end
@@ -92,12 +179,7 @@ function Menu:rects()
     r[#r + 1] = { x = px + 268, y = yy, w = 32, h = 34, label = "x", delmap = m }
   end
   -- game update (top-right), when GitHub has a newer version
-  local ON = require("src.online")
-  if ON.state == "available" or ON.state == "downloading" or ON.state == "updated" or ON.state == "failed" then
-    local label = ({ available = "Update to v" .. tostring(ON.latest), downloading = "Downloading...",
-      updated = "Restart to finish update", failed = "Update failed - retry" })[ON.state]
-    r[#r + 1] = { x = w - 300, y = 16, w = 284, h = 40, label = label, action = "update", active = ON.state ~= "failed" }
-  end
+  self:updateRect(r, w)
   return r
 end
 
@@ -108,6 +190,7 @@ function Menu:activeCount()
 end
 
 function Menu:validTeams()
+  if self.mode == "arena" then return true end
   if self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2 then return false end
   local teams, n = {}, 0
   for _, s in ipairs(self.slots) do
@@ -133,7 +216,8 @@ end
 function Menu:draw()
   local lg = love.graphics
   local x0, y, w, h = self:layout()
-  lg.clear(0.05, 0.07, 0.1)
+  local th = THEMES[self.mode == "arena" and "arena" or "rts"]
+  lg.clear(th.bg[1], th.bg[2], th.bg[3])
   for _, s in ipairs(self.shapes) do
     local c = D.teamColor[s.team]
     lg.setColor(c[1], c[2], c[3], 0.22)
@@ -151,25 +235,33 @@ function Menu:draw()
   lg.setFont(f)
   lg.setColor(0, 0, 0, 0.5)
   lg.print(title, w / 2 - f:getWidth(title) / 2 + 4, y - 150 + 4)
-  lg.setColor(0.95, 0.97, 1)
+  lg.setColor(th.title[1], th.title[2], th.title[3])
   lg.print(title, w / 2 - f:getWidth(title) / 2, y - 150)
   lg.setFont(R.font(18))
-  lg.setColor(0.6, 0.7, 0.8)
-  local sub = "A small real-time strategy game of land, sea and air. Shapes included."
+  lg.setColor(th.sub[1], th.sub[2], th.sub[3])
+  local sub = self.mode == "arena" and "Commander Arena: no base, no army. Your Commander, three lanes and endless creeps."
+    or "A small real-time strategy game of land, sea and air. Shapes included."
   lg.print(sub, w / 2 - R.font(18):getWidth(sub) / 2, y - 78)
 
   -- column headers for player slots
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
   local ty = y + 160
-  lg.print("Players", x0 - 130, ty - 22)
-  lg.print("Team", x0 + 78, ty - 22)
-  lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
-  lg.print("Personality (click to cycle)", x0 + 388, ty - 22)
-  lg.print("SAVED MAPS", x0 + 580, y - 22)
+  if self.mode == "arena" then
+    lg.print("Commanders", x0 - 130, ty - 22)
+    lg.print("Class (click to cycle)", x0, ty - 22)
+    lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
+    lg.print("CLASSES", x0 + 580, y - 22)
+  else
+    lg.print("Players", x0 - 130, ty - 22)
+    lg.print("Team", x0 + 78, ty - 22)
+    lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
+    lg.print("Personality (click to choose)", x0 + 388, ty - 22)
+    lg.print("SAVED MAPS", x0 + 580, y - 22)
+  end
 
   local mx, my = love.mouse.getPosition()
-  local hoverProf, hoverMod
+  local hoverProf, hoverMod, hoverClass
   for _, r in ipairs(self:rects()) do
     if r.rowLabel then
       lg.setFont(R.font(16))
@@ -180,9 +272,16 @@ function Menu:draw()
     local active = (r.field == "size" and self.size == r.value) or (r.field == "water" and self.water == r.value) or r.active
     if r.kind == "prof" and hover then hoverProf = self.slots[r.slot] end
     if r.modkey and hover then hoverMod = r.modkey end
+    if hover and r.roster then hoverClass = r.roster end
+    if hover and r.kind == "aclass" then
+      local k = self.arena.slots[r.aslot].class
+      hoverClass = k > 0 and k or -1
+    end
+    if r.afield then active = r.active end
     if r.kind == "chip" then
       local c = D.teamColor[r.slot]
-      local on = self.slots[r.slot].on
+      local on = r.on
+      if on == nil then on = self.slots[r.slot].on end
       lg.setColor(c[1] * 0.35, c[2] * 0.35, c[3] * 0.35, on and 1 or 0.4)
       lg.rectangle("fill", r.x, r.y, r.w, r.h, 6)
       lg.setColor(c[1], c[2], c[3], on and 1 or 0.4)
@@ -198,16 +297,21 @@ function Menu:draw()
           lg.setColor(0.25, 0.25, 0.27)
         end
       elseif r.kind == "lvlabel" then
-        lg.setColor(0.1, 0.13, 0.17)
+        lg.setColor(th.field[1], th.field[2], th.field[3])
       elseif active then
-        lg.setColor(0.2, 0.42, 0.62)
+        lg.setColor(th.active[1], th.active[2], th.active[3])
       else
-        lg.setColor(hover and 0.2 or 0.13, hover and 0.26 or 0.17, hover and 0.34 or 0.23)
+        local c = hover and th.hover or th.btn
+        lg.setColor(c[1], c[2], c[3])
       end
       lg.rectangle("fill", r.x, r.y, r.w, r.h, 6)
-      lg.setColor(0.4, 0.55, 0.7, 0.8)
+      lg.setColor(th.line[1], th.line[2], th.line[3], 0.8)
       lg.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 6)
-      local fs = r.action == "start" and 24 or 15
+      local fs = r.action == "start" and 24 or (r.big and 20 or 15)
+      if r.big and r.active then
+        lg.setColor(0.95, 0.75, 0.3)
+        lg.rectangle("line", r.x - 2.5, r.y - 2.5, r.w + 5, r.h + 5, 8)
+      end
       lg.setFont(R.font(fs))
       lg.setColor(1, 1, 1)
       local label = r.label
@@ -217,6 +321,9 @@ function Menu:draw()
       lg.print(label, r.x + r.w / 2 - R.font(fs):getWidth(label) / 2, r.y + r.h / 2 - fs * 0.62)
     end
   end
+  if self.mode == "arena" then
+    self:drawArenaInfo(x0, y, w, h, hoverClass)
+  else
   -- personality description
   lg.setFont(R.font(14))
   lg.setColor(0.65, 0.72, 0.8)
@@ -277,22 +384,142 @@ function Menu:draw()
     lg.setColor(0.8, 0.85, 0.95)
     lg.printf(ON.msg, w - 300, 62, 284)
   end
+  end -- rts info
   lg.setColor(0.4, 0.45, 0.52)
   lg.print("v" .. D.VERSION, 12, h - 24)
   lg.setFont(R.font(13))
   lg.setColor(0.5, 0.56, 0.64)
-  local tip = "Tip: build Metal Extractors on the yellow deposits and Solar Collectors for energy, then a Vehicle Plant. Kill enemy Commanders to win."
+  local tip = self.mode == "arena"
+    and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
+    or "Tip: build Metal Extractors on the yellow deposits and Solar Collectors for energy, then a Vehicle Plant. Kill enemy Commanders to win."
   lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 40)
-  if self.showHelp then UI.drawHelp() end
+  self:drawDropdown()
+  if self.showHelp then UI.drawHelp(self.mode == "arena") end
+end
+
+function Menu:drawArenaInfo(x0, y, w, h, hoverClass)
+  local lg = love.graphics
+  local ty = y + 160
+  lg.setFont(R.font(14))
+  lg.setColor(0.65, 0.72, 0.8)
+  local desc
+  if hoverClass and hoverClass > 0 then
+    local c = ARENA.CLASSES[hoverClass]
+    local names = {}
+    for _, k in ipairs(c.skills) do names[#names + 1] = ARENA.SKILLS[k].name end
+    desc = c.name .. ": " .. c.tag .. "  Skills: " .. table.concat(names, ", ") .. ".  Ultimate: " .. ARENA.SKILLS[c.ult].name .. "."
+  elseif hoverClass == -1 then
+    desc = "Random: a class picked for you when the match starts."
+  else
+    desc = "Destroy the enemy Core. Towers guard each lane: outer first, then inner, then the Core. Hover a class to read about it."
+  end
+  lg.printf(desc, x0, ty + 4 * 46 + 4, 520)
+  -- arena high scores and online board
+  self.arenaScores = self.arenaScores or require("src.scores").load("arena")
+  local hy = y + 7 * 34 + 24
+  lg.setFont(R.font(13))
+  lg.setColor(0.55, 0.62, 0.7)
+  lg.print("ARENA HIGH SCORES  v" .. D.VERSION, x0 + 580, hy)
+  if #self.arenaScores == 0 then
+    lg.setColor(0.45, 0.5, 0.58)
+    lg.print("None yet - win an Arena match.", x0 + 580, hy + 22)
+  end
+  for i, sc in ipairs(self.arenaScores) do
+    if i > 5 then break end
+    lg.setColor(i == 1 and 1 or 0.85, i == 1 and 0.85 or 0.88, i == 1 and 0.35 or 0.92)
+    lg.print(string.format("%d. %s  %s  %s", i, U_fmt(sc.pts), sc.result, sc.date), x0 + 580, hy + 4 + i * 20)
+  end
+  local ON = require("src.online")
+  local oy = hy + 4 + 6 * 20 + 14
+  lg.setColor(0.55, 0.62, 0.7)
+  lg.print("ONLINE ARENA LEADERBOARD  v" .. D.VERSION, x0 + 580, oy)
+  local board = ON.arenaBoard
+  if not board or #board == 0 then
+    lg.setColor(0.45, 0.5, 0.58)
+    lg.print(board and "No scores yet this version - be the first." or "(offline)", x0 + 580, oy + 22)
+  else
+    for i, e in ipairs(board) do
+      if i > 5 then break end
+      lg.setColor(i == 1 and 1 or 0.85, i == 1 and 0.85 or 0.88, i == 1 and 0.35 or 0.92)
+      local nm = tostring(e.name or "?")
+      if #nm > 14 then nm = nm:sub(1, 13) .. "." end
+      lg.print(string.format("%d. %s  %s  %s", i, U_fmt(e.score), nm, tostring(e.result or "")), x0 + 580, oy + 4 + i * 20)
+    end
+  end
+end
+
+function Menu:dropdownItems()
+  local d = self.dropdown
+  if not d then return {} end
+  local h = love.graphics.getHeight()
+  local items = {}
+  local ih = 28
+  local y0 = d.y
+  if y0 + #D.profiles * ih > h - 10 then y0 = math.max(10, h - 10 - #D.profiles * ih) end
+  for i, p in ipairs(D.profiles) do
+    items[i] = { x = d.x, y = y0 + (i - 1) * ih, w = d.w, h = ih - 2, prof = i, label = p.key }
+  end
+  return items
+end
+
+function Menu:drawDropdown()
+  local d = self.dropdown
+  if not d then return end
+  local lg = love.graphics
+  local items = self:dropdownItems()
+  local mx, my = love.mouse.getPosition()
+  local top, bottom = items[1].y - 4, items[#items].y + items[#items].h + 4
+  lg.setColor(0.04, 0.05, 0.08, 0.97)
+  lg.rectangle("fill", d.x - 4, top, d.w + 8, bottom - top, 6)
+  lg.setColor(0.4, 0.55, 0.7)
+  lg.rectangle("line", d.x - 3.5, top + 0.5, d.w + 7, bottom - top - 1, 6)
+  local hoverDesc
+  for _, it in ipairs(items) do
+    local hover = mx >= it.x and mx <= it.x + it.w and my >= it.y and my <= it.y + it.h
+    local cur = self.slots[d.slot].prof == it.prof
+    if hover then lg.setColor(0.22, 0.32, 0.45) elseif cur then lg.setColor(0.16, 0.3, 0.45) else lg.setColor(0.1, 0.13, 0.18) end
+    lg.rectangle("fill", it.x, it.y, it.w, it.h, 4)
+    lg.setFont(R.font(15))
+    lg.setColor(1, 1, 1)
+    lg.print(it.label, it.x + 10, it.y + 4)
+    if hover then hoverDesc = D.profiles[it.prof].desc end
+  end
+  if hoverDesc then
+    lg.setFont(R.font(13))
+    local tw = 300
+    local _, lines = R.font(13):getWrap(hoverDesc, tw - 16)
+    local th = #lines * 16 + 12
+    lg.setColor(0.04, 0.05, 0.08, 0.97)
+    lg.rectangle("fill", d.x + d.w + 10, top, tw, th, 6)
+    lg.setColor(0.85, 0.9, 0.95)
+    lg.printf(hoverDesc, d.x + d.w + 18, top + 6, tw - 16)
+  end
 end
 
 function Menu:mousepressed(x, y, b)
+  if self.dropdown then
+    for _, it in ipairs(self:dropdownItems()) do
+      if x >= it.x and x <= it.x + it.w and y >= it.y and y <= it.y + it.h then
+        self.slots[self.dropdown.slot].prof = it.prof
+      end
+    end
+    self.dropdown = nil
+    return
+  end
   if self.showHelp then self.showHelp = false; return end
   for _, r in ipairs(self:rects()) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       local s = r.slot and self.slots[r.slot]
       local dir = (b == 2) and -1 or 1
-      if r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
+      local as = r.aslot and self.arena.slots[r.aslot]
+      if r.tab then self.mode = r.tab
+      elseif r.afield then self.arena[r.afield] = r.value
+      elseif r.kind == "aclass" then as.class = (as.class + dir) % (#ARENA.CLASSES + 1)
+      elseif r.kind == "alvdown" then as.level = math.max(1, as.level - 1)
+      elseif r.kind == "alvup" then as.level = math.min(10, as.level + 1)
+      elseif r.kind == "lvlabel" and r.alevel then as.level = (as.level - 1 + dir) % 10 + 1
+      elseif r.kind == "roster" then -- hover only
+      elseif r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
       elseif r.field then self[r.field] = r.value; self.savedMap = nil
       elseif r.kind == "toggle" then
         s.on = not s.on
@@ -303,7 +530,9 @@ function Menu:mousepressed(x, y, b)
       elseif r.kind == "lvdown" then s.level = math.max(1, s.level - 1)
       elseif r.kind == "lvup" then s.level = math.min(10, s.level + 1)
       elseif r.kind == "lvlabel" then s.level = (s.level - 1 + dir) % 10 + 1
-      elseif r.kind == "prof" then s.prof = (s.prof - 1 + dir) % #D.profiles + 1
+      elseif r.kind == "prof" then
+        -- open the personality list under the button
+        self.dropdown = { slot = r.slot, x = r.x, y = r.y + r.h + 2, w = 200 }
       elseif r.map and b == 1 then
         self.savedMap = r.map
         for i, sz in ipairs(SIZES) do if sz[2] == r.map.size then self.size = i end end
@@ -327,6 +556,7 @@ end
 
 function Menu:keypressed(k)
   if (k == "return" or k == "space") and self:validTeams() then return "start" end
+  if k == "escape" and self.dropdown then self.dropdown = nil; return end
   if k == "escape" then
     if self.showHelp then self.showHelp = false else love.event.quit() end
   end
@@ -334,6 +564,21 @@ function Menu:keypressed(k)
 end
 
 function Menu:options()
+  if self.mode == "arena" then
+    local A = self.arena
+    local act = self:arenaActive()
+    local players = {}
+    local allyOf = { 1, 1, 2, 2 }
+    for i = 1, 4 do
+      if act[i] then
+        local sl = A.slots[i]
+        players[#players + 1] = { human = sl.human, ally = allyOf[i], level = sl.level,
+          class = sl.class > 0 and ARENA.CLASSES[sl.class].key or nil }
+      end
+    end
+    return { mode = "arena", size = ASIZES[A.size][2], players = players, menuMode = "arena", arenaSetup = A,
+      sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
+  end
   local players = {}
   for _, s in ipairs(self.slots) do
     if s.on then
@@ -344,6 +589,7 @@ function Menu:options()
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
     mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy },
+    menuMode = "rts", arenaSetup = self.arena,
   }
   if self.savedMap then
     o.seed = self.savedMap.seed

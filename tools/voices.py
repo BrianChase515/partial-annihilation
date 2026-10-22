@@ -33,6 +33,14 @@ LINES = {
     "commander_online": "Commander online. Battle commencing.",
     "victory":          "Victory.",
     "defeat":           "Defeat. Commander lost.",
+    "ultimate_ready":   "Ultimate ready.",
+    "cmd_down":         "Commander down. Respawning.",
+    "enemy_cmd_down":   "Enemy commander destroyed.",
+    "respawned":        "Commander back online.",
+    "tower_lost":       "Our tower has fallen.",
+    "tower_destroyed":  "Enemy tower destroyed.",
+    "creeps":           "Creeps are marching.",
+    "core_attack":      "Warning. Core under attack.",
 }
 
 SR = 22050

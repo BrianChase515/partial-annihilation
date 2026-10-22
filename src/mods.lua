@@ -312,8 +312,9 @@ end
 function M.onKill(world, o, attacker)
   if not world.score or not attacker or not attacker.team or attacker.team < 1 then return end
   if o.team == 0 or not world:hostile(attacker.team, o.team) then return end
+  if world.arena and not (attacker.key == "commander" or attacker.owner or o.arenaTower) then return end -- creeps' own fights don't score
   local v = (o.def.cost and o.def.cost.metal) or (o.key == "commander" and 1000) or 50
-  if o.key == "commander" then v = 3000 end
+  if o.key == "commander" then v = world.arena and 800 or 3000 end
   v = v * (1 + 0.1 * ((o.key == "commander" and o.clevel) or o.level or 0))
   if o.def.building then v = v * 0.75 end
   local sc = world.score[attacker.team]
@@ -348,7 +349,7 @@ end
 -- opposition: how many enemies, whether they are teamed up (a 1v2 is much harder than a
 --   3-way free-for-all where the two computers also fight each other), and how much help
 --   you had from computer allies
--- time: faster than par = bonus up to x2, slower = down to x0.5; a loss is a flat x0.75
+-- time: par / your time (half par = x2, up to x3); slower = down to x0.5; a loss is a flat x0.75
 -- levels[t] = AI level of team t
 function M.finalScore(world, team, levels)
   local sc = world.score[team]
@@ -376,7 +377,8 @@ function M.finalScore(world, team, levels)
   opp = opp / (1 + 0.5 * allies)
   local won = world.over and world.over.winnerAlly == world.ally[team]
   local dev = (world.parTime - world.time) / world.parTime  -- +0.5 = finished in half the par time
-  local timeMul = won and math.max(0.5, math.min(2.0, 1 + dev)) or 0.75
+  -- winning in half the par time doubles your score, a third triples it (the cap); slow wins fade to x0.5
+  local timeMul = won and math.max(0.5, math.min(3.0, world.parTime / math.max(1, world.time))) or 0.75
   local total = math.floor(sc.pts * diffMul * opp * timeMul)
   return total, {
     pts = sc.pts, diffMul = diffMul, avgLevel = avg, oppMul = opp, timeMul = timeMul, won = won,

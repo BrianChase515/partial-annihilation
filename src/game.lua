@@ -9,9 +9,19 @@ local SFX = require("src.sfx")
 local VOICE = require("src.voice")
 local MUSIC = require("src.music")
 local MatchLog = require("src.matchlog")
+local ARENA = require("src.arena")
+local ArenaAI = require("src.arena_ai")
 
 local G = {}
 G.__index = G
+
+-- Can this builder reach that deposit? Land builders take land deposits (and offshore
+-- ones right by the shore); Sea Constructors take offshore ones.
+local function canReachDeposit(b, dp)
+  if b.def.domain == "sea" then return dp.sea == true end
+  return not dp.sea or (dp.shore or 9) <= 2
+end
+
 
 function G.new(opts)
   local self = setmetatable({}, G)
@@ -25,20 +35,29 @@ function G.new(opts)
     }
   end
   if opts.autotest then
-    players[1] = { ally = players[1].ally or 1, level = opts.level1 or 5, profile = opts.profile1 or "Balanced" }
+    players[1] = { ally = players[1].ally or 1, level = opts.level1 or 5, profile = opts.profile1 or "Balanced", class = players[1].class }
   end
+  self.arena = opts.mode == "arena"
   self.players = players
   local income = {}
   for i, p in ipairs(players) do income[i] = p.human and 1 or D.aiLevel(p.level).income end
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
-    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income,
+    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena,
   })
   local world = self.world
+  world.humanTeams = {}
+  for i, p in ipairs(players) do if p.human then world.humanTeams[i] = true end end
   R.init(world)
   self.ais = {}
   for i, p in ipairs(players) do
-    if not p.human then
+    if self.arena then
+      if not p.human then
+        local ai = ArenaAI.new(world, i, p.level)
+        self.ais[#self.ais + 1] = ai
+        p.profileName = ai.profileName
+      end
+    elseif not p.human then
       local ai = AI.new(world, i, p.level, p.profile or "Balanced")
       self.ais[#self.ais + 1] = ai
       p.profileName = ai.profileName
@@ -48,14 +67,26 @@ function G.new(opts)
     if self.log then self.log:event(string.format("%s Commander reached level %d", D.teamName[e.team] or "?", e.clevel or 0)) end
     if e.team == 1 then
       self.stats.cmdLevel = e.clevel
+      if self.arena then
+        if offer and #offer > 0 then
+          self:notice("Level " .. e.clevel .. "!  " .. (offer[1].skill and "Choose a new skill" or "Choose an upgrade") .. " (Z / X)", 3)
+        elseif not offer then
+          local ult = ARENA.SKILLS[ARENA.byClass[e.class].ult]
+          self:notice("Level 6: ULTIMATE unlocked - " .. ult.name .. " (R)", 5)
+        else
+          self:notice("Level " .. e.clevel .. "!", 2)
+        end
+        VOICE.say(offer and "commander_level" or "ultimate_ready")
+      else
       if offer then
         self:notice("Commander reached level " .. e.clevel .. "!  Pick an upgrade (Z / X)", 3)
       else
         self:notice("Commander level 5: NUKE ARMED.  Select him and press N", 5)
       end
       VOICE.say(offer and "commander_level" or "nuke_ready")
+      end
       SFX.play("ready", 0.7, 0)
-    elseif e.clevel >= 5 and world:hostile(e.team, 1) then
+    elseif e.clevel >= 5 and world:hostile(e.team, 1) and not self.arena then
       self:notice(D.teamName[e.team] .. "'s Commander now has a NUKE.", 4)
     end
   end
@@ -170,7 +201,12 @@ function G.new(opts)
   end
   world.onFire = function(e, o)
     if o and o.team and (world:allied(e.team, 1) and world:hostile(o.team, 1) or world:allied(o.team, 1) and world:hostile(e.team, 1)) then
-      MUSIC.bump(o.key == "commander" and 0.05 or 0.02)
+      if not self.arena then
+        MUSIC.bump(o.key == "commander" and 0.05 or 0.02)
+      elseif e.key == "commander" or o.key == "commander" then
+        -- in the Arena creeps fight all the time; only Commander fights raise the music
+        MUSIC.bump((e.team == 1 or o.team == 1) and 0.05 or 0.02)
+      end
     end
     if self:onScreen(e.x, e.y) and (e.team == 1 or world:isVisible(e)) then
       local w = e.def.weapon
@@ -196,12 +232,54 @@ function G.new(opts)
   world.onBuilt = function(b)
     if b.team == 1 and b.def.building then VOICE.say("construction") end
   end
+  if self.arena then
+    world.onCommanderDown = function(c, attacker)
+      local killer = attacker and (attacker.key == "commander" and attacker or attacker.owner)
+      if c.team == 1 then
+        self:notice(string.format("Your Commander is down. Respawning in %ds", math.ceil(c.respawnAt - world.time)), 4)
+        VOICE.say("cmd_down")
+        self.selected = {}
+      elseif world:hostile(c.team, 1) then
+        self:notice((killer and killer.team == 1 and "You destroyed " or "") .. D.teamName[c.team] .. "'s Commander!", 3)
+        VOICE.say("enemy_cmd_down")
+      else
+        self:notice("Your ally's Commander is down", 3)
+      end
+      MUSIC.bump(0.5)
+      if self.log then self.log:event(string.format("%s Commander (%s, L%d) down%s", D.teamName[c.team], c.class, c.clevel or 0,
+        killer and (" - killed by " .. D.teamName[killer.team] .. " " .. killer.key) or "")) end
+    end
+    world.onRespawn = function(c)
+      if c.team == 1 then
+        self:notice("Commander back online", 2)
+        VOICE.say("respawned")
+        self:centerOn(c.x, c.y)
+        self:select({ c })
+      end
+    end
+    world.onTowerDown = function(s)
+      local mine = world:allied(s.team, 1)
+      local what = s.key == "core" and "Core" or (s.tier .. " " .. s.lane .. " tower")
+      self:notice((mine and "We lost our " or "Destroyed the enemy ") .. what .. "!", 3)
+      VOICE.say(mine and "tower_lost" or "tower_destroyed")
+      MUSIC.bump(0.4)
+      if self.log then self.log:event((mine and "Lost " or "Destroyed ") .. what) end
+    end
+    world.onWave = function(k)
+      if k == 1 then self:notice("The creeps are marching. Push a lane!", 3); VOICE.say("creeps") end
+    end
+    world.onSkill = function(c, def)
+      if c.team == 1 then SFX.play("cannon", 0.6, 0.2) end
+      if self.log and def.ult then self.log:event(string.format("%s used %s", D.teamName[c.team], def.name)) end
+    end
+  end
   self.lastAttackNotice = -100
   self.voiceState = { cmdHp = c.hp, nukeReady = false, lowM = 0, lowE = 0 }
   if not self.opts.autotest then VOICE.say("commander_online") end
   if not self.opts.autotest then
     MUSIC.reset()
-    MUSIC.start()
+    -- a different soundtrack each match
+    MUSIC.start(MUSIC.SUITES[love.math.random(#MUSIC.SUITES)])
     local ok, lg = pcall(MatchLog.start, self)
     if ok then self.log = lg else print("match log disabled:", lg) end
   end
@@ -293,13 +371,14 @@ end
 function G:selectedMobile()
   local out = {}
   for _, e in ipairs(self:selectedList()) do
-    if not e.def.building then out[#out + 1] = e end
+    if not e.def.building and e.team == 1 and not e.creep then out[#out + 1] = e end
   end
   return out
 end
 
 function G:selectedBuilders()
   local out = {}
+  if self.arena then return out end
   for _, e in ipairs(self:selectedList()) do
     if e.def.builds and not e.def.factory and e.built >= 1 then out[#out + 1] = e end
   end
@@ -418,8 +497,17 @@ function G:rightClick(wx, wy, queue)
   end)
   local units = self:selectedMobile()
   if #units == 0 then
-    -- factories only: set rally point
-    if #self:selectedFactories() > 0 then self:commandMove(wx, wy, "move") end
+    -- factories only: rally onto a friendly unit (new units guard it), or a rally point
+    local facs = self:selectedFactories()
+    if #facs > 0 then
+      if target and target.team == 1 and not target.def.building then
+        for _, f in ipairs(facs) do f.rally = { type = "guard", target = target } end
+        self:notice("New units will join and follow your " .. target.def.name, 2)
+        world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 0.4, g = 1, b = 0.6 }
+      else
+        self:commandMove(wx, wy, "move")
+      end
+    end
     return
   end
   if target and target.team ~= 1 and not world:hostile(target.team, 1) then target = nil end
@@ -440,6 +528,9 @@ function G:rightClick(wx, wy, queue)
     for _, u in ipairs(units) do
       if u.def.builds and helps and u ~= target then
         world:issue(u, { type = "assist", target = target, persist = target.def.factory and target.built >= 1 }, queue)
+      elseif not target.def.building and u ~= target and u.def.weapon then
+        -- right-click a friendly unit: guard it (follow and protect)
+        world:issue(u, { type = "guard", target = target }, queue)
       else
         others[#others + 1] = u
       end
@@ -458,6 +549,22 @@ end
 
 -- The on-screen orders bar (same actions as the keyboard shortcuts)
 function G:orderAction(action, shift)
+  local slot = tonumber(tostring(action):match("^skill(%d)"))
+  if slot then
+    -- clicking a targeted skill's button waits for a click on the map
+    local c = self:myCommander()
+    local sk = c and c.skills and c.skills[slot]
+    if sk and ARENA.SKILLS[sk.key].aim == "point" then
+      self.mode, self.skillSlot = "skill", slot
+      return
+    end
+    return self:useSkill(slot)
+  end
+  if action == "home" then return self:goHome() end
+  if self.arena and (action == "amove" or action == "stop") and #self:selectedMobile() == 0 then
+    local c = self:myCommander()
+    if c then self:select({ c }) end
+  end
   if action == "amove" or action == "patrol" then
     if #self:selectedMobile() > 0 then self.mode = action end
   elseif action == "stop" then self:stop()
@@ -479,6 +586,23 @@ function G:orderAction(action, shift)
   end
 end
 
+-- Arena: use the skill in a slot at the mouse position
+function G:useSkill(slot)
+  local c = self.world.teams[1].commander
+  if not c or not c.alive then return end
+  local mx, my = love.mouse.getPosition()
+  local wx, wy = self:screenToWorld(mx, my)
+  local ok, why = ARENA.useSkill(self.world, c, slot, wx, wy)
+  if not ok and why then self:notice(why, 1.2) end
+end
+
+function G:goHome()
+  local c = self.world.teams[1].commander
+  if not c or not c.alive then return end
+  self.world:issue(c, { type = "move", x = c.respawnX, y = c.respawnY, arrive = 80 })
+  self:notice("Heading home to heal", 1)
+end
+
 -- Open a pre-filled GitHub issue with this game's official score
 function G:submitScore()
   local f, w = self.finalScore, self.world
@@ -487,7 +611,7 @@ function G:submitScore()
   local ok = require("src.online").submit({
     score = f.total, result = f.won and "Win" or "Loss",
     time = string.format("%d:%02d", math.floor(w.time / 60), math.floor(w.time % 60)),
-    players = w.np, map = w.map.w .. "/" .. w.map.seed, lineup = f.lineup,
+    players = w.np, map = w.map.w .. "/" .. w.map.seed, lineup = f.lineup, mode = self.arena and "arena" or "rts",
     breakdown = string.format("pts %d x%.2f diff x%.2f opp x%.2f time", math.floor(f.pts), f.diffMul, f.oppMul, f.timeMul),
   })
   self.submitted = true
@@ -499,6 +623,7 @@ end
 -- The Commander is skipped unless he is the only thing selected and you press twice.
 function G:selfDestruct()
   local w = self.world
+  if self.arena then return end
   local list, cmd = {}, nil
   for _, e in ipairs(self:selectedList()) do
     if e.team == 1 and e.alive then
@@ -546,10 +671,17 @@ function G:placeBuilding(wx, wy, queue)
     return false
   end
   local builders = self:selectedBuilders()
+  local dp = key == "mex" and self.world.map.deposit[self.world.map:idx(tx, ty)]
+  local any = false
   for _, b in ipairs(builders) do
-    if self:builderCan(b, key) then
+    if self:builderCan(b, key) and (not dp or canReachDeposit(b, dp)) then
       self.world:issue(b, { type = "build", key = key, tx = tx, ty = ty }, queue)
+      any = true
     end
+  end
+  if dp and not any then
+    self:notice(dp.sea and "Only a Sea Constructor can reach that offshore deposit" or "Sea Constructors can't build on land", 2)
+    return false
   end
   -- remember planned spot so ghosts are shown
   return true
@@ -557,6 +689,13 @@ end
 
 -- Valid build spots inside a dragged rectangle: extractors on every free deposit,
 -- other buildings packed in a grid with a one-tile walkway between them.
+function G:depositUsable(dp, builders)
+  for _, b in ipairs(builders or self:selectedBuilders()) do
+    if canReachDeposit(b, dp) then return true end
+  end
+  return false
+end
+
 function G:areaSites(key, ax, ay, bx, by)
   local world = self.world
   local map = world.map
@@ -586,8 +725,9 @@ function G:areaSites(key, ax, ay, bx, by)
   if key == "mex" then
     for _, dp in ipairs(map.deposits) do
       local cx, cy = map:center(dp.x, dp.y)
-      if cx >= x0 - T / 2 and cx <= x1 + T / 2 and cy >= y0 - T / 2 and cy <= y1 + T / 2 and free(dp.x, dp.y) then
-        sites[#sites + 1] = { tx = dp.x, ty = dp.y }
+      if cx >= x0 - T / 2 and cx <= x1 + T / 2 and cy >= y0 - T / 2 and cy <= y1 + T / 2 and free(dp.x, dp.y)
+        and self:depositUsable(dp) then
+        sites[#sites + 1] = { tx = dp.x, ty = dp.y, dp = dp }
       end
     end
   else
@@ -632,11 +772,14 @@ function G:assignSites(key, sites, queue)
     local bi, si, bd
     for i, p in ipairs(pos) do
       for j, st in ipairs(left) do
-        local cx, cy = (st.tx + d.w / 2) * T, (st.ty + d.h / 2) * T
-        local dd = U.dist2(p[1], p[2], cx, cy)
-        if not bd or dd < bd then bi, si, bd = i, j, dd end
+        if not st.dp or canReachDeposit(builders[i], st.dp) then
+          local cx, cy = (st.tx + d.w / 2) * T, (st.ty + d.h / 2) * T
+          local dd = U.dist2(p[1], p[2], cx, cy)
+          if not bd or dd < bd then bi, si, bd = i, j, dd end
+        end
       end
     end
+    if not bi then break end
     local st = table.remove(left, si)
     self.world:issue(builders[bi], { type = "build", key = key, tx = st.tx, ty = st.ty }, true)
     pos[bi] = { (st.tx + d.w / 2) * T, (st.ty + d.h / 2) * T }
@@ -710,7 +853,7 @@ function G:updateVoice(dt)
   local c = w.teams[1].commander
   if c and c.alive then
     if c.hp < vs.cmdHp - 1 then
-      if c.hp < c.maxhp * 0.3 then VOICE.say("commander_low") else VOICE.say("commander_attack") end
+      if c.hp < c.maxhp * 0.3 then VOICE.say("commander_low") elseif not self.arena then VOICE.say("commander_attack") end
     end
     vs.cmdHp = c.hp
     if c.nukeReady and not vs.nukeReady and (c.clevel or 0) >= 5 and vs.sawNukeCycle then VOICE.say("nuke_ready") end
@@ -721,6 +864,7 @@ function G:updateVoice(dt)
   local tm = w.teams[1]
   vs.lowM = (tm.mRatio < 0.5 and tm.mDemand > 0) and vs.lowM + dt or 0
   vs.lowE = (tm.eRatio < 0.5 and tm.eDemand > 0) and vs.lowE + dt or 0
+  if self.arena then return end
   if vs.lowM > 6 then VOICE.say("low_metal"); vs.lowM = 0 end
   if vs.lowE > 6 then VOICE.say("low_energy"); vs.lowE = 0 end
 end
@@ -746,7 +890,8 @@ function G:update(dt)
         local ais, levels = {}, {}
         for i, p in ipairs(self.players) do
           if not p.human then
-            ais[#ais + 1] = (w:hostile(i, 1) and "" or "ally ") .. (p.profileName or p.profile) .. " " .. p.level
+            local nm = self.arena and (w.teams[i].commander.class or "?") or (p.profileName or p.profile)
+            ais[#ais + 1] = (w:hostile(i, 1) and "" or "ally ") .. nm .. " " .. p.level
             levels[i] = p.level
           end
         end
@@ -759,7 +904,7 @@ function G:update(dt)
           self.highRank = require("src.scores").add({
             pts = total, result = f.won and "Win" or "Loss", date = os.date("%Y-%m-%d"),
             desc = string.format("%dp vs %s, %d:%02d", w.np, f.lineup, math.floor(w.time / 60), math.floor(w.time % 60)),
-          })
+          }, self.arena and "arena" or nil)
         end
       end
     end
@@ -825,7 +970,19 @@ function G:update(dt)
 
   -- under attack notices
   local tm = self.world.teams[1]
-  if tm.lastAttacked > self.lastAttackNotice + 12 and self.world.time - tm.lastAttacked < 0.5 then
+  if self.arena then
+    -- Arena: only the Core matters for alarms
+    local core = self.world.arena.core1
+    if core and core.alive then
+      if core.hp < (self.coreHp or core.hp) - 1 and self.world.time - (self.coreWarn or -99) > 20 then
+        self.coreWarn = self.world.time
+        self:notice("Our Core is under attack!", 3)
+        VOICE.say("core_attack")
+        self.attackX, self.attackY = core.x, core.y
+      end
+      self.coreHp = core.hp
+    end
+  elseif tm.lastAttacked > self.lastAttackNotice + 12 and self.world.time - tm.lastAttacked < 0.5 then
     self.lastAttackNotice = self.world.time
     self:notice("Under attack!  (press Space to jump there)", 3)
     if self.log and not self.firstContact then self.firstContact = true; self.log:event("First enemy attack on you") end
@@ -931,10 +1088,16 @@ function G:drawOverlays()
     end
     -- rally point
     if e.def.factory and e.rally then
-      lg.setColor(0.3, 1, 0.4, 0.5)
-      lg.setLineWidth(1)
-      lg.line(e.x, e.y, e.rally.x, e.rally.y)
-      lg.circle("line", e.rally.x, e.rally.y, 8)
+      local rx, ry = e.rally.x, e.rally.y
+      if e.rally.target then
+        if e.rally.target.alive then rx, ry = e.rally.target.x, e.rally.target.y else e.rally = nil end
+      end
+      if rx then
+        lg.setColor(0.3, 1, 0.4, 0.5)
+        lg.setLineWidth(1)
+        lg.line(e.x, e.y, rx, ry)
+        lg.circle("line", rx, ry, e.rally and e.rally.target and 22 or 8)
+      end
     end
     -- weapon range ring
     if e.def.weapon and e.built >= 1 then
@@ -1005,9 +1168,10 @@ function G:drawOverlays()
       end
       -- highlight deposits when placing an extractor
       if self.buildKey == "mex" then
+        local bl = self:selectedBuilders()
         for _, dp in ipairs(world.map.deposits) do
           local i = world.map:idx(dp.x, dp.y)
-          if not world.map.blocked[i] then
+          if not world.map.blocked[i] and self:depositUsable(dp, bl) then
             lg.setColor(1, 0.9, 0.3, 0.6)
             lg.circle("line", (dp.x + 0.5) * T, (dp.y + 0.5) * T, 14)
           end
@@ -1041,6 +1205,14 @@ function G:mousepressed(x, y, button)
       return
     elseif self.mode == "nuke" then
       self.world:launchNuke(self:myCommander(), wx, wy)
+      self.mode = nil
+      return
+    elseif self.mode == "skill" then
+      local c = self:myCommander()
+      if c then
+        local ok, why = ARENA.useSkill(self.world, c, self.skillSlot, wx, wy)
+        if not ok and why then self:notice(why, 1.2) end
+      end
       self.mode = nil
       return
     elseif self.mode == "flag" then
@@ -1294,6 +1466,14 @@ function G:keypressed(key)
     self:pickUpgrade(key == "z" and 1 or 2)
     return
   end
+  if self.arena then
+    -- Arena: Q W E R fire skills at the mouse; F heads home to heal
+    for slot, k in ipairs(ARENA.KEYS) do
+      if key == k then self:useSkill(slot); return end
+    end
+    if key == "f" then self:goHome(); return end
+    if key == "b" or key == "tab" or key == "n" or key == "g" or key == "p" then return end
+  end
   if key == "n" then
     self:startNuke()
     return
@@ -1440,7 +1620,14 @@ end
 function G:retreat(where)
   local units = self:selectedMobile()
   local list = {}
-  for _, u in ipairs(units) do if u.key ~= "commander" then list[#list + 1] = u end end
+  for _, u in ipairs(units) do
+    if u.key == "commander" then
+      -- the Commander flees home (+50% speed), powered down until he's fully repaired there
+      local tm = self.world.teams[1]
+      self.world:issue(u, { type = "retreat", x = tm.startX, y = tm.startY })
+      self:notice("Commander retreating home: weapons off until fully repaired at base", 2.5)
+    else list[#list + 1] = u end
+  end
   if #list == 0 then return end
   local c = self.world.teams[1].commander
   local x, y

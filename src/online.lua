@@ -55,6 +55,7 @@ function O.check()
   O.checked = true
   run("version", "curl -fsSL --max-time 8 " .. O.RAW .. "VERSION")
   run("board", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/v" .. D.VERSION .. ".json")
+  run("arenaboard", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/arena-v" .. D.VERSION .. ".json")
 end
 
 -- replace the .love we were launched from with the newest build
@@ -114,6 +115,8 @@ function O.poll()
       end
     elseif msg.id == "board" then
       O.board = parseBoard(out)
+    elseif msg.id == "arenaboard" then
+      O.arenaBoard = parseBoard(out)
     elseif msg.id == "download" then
       finishDownload(out)
     end
@@ -141,6 +144,7 @@ end
 function O.submit(info)
   local fields = {
     "version: " .. D.VERSION,
+    "mode: " .. (info.mode or "rts"),
     "score: " .. info.score,
     "result: " .. info.result,
     "time: " .. info.time,
@@ -154,7 +158,7 @@ function O.submit(info)
   local body = "Submitted from Partial Annihilation. Just press **Submit new issue** - the bot adds it to the "
     .. "[leaderboard](https://github.com/" .. O.REPO .. "/blob/main/LEADERBOARD.md) and closes this.\n\n```pa-score\n"
     .. table.concat(fields, "\n") .. "\n```\n"
-  local title = string.format("[score] %s - %s %s", info.score, info.result, info.time)
+  local title = string.format("[score] %s%s - %s %s", info.mode == "arena" and "Arena " or "", info.score, info.result, info.time)
   local url = "https://github.com/" .. O.REPO .. "/issues/new?title=" .. urlencode(title) .. "&body=" .. urlencode(body)
   return love.system.openURL(url)
 end

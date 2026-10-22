@@ -2,11 +2,31 @@
 
 **A lightweight real-time strategy game for the Mac, in the spirit of Total Annihilation, where the units are shapes and numbers, your Commander levels up like a roguelike hero, and the soundtrack goes to war with you.**
 
-Land, sea and air. Up to 4 players with teams. Procedural maps. About 80 KB of Lua plus 3 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
+Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of Lua plus 8 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
 
 ![A 2v2 battle: green's veteran tanks push into red's base](screenshots/battle-2v2.png)
 
+**Two games in one:** a full RTS, and **Commander Arena**, a single-player lane-battle mode where you control only your Commander.
+
 ## What makes it different
+
+### Commander Arena: a single-player lane battler
+Switch the title screen to **COMMANDER ARENA** for a different game. There's no base and no army: just your Commander, three lanes, towers, a Core to protect, and endless waves of creeps marching at the enemy.
+- **Seven classes inspired by classic action-RPG archetypes, each with five skills and an ultimate:**
+  - **Ranger:** volleys, lances, decoys.
+  - **Elementalist:** fireballs, frost, teleport. Ultimate: Meteor.
+  - **Reclaimer:** rebuilds wrecked enemy creeps as its own drones.
+  - **Juggernaut:** leaps, war cries, Berserk.
+  - **Warden:** auras for your creeps, charges and smites.
+  - **Shifter:** a wolf pack, bear form, cyclones.
+  - **Infiltrator:** trap turrets, stealth, a shadow clone.
+- **Roguelike levels to 10.** Levels 2, 4 and 8 offer 1 of 2 class skills (cast with Q/W/E at the mouse), level 6 unlocks your ultimate (R), and the other levels offer upgrade cards.
+- **Death isn't the end.** Your Commander respawns at your Core. Towers must fall in order (outer, inner, then the Core), and a lane whose towers are down sends super creeps.
+- **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal, dive a weakened Commander, gang up with allies and use their skills.
+- **1v1, 1v2, 2v2 or 2v1**, with its own scoring, high scores and online leaderboard.
+
+![Commander Arena: an Elementalist calls down a Meteor](screenshots/arena-fight.png)
+
 
 ### Your Commander is a roguelike hero with a nuke
 Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:
@@ -19,7 +39,7 @@ Lose him and you lose the game, but he only grows by fighting. He levels up **on
 **Level 5 is always the Nuke.** Every player hears the warning and watches the slow missile and its target circle. It flattens every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune, and it takes 10 minutes to recharge. Every fight that makes him stronger is also a chance to lose everything.
 
 ### Every match is a scored run on a seasonal online leaderboard
-Kills pay out the metal value of what you destroy. A kill-streak multiplier climbs to x3 and resets after 10 seconds without an enemy death (the window tightens as the streak grows). At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
+Kills pay out the metal value of what you destroy. A kill-streak multiplier climbs to x3 and resets after 10 seconds without an enemy death (the window tightens as the streak grows). At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. Speed pays: winning in half the par time doubles your score, and a third of it triples it. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
 
 ### A soundtrack that follows the fighting, and a robot announcer
 The score is three tempo-locked orchestral layers that crossfade with the action:
@@ -42,10 +62,14 @@ Metal near your base is scarce. Most deposits sit out in the contested middle of
 ### A navy worth fighting for
 Most maps are ringed by ocean, and every body of water connects. Much of the richest metal sits offshore, and only Sea Constructors can reach most of it. They also build Tidal Generators, which outproduce solar. A player who hides inland is leaving that economy to whoever controls the sea.
 
-The **Battleship** brings the sea to the land. It shells anything within 25 tiles: not much damage per shot, but constant pressure on a whole base. It's slow and expensive, and it can't hit aircraft or submarines, so everyone hunts it. The computer players send bombers and subs after any battleship near their base, escort their own with destroyers, and either besiege your coast or keep it home as a harbor guard.
+Wetter maps carry long inlets deep into the land on every side, so a navy can reach almost anywhere. Sea Constructors also build **Sea Batteries**: floating gun platforms, tougher than land towers, that hit land, sea and air.
 
-### Retreat has a price
+The **Battleship** brings the sea to the land. It shells anything within 40 tiles, far enough to reach the middle of the map from the coast: not much damage per shot, but constant pressure on a whole base. It's slow and expensive, and it can't hit aircraft or submarines, so everyone hunts it. The computer players send bombers and subs after any battleship near their base, escort their own with destroyers, and either besiege your coast or keep it home as a harbor guard.
+
+### Retreat has a price, and your Commander needs a home
 `F` pulls units back at +25% speed, but their weapons stay offline until they're fully repaired. Fleeing saves units, and it also leaves them defenseless if the enemy gives chase.
+
+Your Commander can flee too, at +50% speed, but he only repairs at his starting spot. There he powers down until he's whole again, which turns your start into a real base: hit-and-run with him is fine, and the way to kill an enemy Commander is to catch him off guard or assault his home.
 
 ### Opponents with personalities, and Commanders they actually use
 Difficulty (1–10) and personality are set separately for each computer player. The personalities are *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord*, a Commander who leads every assault from the front. Computer players pick upgrades that fit their style. They level their Commander when the odds are good and pull him back to their strongest position when hurt. They also aim nukes at your most valuable targets while keeping clear of their own buildings.
@@ -55,7 +79,9 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 
 ## Also included
 - **Up to 4 players and any teams:** free-for-all, 2v2, 1v3, or you with a computer ally, sharing vision.
-- **Procedural, symmetric maps:** an ocean ring with bays and rivers on most of them. Save the seeds you like by name.
+- **Procedural, symmetric maps:** an ocean ring with bays, rivers and inlets on most of them. You start in a random corner. Save the seeds you like by name.
+- **Guard and follow:** right-click a friendly unit to have your army guard it, or right-click one with a factory selected so every new unit joins it and follows it around, your Commander included.
+- **Three soundtracks:** besides the original D-minor score there's **Iron Tide** (driving strings and war drums) and **Ashfall** (dark choir and low brass). Each match picks one.
 - **Total Annihilation-style economy:** overspending slows every project by the same amount.
 - **Veterancy for every unit, including towers.**
 - **Every order is a button**, with its shortcut and a tooltip.
@@ -68,6 +94,7 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 | ![Commander level-up: pick 1 of 2 random upgrades](screenshots/commander-upgrade.png) | ![The Nuke: everyone sees where it will land](screenshots/nuke.png) |
 | ![Groovy modifier with the live score leaderboard](screenshots/groovy.png) | ![Base building](screenshots/base.png) |
 | ![Every order is a button, with tooltips](screenshots/orders.png) | ![A raid](screenshots/raid.png) |
+| ![The Commander Arena title screen](screenshots/arena-menu.png) | |
 
 ## Units
 
@@ -83,6 +110,7 @@ Shapes tell you the domain, and the number tells you the type:
 - Metal Extractor
 - Solar Collector
 - Tidal Generator (on water)
+- Sea Battery (on water; hits land, sea and air)
 - Storage
 - Vehicle Plant
 - Aircraft Plant
@@ -110,6 +138,9 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Move / attack / assist | Right-click (Shift queues) |
 | Attack-move, Stop, Patrol | `A` then click, `S`, `P` then click |
 | Plant retreat flag | `Ctrl+F` at the mouse (or the Flag button, then click) |
+| Guard a unit / factory output follows a unit | Right-click a friendly unit with army / a factory selected |
+| Commander flees home (repairs only there) | `F` with the Commander selected |
+| Arena skills / ultimate | `Q` `W` `E` / `R` at the mouse (Arena) |
 | Self-destruct selection | `Delete` (unfinished buildings refund their metal; the Commander needs two presses) |
 | Drop last queued order | `Shift+Delete` |
 | Retreat to flag / Commander | `F` / `Shift+F`; plant the flag with `Ctrl+F` |
@@ -142,6 +173,8 @@ Plain Lua on LÖVE 11.5, with no other dependencies.
 | `src/mods.lua` | Game modifiers: Alien Tech, Dropships, Score mode |
 | `src/scores.lua`, `src/online.lua` | Local high scores; update check, one-click update and online leaderboard (via `curl` and GitHub) |
 | `src/matchlog.lua` | Per-game logs for balance review |
+| `src/arena.lua`, `src/arena_ai.lua` | Commander Arena: lane map, towers, creep waves, the seven classes and their skills, and the computer Commanders |
+| `tools/compose_suites.py` | The two extra soundtracks |
 | `tools/leaderboard.py`, `.github/workflows/leaderboard.yml` | The leaderboard bot: checks a submitted score issue, updates `LEADERBOARD.md`, then replies and closes the issue |
 | `src/game.lua`, `src/ui.lua`, `src/render.lua` | Input, the HUD and drawing |
 | `src/menu.lua`, `src/maps.lua` | Lobby and saved maps |
@@ -156,6 +189,7 @@ Computer-vs-computer games run headless at high speed:
 ```sh
 love . --autotest 25 <seed> <size> <level1> <profile1> <level2> <profile2> [--mods alien,drops,groovy]
 love . --autotest4 30 <seed> 128 ffa|2v2|3
+love . --arenatest 25 <seed> <size> 1v1|2v2|1v2 <level> [class1,class2,...]
 love . --smoketest     # a scripted "player" drives the real input handlers
 ```
 

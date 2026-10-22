@@ -5,6 +5,7 @@ local Path = require("src.path")
 local Map = require("src.map")
 local CMD = require("src.commander")
 local MODS = require("src.mods")
+local ARENA -- loaded lazily (src.arena requires this module's siblings)
 
 local W = {}
 W.__index = W
@@ -13,7 +14,12 @@ local CELL = 96
 
 function W.new(opts)
   local self = setmetatable({}, W)
-  self.map = Map.generate(opts)
+  if opts.arena then
+    ARENA = ARENA or require("src.arena")
+    self.map = Map.generateArena(opts)
+  else
+    self.map = Map.generate(opts)
+  end
   self.T = self.map.T
   self.entities = {}
   self.byId = {}
@@ -56,6 +62,16 @@ function W.new(opts)
   self.nukes = {}
   self.rngCmd = love.math.newRandomGenerator((opts.seed or 1) + 777)
   MODS.init(self, opts.mods)
+  -- random starting corner: rotate everyone's start by one of the map's symmetries
+  if not opts.arena and not opts.fixedStarts then
+    if love.math.random() < 0.5 then self.map:flipX() end
+    local syms = self.map.syms
+    local f = syms[love.math.random(#syms)]
+    for t, st in ipairs(self.map.starts) do
+      local x, y = f(st.x, st.y)
+      self.map.starts[t] = { x = x, y = y }
+    end
+  end
   -- commanders
   for t = 1, self.np do
     local s = self.map.starts[t]
@@ -66,6 +82,10 @@ function W.new(opts)
     c.cxp, c.clevel = 0, 0
     self.teams[t].commander = c
     self.teams[t].startX, self.teams[t].startY = x, y
+  end
+  if opts.arena then
+    ARENA.setup(self, opts)
+    self.parTime = ARENA.par(self)
   end
   self:recomputeEconomy()
   self.grid = {}
@@ -451,6 +471,7 @@ end
 -- Commander progression (see src/commander.lua)
 
 function W:commanderXP(e, amount)
+  if self.arena then return ARENA.commanderXP(self, e, amount) end
   e.cxp = (e.cxp or 0) + amount
   while (e.clevel or 0) < CMD.MAX_LEVEL and e.cxp >= CMD.THRESHOLDS[(e.clevel or 0) + 1] do
     e.clevel = (e.clevel or 0) + 1
@@ -593,15 +614,28 @@ end
 local NOMODS = {}
 function W:modsOf(e) return e.mods or NOMODS end
 
+-- timed buff value (Arena skills), or nil
+function W:bv(e, key)
+  local b = e.buffs and e.buffs[key]
+  if b and b[2] > self.time then return b[1] end
+  return nil
+end
+
 function W:rangeOf(e)
-  return e.def.weapon.range * (1 + 0.04 * (e.level or 0)) * (self:modsOf(e).range or 1)
+  return e.def.weapon.range * (1 + 0.04 * (e.level or 0)) * (self:modsOf(e).range or 1) * (self:bv(e, "range") or 1)
 end
 function W:buildRangeOf(e) return (e.def.buildRange or 0) * (self:modsOf(e).buildRange or 1) end
 function W:buildPowerOf(e) return (e.def.buildPower or 0) * (self:modsOf(e).build or 1) end
 function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) end
 
 function W:speedOf(e)
-  return e.def.speed * (1 + 0.04 * (e.level or 0)) * (e.retreating and 1.25 or 1) * (self:modsOf(e).speed or 1)
+  local flee = e.retreating and (e.key == "commander" and 1.5 or 1.25) or 1
+  local sp = e.def.speed * (1 + 0.04 * (e.level or 0)) * flee * (self:modsOf(e).speed or 1)
+  if self.arena then
+    sp = sp * (self:bv(e, "speed") or 1)
+    if e.slowUntil and self.time < e.slowUntil then sp = sp * 0.6 end
+  end
+  return sp
 end
 
 -- Units out of combat near their Commander or a factory slowly repair
@@ -623,7 +657,8 @@ function W:repairZones()
     if e.alive and e.built >= 1 and (e.key == "commander" or e.def.factory) then healers[#healers + 1] = e end
   end
   for _, u in ipairs(self.entities) do
-    if u.alive and not u.def.building and u.hp < u.maxhp and self.time - (u.lastHit or -99) > 4 then
+    if u.alive and not u.def.building and u.hp < u.maxhp and self.time - (u.lastHit or -99) > 4
+      and (u.key ~= "commander" or self.arena) then
       for _, h in ipairs(healers) do
         if h.team == u.team and U.dist2(u.x, u.y, h.x, h.y) < 380 * 380 then
           u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.04 * 0.5)
@@ -637,7 +672,7 @@ end
 
 function W:gainXP(e, amount)
   if not e or not e.alive or not e.def.weapon then return end
-  if e.key == "commander" then return end
+  if e.key == "commander" or e.creep then return end
   e.xp = (e.xp or 0) + amount
   local L = e.level or 0
   while L < W.MAX_LEVEL and e.xp >= self:xpForLevel(e, L + 1) do
@@ -653,6 +688,7 @@ end
 
 function W:canTarget(e, o)
   if not o.alive or o.dormant or o.neutral or self.ally[o.team] == self.ally[e.team] then return false end
+  if o.fadeUntil and self.time < o.fadeUntil then return false end
   if o.def.domain == "air" and e.mods and e.mods.hitsAir then return true end
   return D.canHit(e.def.weapon, o.def.domain)
 end
@@ -667,6 +703,9 @@ function W:findTarget(e, range)
         -- prefer armed units, then units, then buildings
         local isUnit = not o.def.building
         local score = d - (isUnit and 150 or 0) - (o.def.weapon and 100 or 0) - (o.key == "battleship" and 400 or 0)
+        if o.decoy or o.key == "decoy" then score = score - 600 end
+        if e.creep and e.key == "artillery" and o.def.building then score = score - 400 end -- siege creeps go for towers
+        if e.arenaTower and o.key == "commander" and not (o.towerAggro and self.time < o.towerAggro) then score = score + 900 end
         if not bd or score < bd then best, bd = o, score end
       end
     end
@@ -696,6 +735,11 @@ function W:fire(e, o)
   if c and c ~= e and c.alive and c.mods and c.mods.dmgAura and U.dist2(c.x, c.y, e.x, e.y) < 350 * 350 then
     dmg = dmg * 1.25
   end
+  if self.arena then
+    dmg = dmg * (self:bv(e, "dmg") or 1) * (e.dmgMul or 1)
+    if o.def.building and m.breaker then dmg = dmg * m.breaker end
+    if m.crit and math.random() < m.crit then dmg = dmg * 2 end
+  end
   local wpn = w
   if m.hitsAir or m.splash then
     -- per-commander weapon copy so upgrades don't leak to other units
@@ -707,7 +751,8 @@ function W:fire(e, o)
     speed = w.speed, damage = dmg, splash = math.max(w.splash, m.splash or 0), team = e.team,
     weapon = wpn, sx = e.x, sy = e.y, source = e, hitsAir = m.hitsAir,
   }
-  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1)
+  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.arena and (self:bv(e, "rof") or 1) or 1)
+  if self.arena and m.chill then self.projectiles[#self.projectiles].chill = true end
   e.flash = 0.08
   if self.onFire then self.onFire(e, o) end
   if not e.def.building then
@@ -719,6 +764,24 @@ end
 
 function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
+  if self.arena then
+    if o.protected then return end
+    if o.ampUntil and self.time < o.ampUntil then amount = amount * 1.5 end
+    amount = amount * (self:bv(o, "armor") or 1)
+    if o.mods and o.mods.dodge and math.random() < o.mods.dodge then return end
+    if o.absorb then
+      local take = math.min(o.absorb, amount)
+      o.absorb = o.absorb - take
+      amount = amount - take
+      if o.absorb <= 0 then o.absorb, o.absorbUntil = nil, nil end
+      if amount <= 0 then o.hitTimer = 0.1; return end
+    end
+    if attacker and attacker.alive and attacker.mods and attacker.mods.lifesteal then
+      attacker.hp = math.min(attacker.maxhp, attacker.hp + math.min(amount, o.hp) * attacker.mods.lifesteal)
+    end
+    -- a Commander who hits an enemy Commander draws tower fire for a few seconds
+    if attacker and attacker.key == "commander" and o.key == "commander" then attacker.towerAggro = self.time + 3 end
+  end
   local m = o.mods
   if m then
     if o.invulnUntil and self.time < o.invulnUntil then return end
@@ -769,8 +832,17 @@ end
 function W:kill(o, attacker)
   if not o.alive then return end
   self:remove(o)
+  if self.arena then
+    ARENA.onKill(self, o, attacker)
+    if o.key == "commander" then
+      if self.onKill then self.onKill(o, attacker) end
+      MODS.onKill(self, o, attacker)
+      ARENA.commanderDied(self, o, attacker)
+      return
+    end
+  end
   -- Commander XP: metal value of anything he damaged in the last 6 seconds before it died
-  if o.cmdHit then
+  if o.cmdHit and not self.arena then
     for c, t in pairs(o.cmdHit) do
       if c.alive and self.time - t <= 6 then
         self:commanderXP(c, (o.def.cost and o.def.cost.metal) or 400)
@@ -827,6 +899,7 @@ function W:updateProjectiles(dt)
         end)
         self.effects[#self.effects + 1] = { kind = "splash", x = p.tx, y = p.ty, t = 0, life = 0.35, size = p.splash }
       elseif p.target and p.target.alive then
+        if p.chill then p.target.slowUntil = math.max(p.target.slowUntil or 0, self.time + 1) end
         self:damage(p.target, p.damage, p.source)
         self.effects[#self.effects + 1] = { kind = "hit", x = p.tx, y = p.ty, t = 0, life = 0.15, size = 6 }
       end
@@ -911,8 +984,18 @@ end
 function W:updateUnit(e, dt)
   e.moving = false
   e.retreating = false
+  if e.stunUntil and self.time < e.stunUntil then return end
   local regen = (e.mods and e.mods.regen) or e.def.regen
-  if regen and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + regen * dt) end
+  if e.key == "commander" and not self.arena then
+    -- the Commander only repairs himself at his spawn point (his "base"); the Nano
+    -- Regeneration upgrade works anywhere
+    local tm = self.teams[e.team]
+    local atBase = U.dist2(e.x, e.y, tm.startX or e.x, tm.startY or e.y) < 450 * 450
+    regen = (e.mods and e.mods.regen) or 0
+    if atBase then regen = regen + e.def.regen + (self.time - (e.lastHit or -99) > 3 and e.maxhp * 0.03 or 0) end
+    e.atBase = atBase
+  end
+  if regen and regen > 0 and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + regen * dt); if e.key == "commander" and e.atBase then e.healing = 0.3 end end
   local o = e.orders[1]
   local focus = nil
 
@@ -967,6 +1050,41 @@ function W:updateUnit(e, dt)
     else
       if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
       if self:followPath(e, dt, o.arrive or 10) then self:popOrder(e) end
+    end
+  elseif o.type == "guard" then
+    -- stay with a friendly unit; fight anything that comes near it
+    local g = o.target
+    if not g or not g.alive then
+      self:popOrder(e)
+    else
+      local t = e.chase
+      if t and (not t.alive or U.dist(g.x, g.y, t.x, t.y) > 420) then t = nil; e.path = nil end
+      if not t and e.def.weapon then
+        e.amScan = (e.amScan or 0) - dt
+        if e.amScan <= 0 then
+          e.amScan = 0.5
+          t = self:findChaseTarget(e)
+          if t and U.dist(g.x, g.y, t.x, t.y) > 380 then t = nil end
+        end
+      end
+      e.chase = t
+      if t then
+        focus = t
+        self:approach(e, t, dt)
+      else
+        local a = (e.id % 8) / 8 * math.pi * 2
+        local gx, gy = g.x + math.cos(a) * 70, g.y + math.sin(a) * 70
+        if U.dist(e.x, e.y, gx, gy) > 60 then
+          if not e.path or not e.guardRepath or self.time > e.guardRepath then
+            e.guardRepath = self.time + 1
+            self:setDest(e, gx, gy)
+          end
+          self:followPath(e, dt, 30)
+        else
+          e.path = nil
+        end
+        e.homeX, e.homeY = e.x, e.y
+      end
     end
   elseif o.type == "attack" then
     local t = o.target
@@ -1131,7 +1249,11 @@ function W:produce(f, key)
   end
   local u = self:spawn(key, f.team, x, y)
   u.homeX, u.homeY = x, y
-  if f.rally then
+  local rt = f.rally and f.rally.type == "guard" and f.rally.target
+  if rt and rt.alive and self:layerOf(rt) == self:layerOf(u) or (rt and rt.alive and d.domain == "air") then
+    -- rally onto a unit: new units join it and follow it around
+    self:issue(u, { type = "guard", target = rt })
+  elseif f.rally and f.rally.x then
     self:issue(u, { type = f.rally.type == "amove" and "amove" or "move", x = f.rally.x + math.random(-30, 30), y = f.rally.y + math.random(-30, 30) })
   elseif d.domain ~= "air" then
     self:issue(u, { type = "move", x = x + math.random(-40, 40), y = y + 40 + math.random(0, 30) })
@@ -1248,6 +1370,7 @@ function W:update(dt)
   self:separate(dt)
   self:updateProjectiles(dt)
   self:updateNukes(dt)
+  if self.arena then ARENA.update(self, dt) end
   MODS.updateAlien(self, dt)
   MODS.updateDrops(self, dt)
   MODS.updateScore(self, dt)

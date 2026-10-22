@@ -11,7 +11,8 @@ import json, os, re, sys, datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERSION = open(os.path.join(ROOT, "VERSION")).read().strip()
-BOARD = os.path.join(ROOT, "leaderboard", f"v{VERSION}.json")
+def board_path(mode="rts"):
+    return os.path.join(ROOT, "leaderboard", ("arena-" if mode == "arena" else "") + f"v{VERSION}.json")
 REPLY = "/tmp/reply.md"
 
 def check32(s):
@@ -21,27 +22,33 @@ def check32(s):
         h = (h * 16777619) % 4294967296
     return f"{h:08x}"
 
-def load():
+def load(mode="rts"):
     try:
-        with open(BOARD) as f: return json.load(f)
+        with open(board_path(mode)) as f: return json.load(f)
     except FileNotFoundError:
         return []
 
-def save(board):
-    os.makedirs(os.path.dirname(BOARD), exist_ok=True)
-    with open(BOARD, "w") as f: json.dump(board, f, indent=1)
+def save(board, mode="rts"):
+    p = board_path(mode)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w") as f: json.dump(board, f, indent=1)
 
-def render(board):
-    lines = [f"# Partial Annihilation leaderboard - v{VERSION}", "",
-             "Official games only: no Alien Tech or Dropships. Each new game version starts a fresh board.",
-             "Submit from the end-of-game screen (**Submit score online**).", ""]
+def table(board):
     if not board:
-        lines.append("_No scores yet this version._")
-    else:
-        lines += ["| # | Player | Score | Result | Time | Players | Opponents | Date |", "|---|---|---|---|---|---|---|---|"]
-        for i, e in enumerate(board[:100], 1):
-            lines.append(f"| {i} | [{e['name']}](https://github.com/{e['name']}) | {e['score']:,} | {e['result']} | {e['time']} "
-                         f"| {e['players']} | {e['lineup']} | {e['date']} |")
+        return ["_No scores yet this version._"]
+    out = ["| # | Player | Score | Result | Time | Players | Opponents | Date |", "|---|---|---|---|---|---|---|---|"]
+    for i, e in enumerate(board[:100], 1):
+        out.append(f"| {i} | [{e['name']}](https://github.com/{e['name']}) | {e['score']:,} | {e['result']} | {e['time']} "
+                   f"| {e['players']} | {e['lineup']} | {e['date']} |")
+    return out
+
+def render(_=None):
+    lines = [f"# Partial Annihilation leaderboard - v{VERSION}", "",
+             "Each new game version starts a fresh board. Submit from the end-of-game screen (**Submit score online**).", "",
+             "## RTS", "", "Official games only: no Alien Tech or Dropships.", ""]
+    lines += table(load("rts"))
+    lines += ["", "## Commander Arena", ""]
+    lines += table(load("arena"))
     with open(os.path.join(ROOT, "LEADERBOARD.md"), "w") as f:
         f.write("\n".join(lines) + "\n")
 
@@ -69,17 +76,18 @@ def submit():
     if check32(key + "|partial") != fields.get("check") or not (0 < score < 50_000_000):
         reply("This score didn't pass the check, so it wasn't added."); return 1
     name = issue["user"]["login"]
+    mode = "arena" if fields.get("mode") == "arena" else "rts"
     entry = {"name": name, "score": score, "result": fields["result"], "time": fields["time"],
              "players": fields.get("players", "?"), "lineup": fields.get("lineup", "").replace("|", "/")[:80],
              "date": datetime.date.today().isoformat(), "issue": issue["number"]}
-    board = load()
+    board = load(mode)
     old = next((e for e in board if e["name"] == name), None)
     if old and old["score"] >= score:
-        render(board)
+        render()
         reply(f"Thanks {name}! Your best this version is still {old['score']:,}, so the board is unchanged."); return 0
     board = [e for e in board if e["name"] != name] + [entry]
     board.sort(key=lambda e: -e["score"])
-    save(board); render(board)
+    save(board, mode); render()
     rank = next(i for i, e in enumerate(board, 1) if e["name"] == name)
     reply(f"Added! **{score:,}** puts {name} at **#{rank}** on the v{VERSION} "
           f"[leaderboard](https://github.com/{os.environ.get('GITHUB_REPOSITORY', 'BrianChase515/partial-annihilation')}/blob/main/LEADERBOARD.md).")
@@ -87,5 +95,5 @@ def submit():
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["render"]:
-        render(load()); sys.exit(0)
+        render(); sys.exit(0)
     sys.exit(submit())

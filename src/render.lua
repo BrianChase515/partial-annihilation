@@ -288,6 +288,37 @@ function R.drawEntity(e, cam, selected)
       lg.circle("fill", x + math.cos(e.turret) * (r + 8), y + math.sin(e.turret) * (r + 8), 3)
     end
   end
+  -- Arena: shielded structures, stunned units, faded Commanders, energy shields
+  do
+  local x, y, r = e.x, e.y, d.radius
+  if e.protected then
+    lg.setColor(0.6, 0.8, 1, 0.35 + 0.15 * math.sin(R.world.time * 3))
+    lg.setLineWidth(2)
+    lg.circle("line", x, y, r + 10)
+  end
+  if e.stunUntil and R.world.time < e.stunUntil then
+    lg.setColor(1, 1, 0.4, 0.9)
+    for i = 0, 2 do
+      local a = R.world.time * 6 + i * 2.09
+      lg.circle("fill", x + math.cos(a) * (r + 4), y - r - 6 + math.sin(a) * 4, 2.5)
+    end
+  end
+  if e.absorb then
+    lg.setColor(0.5, 0.7, 1, 0.5)
+    lg.setLineWidth(3)
+    lg.circle("line", x, y, r + 7)
+  end
+  if e.summon and e.doom then
+    lg.setColor(1, 1, 1, 0.5)
+    lg.setLineWidth(1)
+    lg.circle("line", x, y, r + 3)
+  end
+  if e.fadeUntil and R.world.time < e.fadeUntil then
+    lg.setColor(0.6, 0.5, 1, 0.6)
+    lg.setLineWidth(2)
+    lg.circle("line", x, y, r + 12)
+  end
+  end
   -- disarmed (retreated, not yet fully repaired): grey slash over the unit
   if e.disarmed and zoom > 0.3 then
     local r = d.radius
@@ -556,6 +587,67 @@ function R.drawWorld(cam, game)
       lg.setColor(fx.r or 0.3, fx.g or 1, fx.b or 0.4, 1 - k)
       lg.setLineWidth(2)
       lg.circle("line", fx.x, fx.y, 6 + k * 18)
+    -- Arena skill effects
+    elseif fx.kind == "beam" then
+      local c = fx.color or { 1, 0.9, 0.6 }
+      lg.setColor(c[1], c[2], c[3], 0.85 * (1 - k))
+      lg.setLineWidth(fx.size * (1 - k * 0.5))
+      lg.line(fx.x, fx.y, fx.x2, fx.y2)
+      lg.setColor(1, 1, 1, 0.6 * (1 - k))
+      lg.setLineWidth(math.max(1, fx.size * 0.3))
+      lg.line(fx.x, fx.y, fx.x2, fx.y2)
+    elseif fx.kind == "bolt" then
+      local c = fx.color or { 0.7, 0.85, 1 }
+      lg.setColor(c[1], c[2], c[3], 1 - k)
+      lg.setLineWidth(3)
+      local pts = { fx.x, fx.y }
+      local segs = 6
+      for i = 1, segs - 1 do
+        local t = i / segs
+        pts[#pts + 1] = fx.x + (fx.x2 - fx.x) * t + (math.random() - 0.5) * 18
+        pts[#pts + 1] = fx.y + (fx.y2 - fx.y) * t + (math.random() - 0.5) * 18
+      end
+      pts[#pts + 1] = fx.x2; pts[#pts + 1] = fx.y2
+      lg.line(pts)
+    elseif fx.kind == "frost" then
+      lg.setColor(0.6, 0.9, 1, 0.35 * (1 - k))
+      lg.circle("fill", fx.x, fx.y, fx.size * (0.6 + 0.4 * k))
+      lg.setColor(0.85, 0.97, 1, 0.9 * (1 - k))
+      lg.setLineWidth(3)
+      lg.circle("line", fx.x, fx.y, fx.size * (0.6 + 0.4 * k))
+    elseif fx.kind == "curse" then
+      lg.setColor(0.7, 0.2, 0.9, 0.35 * (1 - k))
+      lg.circle("fill", fx.x, fx.y, fx.size)
+      lg.setColor(0.85, 0.4, 1, 0.9 * (1 - k))
+      lg.setLineWidth(2)
+      lg.circle("line", fx.x, fx.y, fx.size * (1 - 0.3 * k))
+    elseif fx.kind == "ring" then
+      local c = fx.color or { 1, 0.85, 0.4 }
+      lg.setColor(c[1], c[2], c[3], 0.8 * (1 - k))
+      lg.setLineWidth(4)
+      lg.circle("line", fx.x, fx.y, fx.size * (0.2 + 0.8 * k))
+    elseif fx.kind == "warn" then
+      local pulse = 0.5 + 0.5 * math.sin(world.time * 14)
+      lg.setColor(1, 0.3, 0.2, 0.25 + 0.25 * pulse)
+      lg.circle("fill", fx.x, fx.y, fx.size)
+      lg.setColor(1, 0.4, 0.3, 0.9)
+      lg.setLineWidth(2)
+      lg.circle("line", fx.x, fx.y, fx.size)
+      lg.circle("line", fx.x, fx.y, fx.size * (1 - k))
+    elseif fx.kind == "pillar" then
+      lg.setColor(1, 0.95, 0.6, 0.8 * (1 - k))
+      lg.rectangle("fill", fx.x - 16 * (1 - k), fx.y - 400, 32 * (1 - k), 400)
+      lg.setColor(1, 0.9, 0.5, 0.5 * (1 - k))
+      lg.circle("fill", fx.x, fx.y, fx.size * (0.5 + 0.5 * k))
+    elseif fx.kind == "whirl" or fx.kind == "hammer" or fx.kind == "cyclone" then
+      local col = fx.kind == "whirl" and { 1, 0.5, 0.3 } or (fx.kind == "hammer" and { 1, 0.9, 0.5 } or { 0.6, 0.9, 1 })
+      lg.setColor(col[1], col[2], col[3], 0.6 * (1 - k))
+      lg.setLineWidth(3)
+      local a0 = world.time * 9
+      for i = 0, 2 do
+        local a = a0 + i * 2.09
+        lg.arc("line", "open", fx.x, fx.y, fx.size * 0.8, a, a + 1.1)
+      end
     end
   end
 
@@ -564,6 +656,22 @@ function R.drawWorld(cam, game)
     if world.fogChanged then R.updateFogImage() end
     lg.setColor(1, 1, 1)
     lg.draw(R.fogImage, 0, 0, 0, T, T)
+    -- metal deposits stay marked under the fog, so you can plan where to expand
+    -- (and guess where the enemy will)
+    for _, dpos in ipairs(map.deposits) do
+      local i = dpos.y * map.w + dpos.x
+      if world.visible[i] ~= 1 then
+        local cx, cy = (dpos.x + 0.5) * T, (dpos.y + 0.5) * T
+        if cx > x0 - T and cx < x1 + T and cy > y0 - T and cy < y1 + T then
+          if dpos.sea then lg.setColor(0.35, 0.95, 0.9, 0.45)
+          elseif dpos.rich then lg.setColor(1, 0.8, 0.25, 0.55)
+          else lg.setColor(0.85, 0.75, 0.35, 0.45) end
+          lg.setLineWidth(1.5)
+          lg.circle("line", cx, cy, 8)
+          lg.circle("fill", cx, cy, 3)
+        end
+      end
+    end
   end
 
   -- Alien Tech landing zone (everyone sees it)

@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.7"  -- bump to start a fresh high-score season
+D.VERSION = "0.8"  -- bump to start a fresh high-score season
 
 D.units = {
   commander = {
@@ -92,19 +92,19 @@ D.units = {
   },
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
-    radius = 22, hp = 4200, speed = 36, sight = 420,
-    weapon = { damage = 55, range = 820, minRange = 160, reload = 3.6, speed = 340, splash = 48, ballistic = true,
+    radius = 22, hp = 4200, speed = 40, sight = 460,
+    weapon = { damage = 55, range = 1300, minRange = 200, reload = 3.6, speed = 420, splash = 48, ballistic = true,
       targets = { land = true, sea = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
-    desc = "Siege ship. Shells anything within 25 tiles, but slowly. Can't hit aircraft or subs. Everyone will hunt it.",
+    desc = "Siege ship. Shells anything within 40 tiles, but slowly. Can't hit aircraft or subs. Everyone will hunt it.",
   },
   seabuilder = {
     name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",
     radius = 12, hp = 500, speed = 80, sight = 300,
     buildPower = 8, buildRange = 110,
-    builds = { "mex", "tidal", "shipyard" },
+    builds = { "mex", "tidal", "seabattery", "shipyard" },
     cost = { metal = 90, energy = 700, work = 75 },
-    desc = "Builds offshore extractors, tidal generators and shipyards.",
+    desc = "Builds offshore extractors, tidal generators, Sea Batteries and shipyards.",
   },
   sub = {
     name = "Submarine", short = "3", domain = "sub", shape = "circle",
@@ -122,6 +122,58 @@ D.units = {
     desc = "Alien tech. Devastating guns that hit land, sea and air. Claimed by holding its zone.",
   },
 
+  -- Commander Arena summons ------------------------------------------
+  drone = {
+    name = "Drone", short = "R", domain = "land", shape = "square", arenaOnly = true,
+    radius = 10, hp = 520, speed = 80, sight = 300,
+    weapon = { damage = 26, range = 170, reload = 0.9, speed = 560, targets = { land = true, sea = true } },
+    cost = { metal = 50, energy = 0, work = 1 },
+    desc = "A wreck rebuilt by a Reclaimer. Fights for its master.",
+  },
+  wolf = {
+    name = "Wolf", short = "W", domain = "land", shape = "square", arenaOnly = true,
+    radius = 10, hp = 720, speed = 112, sight = 300,
+    weapon = { damage = 30, range = 110, reload = 0.7, speed = 700, targets = { land = true, sea = true } },
+    cost = { metal = 50, energy = 0, work = 1 },
+    desc = "A Shifter's loyal hunter.",
+  },
+  shadow = {
+    name = "Shadow Clone", short = "SC", domain = "land", shape = "square", arenaOnly = true,
+    radius = 13, hp = 1300, speed = 80, sight = 330,
+    weapon = { damage = 55, range = 200, reload = 0.6, speed = 600, targets = { land = true, sea = true } },
+    cost = { metal = 50, energy = 0, work = 1 },
+    desc = "An Infiltrator's shadow. Gone in 15 seconds.",
+  },
+  decoy = {
+    name = "Decoy", short = "D", domain = "land", shape = "square", arenaOnly = true,
+    radius = 13, hp = 1500, speed = 0, sight = 200,
+    cost = { metal = 50, energy = 0, work = 1 },
+    desc = "Draws enemy fire.",
+  },
+  sentry = {
+    name = "Lightning Sentry", short = "LS", domain = "building", building = true, arenaOnly = true,
+    w = 1, h = 1, place = "land", hp = 600, sight = 320,
+    weapon = { damage = 28, range = 270, reload = 0.45, speed = 900, targets = { land = true, sea = true } },
+    cost = { metal = 40, energy = 0, work = 1 },
+    desc = "An Infiltrator's trap turret.",
+  },
+
+  -- Commander Arena structures (not buildable) ------------------------
+  atower = {
+    name = "Defense Tower", short = "DT", domain = "building", building = true, arenaOnly = true,
+    w = 2, h = 2, place = "land", hp = 2000, sight = 420,
+    weapon = { damage = 75, range = 330, reload = 1.0, speed = 760, targets = { land = true, sea = true } },
+    cost = { metal = 600, energy = 0, work = 1 },
+    desc = "Guards a lane. Shoots creeps first, and Commanders who attack a Commander under it.",
+  },
+  core = {
+    name = "Core", short = "CORE", domain = "building", building = true, arenaOnly = true,
+    w = 4, h = 4, place = "land", hp = 5000, sight = 460,
+    weapon = { damage = 90, range = 380, reload = 0.9, speed = 800, targets = { land = true, sea = true } },
+    cost = { metal = 1500, energy = 0, work = 1 },
+    desc = "Destroy the enemy Core to win. Heals friendly Commanders nearby.",
+  },
+
   -- Buildings ---------------------------------------------------------
   mex = {
     name = "Metal Extractor", short = "M", domain = "building", building = true,
@@ -136,6 +188,13 @@ D.units = {
     income = { energy = 14 },
     cost = { metal = 70, energy = 0, work = 55 },
     desc = "+14 energy per second.",
+  },
+  seabattery = {
+    name = "Sea Battery", short = "SB", domain = "building", building = true,
+    w = 2, h = 2, place = "water", hp = 1900,
+    weapon = { damage = 34, range = 330, reload = 0.45, speed = 820, splash = 30, targets = { land = true, sea = true, air = true } },
+    cost = { metal = 170, energy = 1100, work = 120 },
+    desc = "A floating gun platform. Tougher than a Gun Tower and hits land, sea AND air. Built on water by Sea Constructors.",
   },
   tidal = {
     name = "Tidal Generator", short = "TG", domain = "building", building = true,

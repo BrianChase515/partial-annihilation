@@ -17,6 +17,7 @@ function U.clamp(v, lo, hi)
 end
 
 function U.lerp(a, b, t) return a + (b - a) * t end
+function U.contains(t, v) for _, x in ipairs(t) do if x == v then return true end end return false end
 
 function U.norm(x, y)
   local l = math.sqrt(x * x + y * y)

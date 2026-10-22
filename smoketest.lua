@@ -302,6 +302,42 @@ local function script()
   game:centerOn(sx, sy); game.cam.zoom = 0.8; game:centerOn(sx, sy)
   game:select({ bb })
   frame(); shot("sea.png")
+  -- Commander Arena
+  game = startFn({ mode = "arena", size = 80, seed = 3, players = {
+    { human = true, ally = 1, class = "elementalist" }, { ally = 2, level = 5, class = "juggernaut" } } })
+  w = game.world
+  local ac = w.teams[1].commander
+  log("arena: class", ac.class, "structures", #w.arena.structures, "lanes", w.map.lanes.top and "ok")
+  game:select({ ac })
+  for _ = 1, 30 * 20 do game:update(1 / 30) end
+  log("arena wave", w.arena.wave, "entities", #w.entities)
+  frame(); shot("arena_start.png")
+  w:commanderXP(ac, 2300)
+  log("arena level", ac.clevel, "offers", #ac.offers, "skills", ac.skills[4] and ac.skills[4].key)
+  frame(); shot("arena_offer.png")
+  for _ = 1, 6 do key("z") end
+  local sk = {}
+  for i = 1, 4 do sk[#sk + 1] = ac.skills[i] and ac.skills[i].key or "-" end
+  log("arena skills", table.concat(sk, ","), "upgrades", #ac.upgrades)
+  -- walk to mid and fight for a while
+  local mx, my = w.map:center(40, 40)
+  w:issue(ac, { type = "amove", x = mx, y = my })
+  for _ = 1, 30 * 50 do game:update(1 / 30) end
+  game:centerOn(ac.x, ac.y)
+  for slot = 1, 4 do
+    local ok, why = require("src.arena").useSkill(w, ac, slot, ac.x + 150, ac.y - 100)
+    log("skill", slot, ok, why)
+  end
+  for _ = 1, 30 do game:update(1 / 30) end
+  frame(); shot("arena_fight.png")
+  -- end it
+  local core2 = w.arena.core2
+  core2.protected = nil
+  w:kill(core2, ac)
+  local t2 = love.timer.getTime()
+  while love.timer.getTime() - t2 < 1.7 do game:update(1 / 60); frame() end
+  log("arena over", w.over and w.over.winnerAlly)
+  shot("arena_over.png")
   local MUSIC = require("src.music")
   log("music heat", MUSIC.heat, "intensity", math.floor(MUSIC.intensity * 100) / 100)
   log("DONE")

@@ -117,6 +117,46 @@ local function resourceBar(x, y, label, amount, store, income, spend, col)
   return w
 end
 
+function UI.drawArenaTop(game)
+  local A = require("src.arena")
+  local w = game.world
+  local st = w.arena
+  local c = w.teams[1].commander
+  local cls = A.byClass[c.class]
+  lg.setFont(font(14))
+  lg.setColor(0.95, 0.85, 0.5)
+  local L = c.clevel or 0
+  lg.print(string.format("%s  Lv %d", cls and cls.name or "?", L), 14, 10)
+  -- XP bar
+  local x0 = 150
+  local lo = L > 0 and A.THRESHOLDS[L] or 0
+  local hi = A.THRESHOLDS[L + 1]
+  lg.setColor(0.15, 0.18, 0.24)
+  lg.rectangle("fill", x0, 12, 160, 14, 3)
+  if hi then
+    lg.setColor(0.55, 0.45, 1)
+    lg.rectangle("fill", x0, 12, 160 * math.max(0, math.min(1, ((c.cxp or 0) - lo) / (hi - lo))), 14, 3)
+  else
+    lg.setColor(1, 0.85, 0.3)
+    lg.rectangle("fill", x0, 12, 160, 14, 3)
+  end
+  lg.setFont(font(11))
+  lg.setColor(1, 1, 1)
+  local xt = hi and string.format("XP %d / %d", c.cxp or 0, hi) or "MAX LEVEL"
+  lg.print(xt, x0 + 80 - font(11):getWidth(xt) / 2, 12)
+  -- kills, towers, next wave
+  local towers = { 0, 0 }
+  for _, s in ipairs(st.structures) do if s.alive and s.key ~= "core" then towers[s.side] = towers[s.side] + 1 end end
+  lg.setFont(font(14))
+  lg.setColor(0.85, 0.9, 0.95)
+  local txt = string.format("Kills %d - %d     Towers %d vs %d     Next wave %ds", st.kills[1], st.kills[2], towers[1], towers[2],
+    math.max(0, math.ceil(st.waveAt - w.time)))
+  if not c.alive and c.respawnAt then
+    txt = txt .. string.format("     RESPAWN IN %ds", math.ceil(c.respawnAt - w.time))
+  end
+  lg.print(txt, 330, 10)
+end
+
 function UI.drawTop(game)
   local w = lg.getWidth()
   local tm = game.world.teams[1]
@@ -124,9 +164,13 @@ function UI.drawTop(game)
   lg.rectangle("fill", 0, 0, w, UI.TOP_H)
   lg.setColor(0.25, 0.32, 0.4, 0.8)
   lg.line(0, UI.TOP_H, w, UI.TOP_H)
+  if game.arena then
+    UI.drawArenaTop(game)
+  else
   resourceBar(14, 7, "METAL", tm.metal, tm.mStore, tm.mIncome, tm.mSpend, { 0.82, 0.86, 0.95 })
   resourceBar(370, 7, "ENERGY", tm.energy, tm.eStore, tm.eIncome, tm.eSpend, { 1, 0.85, 0.3 })
-  if tm.stalled then
+  end
+  if tm.stalled and not game.arena then
     lg.setFont(font(13))
     lg.setColor(1, 0.4, 0.3, 0.6 + 0.4 * math.sin(love.timer.getTime() * 6))
     lg.print("LOW RESOURCES - building slowed", 732 + game.world.np * 22, 11)
@@ -235,6 +279,7 @@ UI.SIDE_W = 132
 local TILE = 58
 
 function UI.sidebarItems(game)
+  if game.arena then return {} end
   local facs, blds = {}, {}
   for _, e in ipairs(game.world.entities) do
     if e.alive and e.team == 1 and e.built >= 1 then
@@ -265,6 +310,7 @@ function UI.sidebarItems(game)
 end
 
 function UI.drawSidebar(game)
+  if game.arena then return end
   if not game.showSidebar then return end
   local items, nf, nb = UI.sidebarItems(game)
   if nf + nb == 0 then return end
@@ -466,7 +512,15 @@ function UI.drawInfo(game, L)
     local hpTxt = string.format("HP %d / %d", math.max(0, e.hp), e.maxhp)
     if e.built < 1 then hpTxt = hpTxt .. string.format("    Under construction %d%%", e.built * 100) end
     if e.disarmed then hpTxt = hpTxt .. "    WEAPONS OFFLINE until fully repaired" end
-    if e.key == "commander" then
+    if e.key == "commander" and game.world.arena then
+      e.arenaDesc = true
+      local A = require("src.arena")
+      local L = e.clevel or 0
+      local cls = A.byClass[e.class]
+      hpTxt = hpTxt .. string.format("    %s  level %d", cls and cls.name or "", L)
+      if L < A.MAX_LEVEL then hpTxt = hpTxt .. string.format("   XP %d / %d", e.cxp or 0, A.THRESHOLDS[L + 1]) end
+      if e.atBase == nil and e.respawnAt then hpTxt = hpTxt .. "   (respawning)" end
+    elseif e.key == "commander" then
       local CMD = require("src.commander")
       local L = e.clevel or 0
       if L >= CMD.MAX_LEVEL then hpTxt = hpTxt .. "    Commander level 5 (max)"
@@ -482,7 +536,13 @@ function UI.drawInfo(game, L)
     end
     lg.print(hpTxt, x + 72, y + 26)
     lg.setColor(0.62, 0.68, 0.75)
-    lg.printf(d.desc or "", x + 72, y + 44, w - 80)
+    local desc = d.desc or ""
+    local arenaCmd = game.world.arena and e.key == "commander"
+    if arenaCmd then
+      local cls = require("src.arena").byClass[e.class]
+      desc = cls and (cls.name .. ": " .. cls.tag .. "  He respawns at your Core when destroyed.") or desc
+    end
+    lg.printf(desc, x + 72, y + 44, w - 80)
     local info = {}
     if d.weapon then
       local tg = {}
@@ -490,14 +550,20 @@ function UI.drawInfo(game, L)
       table.sort(tg)
       info[#info + 1] = string.format("Weapon: %d dmg, range %d, hits %s", d.weapon.damage, d.weapon.range, table.concat(tg, "/"))
     end
-    if d.income then
+    if d.income and not arenaCmd then
       info[#info + 1] = string.format("Produces %s%s", d.income.metal and string.format("%.1f metal/s ", d.income.metal) or "",
         d.income.energy and string.format("%d energy/s", d.income.energy) or "")
     end
     if d.speed then info[#info + 1] = string.format("Speed %d   Sight %d", d.speed, d.sight) end
     lg.setColor(0.55, 0.75, 0.95)
     lg.print(table.concat(info, "     "), x + 72, y + 84)
-    if e.key == "commander" and e.upgrades then
+    if e.key == "commander" and e.upgrades and game.world.arena then
+      local names = {}
+      for _, u in ipairs(e.upgrades) do names[#names + 1] = u.name end
+      lg.setFont(font(13))
+      lg.setColor(0.95, 0.85, 0.5)
+      lg.print("Upgrades: " .. (#names > 0 and table.concat(names, ", ") or "none yet"), x + 72, y + 126)
+    elseif e.key == "commander" and e.upgrades then
       local names = {}
       for _, u in ipairs(e.upgrades) do names[#names + 1] = u.name end
       local nuke = ""
@@ -626,8 +692,55 @@ local ORDERS = {
 }
 UI.ORDERS_H = 38
 
+local ARENA_ORDERS = {
+  { "amove", "Attack", "A", "Attack-move: click a spot; your Commander fights anything on the way." },
+  { "stop", "Stop", "S", "Stop and hold position." },
+  { "home", "Home", "F", "Head back to your Core to heal quickly." },
+  { "skill1", nil, "Q" }, { "skill2", nil, "W" }, { "skill3", nil, "E" }, { "skill4", nil, "R" },
+  { "cmd", "Cmdr", "C", "Jump to and select your Commander." },
+  { "follow", "Follow", "L", "Camera follows your Commander. Shift-click: cinematic camera." },
+  { "help", "Help", "F1", "All controls and tips." },
+}
+
 function UI.orderButtons(game)
   local w, h = lg.getDimensions()
+  if game.arena then
+    local A = require("src.arena")
+    local c = game.world.teams[1].commander
+    local list = {}
+    local gap = 4
+    local total = 0
+    for _, o in ipairs(ARENA_ORDERS) do
+      local bw = o[1]:match("^skill") and 104 or 66
+      total = total + bw + gap
+    end
+    total = total - gap
+    local x = math.floor(w / 2 - total / 2)
+    local y = h - UI.PANEL_H - UI.ORDERS_H
+    for _, o in ipairs(ARENA_ORDERS) do
+      local slot = tonumber(o[1]:match("^skill(%d)"))
+      local bw = slot and 104 or 66
+      local b = { x = x, y = y + 3, w = bw, h = UI.ORDERS_H - 6, action = o[1], key = o[3], on = c.alive }
+      if slot then
+        local sk = c.skills and c.skills[slot]
+        if sk then
+          local def = A.SKILLS[sk.key]
+          b.label, b.tip, b.skill = def.name, def.desc, sk
+          b.cd = math.max(0, sk.readyAt - game.world.time)
+          b.cdMax = def.cd * ((c.mods and c.mods.cdr) or 1)
+        else
+          b.label = slot == 4 and "Ultimate" or "Skill " .. slot
+          b.tip = slot == 4 and "Unlocks at level 6." or "Learn a skill at level " .. ({ 2, 4, 8 })[slot] .. "."
+          b.on = false
+        end
+      else
+        b.label, b.tip = o[2], o[4]
+      end
+      list[#list + 1] = b
+      x = x + bw + gap
+    end
+    return list, list[1].x - 6, y, total + 12
+  end
   local mobile = #game:selectedMobile() > 0
   local n = #game:selectedList()
   local mine = false
@@ -676,13 +789,19 @@ function UI.drawOrders(game)
     lg.rectangle("fill", b.x, b.y, b.w, b.h, 5)
     lg.setColor(0.32, 0.42, 0.52, a)
     lg.rectangle("line", b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 5)
-    local warn = b.action == "destroy" or b.action == "nuke"
+    if b.cd and b.cd > 0 then
+      lg.setColor(0, 0, 0, 0.55)
+      lg.rectangle("fill", b.x, b.y, b.w * math.min(1, b.cd / math.max(0.1, b.cdMax or 1)), b.h, 5)
+    end
+    local warn = b.action == "destroy" or b.action == "nuke" or b.action == "skill4"
     lg.setFont(font(12))
     if warn then lg.setColor(1, 0.55, 0.45, a) else lg.setColor(0.92, 0.95, 1, a) end
     lg.print(b.label, b.x + b.w / 2 - font(12):getWidth(b.label) / 2, b.y + 3)
     lg.setFont(font(10))
     lg.setColor(0.65, 0.72, 0.8, a * 0.9)
-    lg.print(b.key, b.x + b.w / 2 - font(10):getWidth(b.key) / 2, b.y + 18)
+    local sub = b.key
+    if b.cd and b.cd > 0 then sub = b.key .. "  " .. math.ceil(b.cd) .. "s" end
+    lg.print(sub, b.x + b.w / 2 - font(10):getWidth(sub) / 2, b.y + 18)
   end
   if hover then
     local text = hover.label .. "  (" .. hover.key .. ")  -  " .. hover.tip .. (hover.on and "" or "   [select units first]")
@@ -799,12 +918,16 @@ Orders (hold Shift to queue)
   Right-click ground ........ move (units spread in formation)
   Right-click enemy ......... attack
   Right-click own unfinished/damaged/factory with constructors .. help build / repair / assist
+  Right-click a friendly unit with army selected .. guard it (follow and protect)
+  Right-click a friendly unit with a factory selected .. new units join it and follow it
   A then click .............. attack-move (fight anything on the way)
   P then click .............. patrol
   S ......................... stop
   F ......................... retreat to your flag (+25% speed, weapons OFF until fully repaired)
   Shift+F ................... retreat to the Commander
   Ctrl+F .................... plant the retreat flag at the mouse
+  F on the Commander ........ he flees home (+50% speed), weapons off until fully repaired.
+                              He only repairs at his starting spot - that is his base
                               Units out of combat near your Commander or a factory slowly repair
   Delete .................... SELF-DESTRUCT selected units/buildings (unfinished ones refund)
                               Commander alone: press twice (you lose the game)
@@ -835,17 +958,51 @@ Veterancy: units level up (gold chevrons, max 5) from damage and kills: more dam
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.
 Rich deposits (+2.6 metal): gold rings near the map center, teal rings offshore. Land metal near home is scarce.
 The sea: Shipyards build Sea Constructors for them and
-  for Tidal Generators (+24 energy). Battleships (shipyard 4) shell anything within 25 tiles - hunt them down.
+  for Tidal Generators (+24 energy). Battleships (shipyard 4) shell anything within 40 tiles - hunt them down.
 ]]
 
-function UI.drawHelp()
+local ARENA_HELP = [[
+COMMANDER ARENA - CONTROLS
+
+Goal: destroy the enemy Core. Each lane has an outer and an inner tower per side:
+  outer first, then inner, then the Core (shielded structures glow blue).
+  Towers shoot creeps first - and you, if you attack an enemy Commander under them.
+  A lane whose enemy towers are down sends super creeps.
+
+Your Commander
+  Right-click ............... move / attack        A then click ... attack-move
+  S ......................... stop                 F .............. head home (your Core heals you fast)
+  Q W E ..................... your skills, cast at the mouse (or click the button, then the map)
+  R ......................... your ultimate (unlocks at level 6)
+  Z / X ..................... choose a level-up card
+  C / Space ................. jump to your Commander      L ... follow camera
+
+Leveling
+  Experience comes from creeps (most of it if your Commander or his summons land the kill),
+  enemy Commanders and towers. Every level: +6% health, +5% damage and a card:
+  levels 2, 4, 8 offer a class skill; level 6 unlocks the class ultimate; the rest offer upgrades.
+  When your Commander dies he respawns at your Core after a timer that grows with level and time.
+
+Classes
+  Ranger ....... longest range: Multishot, Piercing Lance, Evade, Decoy, Frost Arrow. Ult: Chain Storm
+  Elementalist . fragile caster: Teleport, Frost Nova, Fireball, Chain Lightning, Energy Shield. Ult: Meteor
+  Reclaimer .... raises wrecked creeps as drones: Raise, Amplify, Corpse Burst, Bone Spear, Decrepify. Ult: Rise
+  Juggernaut ... tanky brawler: Leap Slam, War Cry, Whirlwind, Battle Orders, Iron Shout. Ult: Berserk
+  Warden ....... auras and holy strikes: Charge, Holy Shield, Spinning Hammers, Smite, Prayer. Ult: Judgment
+  Shifter ...... wolves and storms: Summon Wolves, Bear Form, Cyclone, Firestorm, Spirit of the Oak. Ult: Cataclysm
+  Infiltrator .. traps and stealth: Lightning Sentry, Mind Blast, Fade, Shadow Clone, Dragon Talon. Ult: Sentry Swarm
+
+  Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
+]]
+
+function UI.drawHelp(arena)
   local w, h = lg.getDimensions()
   local bw, bh = 780, math.min(h - 20, 800)
   local x, y = (w - bw) / 2, (h - bh) / 2
   panelBox(x, y, bw, bh, 0.97)
   lg.setFont(font(12))
   lg.setColor(0.9, 0.93, 0.97)
-  lg.print(HELP, x + 24, y + 18)
+  lg.print(arena and ARENA_HELP or HELP, x + 24, y + 18)
 end
 
 local function button(x, y, w, h, label, hot)
@@ -894,7 +1051,7 @@ function UI.menuClick(game, x, y, button_)
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "resume" then game.menuOpen = false
       elseif r.action == "help" then game.menuOpen = false; game.showHelp = true
-      elseif r.action == "savemap" then game:startNaming()
+      elseif r.action == "savemap" then if game.arena then game:notice("Arena maps can't be saved", 1.5) else game:startNaming() end
       elseif r.action == "quit" then game.quitToTitle = true
       elseif r.action == "exit" then love.event.quit() end
     end
@@ -908,8 +1065,8 @@ function UI.overRects(game)
   local by = h / 2 + OVER_H / 2 - 64
   local list = {
     { label = "Play again", action = "again" },
-    { label = "Save this map...", action = "savemap" },
   }
+  if not (game and game.arena) then list[#list + 1] = { label = "Save this map...", action = "savemap" } end
   local f = game and game.finalScore
   if f and f.official and require("src.online").enabled() then
     list[#list + 1] = { label = game.submitted and "Score submitted" or "Submit score online", action = "submit" }
@@ -944,6 +1101,7 @@ function UI.drawOver(game)
   lg.setFont(font(14))
   lg.setColor(0.7, 0.76, 0.84)
   local sub = win and "Every enemy Commander has been annihilated. Partially." or "Your side has been annihilated. Completely."
+  if world.arena then sub = win and "The enemy Core is rubble." or "Your Core has fallen." end
   lg.print(sub, w / 2 - font(14):getWidth(sub) / 2, py + 68)
 
   local f = game.finalScore
@@ -962,7 +1120,25 @@ function UI.drawOver(game)
     lg.print(value, x + wid - font(14):getWidth(value), y)
   end
   head(lx, ly, "THE MATCH")
-  local rows = {
+  local rows
+  if world.arena then
+    local ast = world.arena
+    local towersDown = 0
+    for _, s2 in ipairs(ast.structures) do if not s2.alive and s2.side == 2 and s2.key ~= "core" then towersDown = towersDown + 1 end end
+    local c = world.teams[1].commander
+    rows = {
+      { "Game time", mmss(world.time) .. "   (par " .. mmss(world.parTime) .. ")" },
+      { "Opponents", f and f.lineup or "" },
+      { "Your class", (require("src.arena").byClass[c.class] or {}).name or "?" },
+      { "Commander level", tostring(c.clevel or 0) },
+      { "Enemy Commanders killed", tostring(ast.kills[1]) },
+      { "Your deaths", tostring(ast.deaths[1] or 0) },
+      { "Enemy towers destroyed", tostring(towersDown) },
+      { "Creeps and summons destroyed", tostring(sc and sc.kills or 0) },
+      { "Creep waves", tostring(ast.wave) },
+      { "Best kill streak", sc and (sc.bestStreak .. " kills  (x" .. string.format("%.1f", sc.bestMult) .. ")") or "-" },
+    }
+  else rows = {
     { "Game time", mmss(world.time) .. (world.parTime and ("   (par " .. mmss(world.parTime) .. ")") or "") },
     { "Opponents", f and f.lineup or "" },
     { "Units built", tostring(st.built) },
@@ -973,7 +1149,7 @@ function UI.drawOver(game)
     { "Your losses", tostring(st.lost) },
     { "Commander level", tostring(st.cmdLevel or 0) .. ((st.nukes or 0) > 0 and ("   nukes launched " .. st.nukes) or "") },
     { "Best kill streak", sc and (sc.bestStreak .. " kills  (x" .. string.format("%.1f", sc.bestMult) .. ")") or "-" },
-  }
+  } end
   for i, r in ipairs(rows) do row(lx, ly + 6 + i * 24, r[1], r[2], 410) end
   -- everyone's points
   if world.score then
@@ -995,8 +1171,8 @@ function UI.drawOver(game)
     end
     line("Kills  (metal value of what you destroyed)", U.fmt(sc.killPts))
     line(string.format("Kill-streak bonus  (best x%.1f)", sc.bestMult), "+" .. U.fmt(sc.streakPts), { 1, 0.7, 0.3 })
-    line("Construction  (10% of metal you built)", U.fmt(sc.buildPts))
-    line("Commander promotions", U.fmt(sc.cmdPts))
+    if not world.arena then line("Construction  (10% of metal you built)", U.fmt(sc.buildPts)) end
+    line(world.arena and "Level-ups" or "Commander promotions", U.fmt(sc.cmdPts))
     lg.setColor(0.4, 0.48, 0.58); lg.line(rx, y + 2, rx + rw, y + 2); y = y + 8
     line("Points", U.fmt(f.pts))
     line(string.format("x %.2f  difficulty  (enemies avg. level %.1f)", f.diffMul, f.avgLevel), "", nil)
@@ -1034,13 +1210,18 @@ function UI.drawOver(game)
   end
   lg.setFont(font(12))
   lg.setColor(0.55, 0.62, 0.7)
+  local how = world.arena and ("How Arena scoring works: points come from what your Commander and his summons destroy (creeps by their metal cost, "
+    .. "Commanders 800, towers 450, the Core 1125) plus 150 x level for each level-up. Kill streaks multiply them up to x3. Then the total is scaled "
+    .. "by enemy difficulty, how many enemies you faced, and how fast you won: par time divided by your time (up to x3).") or nil
+  if how then lg.printf(how, px + 30, py + OVER_H - 150, OVER_W - 60) else
   lg.printf("How scoring works: every enemy you destroy is worth its metal cost (a Commander is 3000, veterans more). "
     .. "Each kill soon after the last raises your multiplier by 0.1, up to x3; it resets after 10 seconds without an enemy death "
     .. "(the window shrinks to 5s as the streak grows). "
     .. "Building earns 10% of the metal spent and each Commander promotion pays 150 x level. Then the total is scaled by "
-    .. "how strong the enemies were, how many there were (and whether they were teamed up against you), and how fast you won "
-    .. "compared with par. Games with Alien Tech or Dropships don't count as official.",
+    .. "how strong the enemies were, how many there were (and whether they were teamed up against you), and how fast you won: "
+    .. "par time divided by your time, so winning in half the par time doubles the score (up to x3). Games with Alien Tech or Dropships don't count as official.",
     px + 30, py + OVER_H - 150, OVER_W - 60)
+  end
   for _, r in ipairs(UI.overRects(game)) do button(r.x, r.y, r.w, r.h, r.label) end
 end
 
@@ -1082,6 +1263,7 @@ function UI.draw(game)
   elseif game.mode == "amove" then hint = "Attack-move: click a destination (Shift queues)"
   elseif game.mode == "patrol" then hint = "Patrol: click a destination (Shift queues)"
   elseif game.mode == "flag" then hint = "Retreat flag: click where fleeing units should regroup"
+  elseif game.mode == "skill" then hint = "Click where to use the skill (Esc cancels). Tip: Q W E R cast straight at the mouse."
   elseif game.mode == "nuke" then hint = "NUKE: click the target. Buildings in the circle are destroyed, units lose half their health. Esc cancels" end
   if hint then
     lg.setFont(font(14))
@@ -1190,7 +1372,7 @@ function UI.draw(game)
     end
   end
 
-  if game.showHelp then UI.drawHelp() end
+  if game.showHelp then UI.drawHelp(game.arena) end
   if game.menuOpen then UI.drawMenu() end
   if game.world.over and game.overShown then UI.drawOver(game) end
   if game.naming then

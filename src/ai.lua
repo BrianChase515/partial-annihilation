@@ -280,15 +280,20 @@ function AI:thinkCommander()
   local retreatAt = style == "aggressive" and 0.5 or (style == "cautious" and 0.75 or 0.6)
   local distHome = U.dist(c.x, c.y, self.baseX, self.baseY)
   local outgunned = danger > (support + 600) * (style == "aggressive" and 1.5 or 1.0)
-  if (hpf < retreatAt and danger > 0) or outgunned then
+  local tmS = world.teams[self.team]
+  if self.cmdMode ~= "retreat" and ((hpf < retreatAt and danger > 0) or outgunned or (hpf < 0.4 and distHome > 500)) then
+    -- flee home at +50% speed; he only repairs at his spawn point, powered down until full
     self.cmdMode = "retreat"
-    local rx, ry = self:escapePoint(c)
-    world:issue(c, { type = "move", x = rx, y = ry })
+    world:issue(c, { type = "retreat", x = tmS.startX, y = tmS.startY })
     return
   end
   if self.cmdMode == "retreat" then
-    -- once nothing is chasing him, go back to work (he repairs near factories while building)
-    if danger > 0 then return end
+    if hpf < 0.95 then
+      if #c.orders == 0 and U.dist(c.x, c.y, tmS.startX, tmS.startY) > 200 then
+        world:issue(c, { type = "retreat", x = tmS.startX, y = tmS.startY })
+      end
+      return
+    end
     self.cmdMode = nil
   end
 
@@ -321,7 +326,9 @@ function AI:thinkCommander()
   local canEscort
   if style == "aggressive" then canEscort = hpf > 0.75 and #waveList >= 6
   elseif style == "normal" then
-    canEscort = hpf > 0.8 and #waveList >= 8 and world.time > 480 and ((c.clevel >= 2 and tough >= 1) or c.clevel >= 3)
+    local bold = (self.diff.level or 5) >= 6
+    canEscort = hpf > 0.75 and #waveList >= (bold and 6 or 8) and world.time > (bold and 300 or 420)
+      and (bold or (c.clevel >= 2 and tough >= 1) or c.clevel >= 3)
   else canEscort = false end
   if canEscort then
     cx, cy = cx / #waveList, cy / #waveList
@@ -626,6 +633,23 @@ function AI:seaBuilderTask(b)
   if dp then
     world:issue(b, { type = "build", key = "mex", tx = dp.x, ty = dp.y })
     return
+  end
+  -- a Sea Battery or two guarding our water (and our offshore extractors)
+  local bats = self:countPlanned("seabattery")
+  local wantBats = math.min(4, 1 + math.floor(world.time / 300)) + (self.profile.navalFirst and 1 or 0)
+  if self.waterTX and bats < wantBats and world.teams[self.team].mIncome > 12 then
+    local cx, cy = self.waterTX, self.waterTY
+    -- prefer a spot near one of our offshore extractors
+    local mexes = self:mine(function(e) return e.key == "mex" and e.mods and e.built >= 1 end)
+    if #mexes > 0 then
+      local m = mexes[self.rng:random(#mexes)]
+      cx, cy = world.map:tileAt(m.x, m.y)
+    end
+    local tx, ty = self:findSite("seabattery", cx, cy, 1, 8)
+    if tx then
+      world:issue(b, { type = "build", key = "seabattery", tx = tx, ty = ty })
+      return
+    end
   end
   local tidals = self:countPlanned("tidal")
   if self.waterTX and tidals < math.min(14, 3 + math.floor(world.time / 150)) then

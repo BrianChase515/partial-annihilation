@@ -20,11 +20,21 @@ local function smooth(e0, e1, x)
   return t * t * (3 - 2 * t)
 end
 
-function M.start()
+-- three soundtracks: "" (D minor), "_b" Iron Tide (E minor), "_c" Ashfall (C minor)
+M.SUITES = { "", "_b", "_c" }
+
+function M.start(suite)
   if not love.audio then return end
+  suite = suite or M.suite or ""
+  if suite ~= M.suite then
+    for _, st in pairs(stems) do st:stop() end
+    stems = {}
+    playing = false
+    M.suite = suite
+  end
   if not stems.ambient then
     for _, k in ipairs({ "ambient", "tension", "combat" }) do
-      stems[k] = load(k)
+      stems[k] = load(k .. suite)
       if stems[k] then stems[k]:setLooping(true); stems[k]:setVolume(0) end
     end
   end
