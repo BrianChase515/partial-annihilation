@@ -1,4 +1,4 @@
-# Partial Annihilation leaderboard - v0.6
+# Partial Annihilation leaderboard - v0.7
 
 Official games only: no Alien Tech or Dropships. Each new game version starts a fresh board.
 Submit from the end-of-game screen (**Submit score online**).
