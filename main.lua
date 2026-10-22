@@ -104,6 +104,13 @@ function love.load(args)
     return
   end
   for _, a in ipairs(args or {}) do
+    if a == "--showcase" then
+      smoke = require("showcase")
+      menu = Menu.new()
+      state = "menu"
+      smoke.start(function(opts) startGame(opts) return game end)
+      return
+    end
     if a == "--smoketest" then
       smoke = require("smoketest")
       menu = Menu.new()

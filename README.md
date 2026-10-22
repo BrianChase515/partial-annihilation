@@ -4,7 +4,7 @@
 
 Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of Lua plus 8 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
 
-![A 2v2 battle: green's veteran tanks push into red's base](screenshots/battle-2v2.png)
+![A 2v2 battle](screenshots/rts-battle.gif)
 
 **Two games in one:** a full RTS, and **Commander Arena**, a single-player lane-battle mode where you control only your Commander.
 
@@ -31,7 +31,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **Open Field:** almost no rock between the lanes, so roaming and ganks rule.
 - **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy.
 
-![Commander Arena: an Elementalist calls down a Meteor](screenshots/arena-fight.png)
+![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)
 
 
 ### Your Commander is a roguelike hero with a nuke
@@ -98,7 +98,8 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 | | |
 |---|---|
 | ![Commander level-up: pick 1 of 2 random upgrades](screenshots/commander-upgrade.png) | ![The Nuke: everyone sees where it will land](screenshots/nuke.png) |
-| ![Groovy modifier with the live score leaderboard](screenshots/groovy.png) | ![Base building](screenshots/base.png) |
+| ![Groovy modifier with the live score leaderboard](screenshots/groovy.png) | ![Battleships and escorts besiege a coast](screenshots/naval.png) |
+| ![Commander Arena: a Warden's Judgment strikes](screenshots/arena-fight.png) | ![A 2v2 battle](screenshots/battle-2v2.png) |
 | ![Every order is a button, with tooltips](screenshots/orders.png) | ![A raid](screenshots/raid.png) |
 | ![The Commander Arena title screen](screenshots/arena-menu.png) | |
 
