@@ -1,49 +1,65 @@
 # Partial Annihilation
 
-**A lightweight real-time strategy game for the Mac, in the spirit of Total Annihilation, where the units are shapes and numbers.**
+**A lightweight real-time strategy game for the Mac, in the spirit of Total Annihilation, where the units are shapes and numbers, your Commander levels up like a roguelike hero, and the soundtrack goes to war with you.**
 
-Land, sea and air. Up to 4 players with teams. Procedural maps. The whole game is about 80 KB of compressed Lua plus about 3 MB of music, and it runs on the tiny [LÖVE](https://love2d.org) engine, which runs natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
+Land, sea and air. Up to 4 players with teams. Procedural maps. About 80 KB of Lua plus 3 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
 
 ![A 2v2 battle: green's veteran tanks push into red's base](screenshots/battle-2v2.png)
 
 ## What makes it different
 
-- **Your Commander is a super unit, and losing him loses the game.** He levels up only from **his own kills**. Each level from 1 to 4 offers a roguelike pick: **2 random upgrades out of a pool of 20**, and whatever you take never comes up again. The pool includes:
-  - Second Wind, Emergency Recall, Repair Aura and Inspiring Presence
-  - Explosive Shells, Flak Mount, Resource Siphon and Salvager
-  - instant veteran Reinforcements, and more
+### Your Commander is a roguelike hero with a nuke
+Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:
+- Second Wind and Emergency Recall
+- Repair Aura and Inspiring Presence
+- Explosive Shells and a Flak Mount
+- Resource Siphon and Salvager
+- instant veteran Reinforcements, and more
 
-  **Level 5 is always the Nuke.** Every player sees the launch warning, the slow missile and the target circle. It destroys every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune, and it recharges for 10 minutes. The more you send him into combat, the stronger he gets, and the more likely you are to lose the game.
-- **Computer opponents that use their Commander well.** They level him by defending when the odds are good. They escort strong waves from the back once he has survivability upgrades. They retreat to their best-defended position when hurt or outgunned. They pick upgrades that suit their personality, and they aim nukes at the most valuable enemy targets while avoiding their own and their allies' buildings.
-- **Separate difficulty and personality settings.** Difficulty runs from 1 to 10. There are eight personalities: *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord* (a battle-hungry Commander who leads from the front), plus *Random*. Each computer player gets its own pair.
-- **Up to 4 players, any teams.** Free-for-all, 2v2, 1v3, or you plus a computer ally. You see whatever your allies see. When a player's Commander falls, their forces self-destruct.
-- **Every game is scored, with an online leaderboard.** Kills are worth the metal value of what you destroy, and a kill-streak multiplier holds until 10 seconds pass without an enemy dying. Your points are then scaled by enemy difficulty, by the opposition (a 1v2 against a team is worth far more than a free-for-all where the computers also fight each other) and by your time against par. The end screen breaks every part of it down. Games without Alien Tech or Dropships are **official**: they go on your high-score table, and one click submits them to the [online leaderboard](LEADERBOARD.md). Each game version starts a fresh board.
-- **Game modifiers you can combine:**
-  - **Alien Tech:** a huge alien walker is announced, then lands near the middle of the map. Hold its zone for 15 seconds with no enemies inside to claim it, king-of-the-hill style. After each capture, another one lands somewhere else.
-  - **Dropships:** from minute 3, neutral alien crews drop near the middle and wander. When one meets you, the game pauses for a moment while a coin flips: heads they join you, tails they attack.
-  - **Groovy:** flower-power explosions, 60s/70s colors and a slowly shifting, color-cycling landscape.
-- **Select Half.** `H` halves your selection while keeping the same mix of unit types, choosing the half nearest your mouse. `Shift+H` flips to the other half. The idea comes from AI War.
-- **Retreat has a real cost.** `F` pulls units back at +25% speed, but their weapons stay offline until they're fully repaired. If the enemy chases, they're defenseless.
-- **Drag-to-build, nearest first.** Drag a box to fill it with extractors on every deposit, or with buildings in a grid. Each constructor takes the closest jobs first.
-- **Factory output joins control groups**, and **every unit has veterancy**, including towers.
-- **Total Annihilation-style economy, and maps you can keep.** If you overspend, every project slows down by the same amount instead of the oldest one hogging everything. Maps are procedurally generated and symmetric, and you can save the ones you like by name.
-- **A dynamic orchestral score and a robotic announcer.** Three tempo-locked orchestral layers loop in sync and crossfade with how much fighting you're in: strings, choir and harp when it's quiet; cellos, tremolo strings and timpani when enemies are in sight; full brass and percussion in a real battle. Victory and defeat get their own fanfare. A robot voice calls out base attacks, a Commander under fire, incoming nukes, dropships, alien tech, a stalled economy and more.
-- **Every order is a button.** A bar above the bottom panel shows Attack, Stop, Patrol, Flee, Flag, Destroy, Select half and the rest, each with its shortcut and a tooltip, so you never have to learn the keys.
-- **Maps built for all three domains.** Most maps are ringed by ocean with bays and rivers cut inland, and every body of water connects. A shipyard is never stranded in a lake.
-- **Updates itself.** The title screen checks GitHub and offers a one-click update to the newest build.
-- **Match logs.** Every game writes a readable log (minute-by-minute economy, armies, Commander levels, key events and the score) to a `logs` folder next to the game, which is handy for balance feedback.
-- **Quality-of-life touches:**
-  - a sidebar listing every factory and builder
-  - a follow camera and a cinematic camera
-  - right-drag panning
-  - mouse lock so edge-panning works in a window
-  - clickable game-speed controls
+**Level 5 is always the Nuke.** Every player hears the warning and watches the slow missile and its target circle. It flattens every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune, and it takes 10 minutes to recharge. Every fight that makes him stronger is also a chance to lose everything.
+
+### Every match is a scored run on a seasonal online leaderboard
+Kills pay out the metal value of what you destroy. A kill-streak multiplier climbs to x4 and only resets after 10 seconds without an enemy death. At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
+
+### A soundtrack that follows the fighting, and a robot announcer
+The score is three tempo-locked orchestral layers that crossfade with the action:
+- **quiet:** strings, choir and harp
+- **enemies in sight:** cellos, tremolo strings and timpani
+- **a real battle:** full brass and war drums
+
+Victory and defeat get their own fanfares. A robotic voice calls out "Warning. Nuke en route.", "Commander under fire", "Dropship approaching", "Alien tech secured", stalled economies and more.
+
+### Modifiers that change how a match plays
+- **Alien Tech:** an enormous alien walker is announced and then lands near the middle of the map. Hold its zone uncontested for 15 seconds to make it yours, king-of-the-hill style. Then the next one lands somewhere else.
+- **Dropships:** from minute 3, neutral alien crews drop and wander the map. When one meets you, the game pauses on a **coin flip**: heads they join you, tails they open fire.
+- **Groovy:** explosions become flowers, the palette goes 1970, and the landscape slowly trips out.
+
+Combine them however you like. Score keeps running, but only games without Alien Tech or Dropships count as official.
+
+### Retreat has a price
+`F` pulls units back at +25% speed, but their weapons stay offline until they're fully repaired. Fleeing saves units, and it also leaves them defenseless if the enemy gives chase.
+
+### Opponents with personalities, and Commanders they actually use
+Difficulty (1–10) and personality are set separately for each computer player. The personalities are *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord*, a Commander who leads every assault from the front. Computer players pick upgrades that fit their style. They level their Commander when the odds are good and pull him back to their strongest position when hurt. They also aim nukes at your most valuable targets while keeping clear of their own buildings.
+
+### Small, and it updates itself
+The whole game is a 3 MB file. The title screen checks GitHub and updates to the newest build in one click, and every match writes a readable log (minute-by-minute economy, armies, key moments and the score breakdown) for anyone who wants to dig into balance.
+
+## Also included
+- **Up to 4 players and any teams:** free-for-all, 2v2, 1v3, or you with a computer ally, sharing vision.
+- **Maps built for land, sea and air:** procedural and symmetric, usually ringed by ocean with bays and rivers, and every body of water connects. Save the seeds you like by name.
+- **Total Annihilation-style economy:** overspending slows every project by the same amount.
+- **Veterancy for every unit, including towers.**
+- **Every order is a button**, with its shortcut and a tooltip.
+- **Drag-to-build:** fills an area with buildings, with each constructor taking the nearest jobs first.
+- **Factory output can join a control group** automatically.
+- **Camera and interface extras:** follow and cinematic cameras, a sidebar of factories and builders, and a clickable game speed.
 
 | | |
 |---|---|
 | ![Commander level-up: pick 1 of 2 random upgrades](screenshots/commander-upgrade.png) | ![The Nuke: everyone sees where it will land](screenshots/nuke.png) |
-| ![Groovy modifier with a live Score-mode leaderboard](screenshots/groovy.png) | ![Base building](screenshots/base.png) |
-| ![Title screen and lobby](screenshots/lobby.png) | ![A raid](screenshots/raid.png) |
+| ![Groovy modifier with the live score leaderboard](screenshots/groovy.png) | ![Base building](screenshots/base.png) |
+| ![Every order is a button, with tooltips](screenshots/orders.png) | ![A raid](screenshots/raid.png) |
 
 ## Units
 
@@ -67,13 +83,15 @@ Shapes tell you the domain, and the number tells you the type:
 
 ## Playing on a Mac
 
-1. Install **LÖVE 11.5** from [love2d.org](https://love2d.org) (the macOS download is a universal app). Move `love.app` into Applications.
+1. Install **LÖVE 11.5** from [love2d.org](https://love2d.org) (the macOS download is a universal app). Move `love.app` into your **Applications** folder. If you run it straight from Downloads, macOS launches it from a temporary hidden copy, so any folder permission you grant doesn't stick and you'll be asked again on every launch.
 2. Build the game file. Run `tools/build.sh`, or zip the contents of this folder (`main.lua`, `conf.lua`, `src/`, `assets/`) into `PartialAnnihilation.love`.
 3. Run it with `open -n -a love PartialAnnihilation.love`, or drag the `.love` file onto `love.app`.
 
 Or download the newest build directly: [`dist/PartialAnnihilation.love`](dist/PartialAnnihilation.love). After that, the game updates itself from its title screen.
 
 The same `.love` file runs on Windows and Linux with LÖVE 11.5.
+
+If you keep the game in Documents, Desktop or Downloads, macOS asks once whether LÖVE may use that folder (the game reads itself from there and writes its match logs beside it). Allow it once and you won't be asked again. A folder like `~/Games` doesn't ask at all.
 
 ## Controls
 
