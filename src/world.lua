@@ -3,6 +3,8 @@ local D = require("src.defs")
 local U = require("src.util")
 local Path = require("src.path")
 local Map = require("src.map")
+local CMD = require("src.commander")
+local MODS = require("src.mods")
 
 local W = {}
 W.__index = W
@@ -51,12 +53,17 @@ function W.new(opts)
   self.fogTimer = 0
   self.noFog = opts.noFog
 
+  self.nukes = {}
+  self.rngCmd = love.math.newRandomGenerator((opts.seed or 1) + 777)
+  MODS.init(self, opts.mods)
   -- commanders
   for t = 1, self.np do
     local s = self.map.starts[t]
     local x, y = self.map:center(s.x, s.y)
     local c = self:spawn("commander", t, x, y)
     c.homeX, c.homeY = x, y
+    c.mods, c.taken, c.upgrades, c.offers = {}, {}, {}, {}
+    c.cxp, c.clevel = 0, 0
     self.teams[t].commander = c
     self.teams[t].startX, self.teams[t].startY = x, y
   end
@@ -203,12 +210,16 @@ function W:recomputeEconomy()
   for _, e in ipairs(self.entities) do
     if e.alive and e.built >= 1 then
       local tm = self.teams[e.team]
-      local inc = e.def.income
+      local inc = (e.mods and e.mods.income) and {
+        metal = (e.def.income and e.def.income.metal or 0) + e.mods.income.metal,
+        energy = (e.def.income and e.def.income.energy or 0) + e.mods.income.energy } or e.def.income
       if inc then
         tm.mIncome = tm.mIncome + (inc.metal or 0) * tm.incomeMul
         tm.eIncome = tm.eIncome + (inc.energy or 0) * tm.incomeMul
       end
-      local st = e.def.storage
+      local st = (e.mods and e.mods.storage) and {
+        metal = (e.def.storage and e.def.storage.metal or 0) + e.mods.storage.metal,
+        energy = (e.def.storage and e.def.storage.energy or 0) + e.mods.storage.energy } or e.def.storage
       if st then
         tm.mStore = tm.mStore + st.metal
         tm.eStore = tm.eStore + st.energy
@@ -433,6 +444,109 @@ function W:separate(dt)
 end
 
 ---------------------------------------------------------------------------
+-- Commander progression (see src/commander.lua)
+
+function W:commanderXP(e, amount)
+  e.cxp = (e.cxp or 0) + amount
+  while (e.clevel or 0) < CMD.MAX_LEVEL and e.cxp >= CMD.THRESHOLDS[(e.clevel or 0) + 1] do
+    e.clevel = (e.clevel or 0) + 1
+    self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 1.2, size = 46 }
+    MODS.onCommanderLevel(self, e)
+    if e.clevel >= CMD.MAX_LEVEL then
+      e.nukeReady = self.time   -- unlocked
+      if self.onCommanderLevel then self.onCommanderLevel(e, nil) end
+    else
+      local offer = CMD.offer(self.rngCmd, e)
+      e.offers[#e.offers + 1] = offer
+      if self.onCommanderLevel then self.onCommanderLevel(e, offer) end
+    end
+  end
+end
+
+-- Take one of the two offered upgrades (index 1 or 2) from the oldest pending offer
+function W:chooseUpgrade(e, i)
+  local offer = e.offers[1]
+  if not offer or not offer[i] then return nil end
+  table.remove(e.offers, 1)
+  local u = offer[i]
+  e.taken[u.key] = true
+  e.upgrades[#e.upgrades + 1] = u
+  u.apply(self, e)
+  return u
+end
+
+function W:reinforce(e)
+  local layer = "land"
+  local tx, ty = self.map:tileAt(e.x, e.y)
+  for k = 1, 4 do
+    local nx, ny = self.map:nearestTile(tx + (k % 2 == 0 and 2 or -2), ty + (k > 2 and 2 or -2),
+      function(x, y) return self.map:passable(layer, x, y) end, 8)
+    if nx then
+      local x, y = self.map:center(nx, ny)
+      local u = self:spawn("tank", e.team, x, y)
+      u.homeX, u.homeY = x, y
+      self:gainXP(u, self:xpForLevel(u, 2))
+    end
+  end
+end
+
+-- The Nuke: unlimited range, slow visible flight, 10 minute cooldown
+function W:canNuke(e)
+  return e and e.alive and e.nukeReady and self.time >= e.nukeReady
+end
+
+function W:launchNuke(e, x, y)
+  if not self:canNuke(e) then return false end
+  e.nukeReady = self.time + CMD.NUKE_COOLDOWN
+  self.nukeCount = (self.nukeCount or 0) + 1
+  local n = { x = e.x, y = e.y, sx = e.x, sy = e.y, tx = x, ty = y, team = e.team, t = 0, src = e }
+  self.nukes[#self.nukes + 1] = n
+  if self.onNuke then self.onNuke(e, x, y) end
+  return true
+end
+
+function W:updateNukes(dt)
+  local keep = {}
+  for _, n in ipairs(self.nukes) do
+    local dx, dy, len = U.norm(n.tx - n.x, n.ty - n.y)
+    local step = CMD.NUKE_SPEED * dt
+    if len <= step then
+      self:detonate(n)
+    else
+      n.x, n.y = n.x + dx * step, n.y + dy * step
+      keep[#keep + 1] = n
+    end
+  end
+  self.nukes = keep
+end
+
+function W:detonate(n)
+  local R = CMD.NUKE_RADIUS
+  self.effects[#self.effects + 1] = { kind = "nuke", x = n.tx, y = n.ty, t = 0, life = 2.2, size = R }
+  local victims = {}
+  self:query(n.tx, n.ty, R + 60, function(o)
+    if o.alive and o.key ~= "commander" and not o.dormant and not o.neutral then
+      local d = U.dist(n.tx, n.ty, o.x, o.y)
+      if d <= R + (o.def.building and o.def.radius * 0.5 or 0) then victims[#victims + 1] = o end
+    end
+  end)
+  for _, o in ipairs(victims) do
+    if o.alive then
+      if o.def.building then
+        self:kill(o, n.src)
+      else
+        local before = o.hp
+        o.hp = o.hp - o.maxhp * 0.5
+        o.hitTimer = 0.3
+        o.lastHit = self.time
+        if o.hp <= 0 then self:kill(o, n.src) end
+      end
+    end
+  end
+  if self.onDetonate then self.onDetonate(n) end
+end
+
+---------------------------------------------------------------------------
 -- Elimination: a player whose Commander dies is out; their forces self-destruct.
 -- The game ends when only one alliance has a Commander left.
 
@@ -472,16 +586,34 @@ function W:xpForLevel(e, L)
   return e.def.hp * 0.7 * L * (L + 1) / 2
 end
 
+local NOMODS = {}
+function W:modsOf(e) return e.mods or NOMODS end
+
 function W:rangeOf(e)
-  return e.def.weapon.range * (1 + 0.04 * (e.level or 0))
+  return e.def.weapon.range * (1 + 0.04 * (e.level or 0)) * (self:modsOf(e).range or 1)
 end
+function W:buildRangeOf(e) return (e.def.buildRange or 0) * (self:modsOf(e).buildRange or 1) end
+function W:buildPowerOf(e) return (e.def.buildPower or 0) * (self:modsOf(e).build or 1) end
+function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) end
 
 function W:speedOf(e)
-  return e.def.speed * (1 + 0.04 * (e.level or 0)) * (e.retreating and 1.25 or 1)
+  return e.def.speed * (1 + 0.04 * (e.level or 0)) * (e.retreating and 1.25 or 1) * (self:modsOf(e).speed or 1)
 end
 
 -- Units out of combat near their Commander or a factory slowly repair
 function W:repairZones()
+  -- Repair Aura: heals everything near the Commander, even mid-fight
+  for t = 1, self.np do
+    local c = self.teams[t].commander
+    if c and c.alive and c.mods and c.mods.healAura then
+      self:query(c.x, c.y, 320, function(u)
+        if u.alive and u.team == t and u ~= c and u.hp < u.maxhp and U.dist2(u.x, u.y, c.x, c.y) < 300 * 300 then
+          u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.03 * 0.5)
+          u.healing = 0.6
+        end
+      end)
+    end
+  end
   local healers = {}
   for _, e in ipairs(self.entities) do
     if e.alive and e.built >= 1 and (e.key == "commander" or e.def.factory) then healers[#healers + 1] = e end
@@ -501,6 +633,7 @@ end
 
 function W:gainXP(e, amount)
   if not e or not e.alive or not e.def.weapon then return end
+  if e.key == "commander" then return end
   e.xp = (e.xp or 0) + amount
   local L = e.level or 0
   while L < W.MAX_LEVEL and e.xp >= self:xpForLevel(e, L + 1) do
@@ -515,7 +648,8 @@ function W:gainXP(e, amount)
 end
 
 function W:canTarget(e, o)
-  if not o.alive or self.ally[o.team] == self.ally[e.team] then return false end
+  if not o.alive or o.dormant or o.neutral or self.ally[o.team] == self.ally[e.team] then return false end
+  if o.def.domain == "air" and e.mods and e.mods.hitsAir then return true end
   return D.canHit(e.def.weapon, o.def.domain)
 end
 
@@ -551,12 +685,25 @@ function W:fire(e, o)
     ty = ty + (math.random() - 0.5) * 24
   end
   local L = e.level or 0
+  local m = self:modsOf(e)
+  local dmg = w.damage * (1 + 0.15 * L) * (m.dmg or 1)
+  -- Inspiring Presence: allies near a Commander with the aura hit harder
+  local c = self.teams[e.team].commander
+  if c and c ~= e and c.alive and c.mods and c.mods.dmgAura and U.dist2(c.x, c.y, e.x, e.y) < 350 * 350 then
+    dmg = dmg * 1.25
+  end
+  local wpn = w
+  if m.hitsAir or m.splash then
+    -- per-commander weapon copy so upgrades don't leak to other units
+    e.wpnCopy = e.wpnCopy or setmetatable({}, { __index = w })
+    wpn = e.wpnCopy
+  end
   self.projectiles[#self.projectiles + 1] = {
     x = e.x, y = e.y, tx = tx, ty = ty, target = (not w.ballistic) and o or nil,
-    speed = w.speed, damage = w.damage * (1 + 0.15 * L), splash = w.splash, team = e.team,
-    weapon = w, sx = e.x, sy = e.y, source = e,
+    speed = w.speed, damage = dmg, splash = math.max(w.splash, m.splash or 0), team = e.team,
+    weapon = wpn, sx = e.x, sy = e.y, source = e, hitsAir = m.hitsAir,
   }
-  e.reload = w.reload / (1 + 0.08 * L)
+  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1)
   e.flash = 0.08
   if self.onFire then self.onFire(e, o) end
   if not e.def.building then
@@ -567,8 +714,17 @@ function W:fire(e, o)
 end
 
 function W:damage(o, amount, attacker)
-  if not o.alive then return end
-  if attacker and self:hostile(attacker.team, o.team) then
+  if not o.alive or o.dormant or o.neutral then return end
+  local m = o.mods
+  if m then
+    if o.invulnUntil and self.time < o.invulnUntil then return end
+    amount = amount * (m.armor or 1)
+  end
+  if attacker and attacker.key == "commander" and self:hostile(attacker.team, o.team) then
+    -- remember that this Commander had a hand in it; he gets the kill if it dies soon
+    o.cmdHit = o.cmdHit or {}
+    o.cmdHit[attacker] = self.time
+  elseif attacker and self:hostile(attacker.team, o.team) then
     local dealt = math.min(amount, math.max(0, o.hp))
     local xp = dealt * (o.def.building and 0.5 or 1)
     if o.hp - amount <= 0 then xp = xp + o.maxhp * 0.3 end -- kill bonus
@@ -582,13 +738,54 @@ function W:damage(o, amount, attacker)
   if attacker and attacker.alive and not o.def.building and #o.orders == 0 and o.def.weapon and not o.retaliate and not o.disarmed then
     o.retaliate = attacker
   end
+  if m then
+    -- Second Wind: survive one killing blow
+    if o.hp <= 0 and m.secondWind and not o.secondWindUsed then
+      o.secondWindUsed = true
+      o.hp = 1
+      o.invulnUntil = self.time + 6
+      self.effects[#self.effects + 1] = { kind = "levelup", x = o.x, y = o.y, t = 0, life = 1.5, size = 60 }
+      if self.onCommanderEvent then self.onCommanderEvent(o, "Second Wind!") end
+    end
+    -- Emergency Recall: jump home when badly hurt
+    if o.hp > 0 and m.recall and o.hp < o.maxhp * 0.25 and self.time >= (o.recallReady or 0) then
+      o.recallReady = self.time + 120
+      local tm = self.teams[o.team]
+      self.effects[#self.effects + 1] = { kind = "levelup", x = o.x, y = o.y, t = 0, life = 0.8, size = 40 }
+      o.x, o.y = tm.startX, tm.startY
+      o.orders, o.path, o.chase = {}, nil, nil
+      o.homeX, o.homeY = o.x, o.y
+      self.effects[#self.effects + 1] = { kind = "levelup", x = o.x, y = o.y, t = 0, life = 0.8, size = 40 }
+      if self.onCommanderEvent then self.onCommanderEvent(o, "Emergency Recall!") end
+    end
+  end
   if o.hp <= 0 then self:kill(o, attacker) end
 end
 
 function W:kill(o, attacker)
   if not o.alive then return end
   self:remove(o)
+  -- Commander XP: metal value of anything he damaged in the last 6 seconds before it died
+  if o.cmdHit then
+    for c, t in pairs(o.cmdHit) do
+      if c.alive and self.time - t <= 6 then
+        self:commanderXP(c, (o.def.cost and o.def.cost.metal) or 400)
+      end
+    end
+  end
+  if o.key == "commander" and self.debugDeaths then
+    local tm = self.teams[o.team]
+    print(string.format("CMDDEATH team %d t=%d mode=%s distHome=%d killer=%s lvl=%d", o.team, self.time,
+      tostring(self.cmdModes and self.cmdModes[o.team]), U.dist(o.x, o.y, tm.startX, tm.startY),
+      attacker and attacker.key or "?", o.clevel or 0))
+  end
+  -- Salvager refund
+  if attacker and attacker.mods and attacker.mods.salvage and o.def.cost and self:hostile(attacker.team, o.team) then
+    local tm = self.teams[attacker.team]
+    tm.metal = math.min(tm.mStore, tm.metal + o.def.cost.metal * attacker.mods.salvage)
+  end
   if self.onKill then self.onKill(o, attacker) end
+  MODS.onKill(self, o, attacker)
   local size = o.def.building and o.def.radius * 1.4 or o.def.radius * 2
   self.effects[#self.effects + 1] = { kind = "boom", x = o.x, y = o.y, t = 0, life = 0.6, size = size }
   if o.built >= 1 and (o.def.income or o.def.storage) then self.economyDirty = true end
@@ -616,7 +813,7 @@ function W:updateProjectiles(dt)
       -- impact
       if p.splash > 0 then
         self:query(p.tx, p.ty, p.splash + 30, function(o)
-          if o.alive and self:hostile(o.team, p.team) and D.canHit(p.weapon, o.def.domain) then
+          if o.alive and self:hostile(o.team, p.team) and (D.canHit(p.weapon, o.def.domain) or (p.hitsAir and o.def.domain == "air")) then
             local d = U.dist(p.tx, p.ty, o.x, o.y) - o.def.radius * 0.5
             if d < p.splash then
               local f = 1 - math.max(0, d) / p.splash * 0.6
@@ -642,7 +839,7 @@ end
 
 function W:updateWeapon(e, dt, focus)
   local w = e.def.weapon
-  if not w or e.built < 1 then return end
+  if not w or e.built < 1 or e.neutral then return end
   if e.disarmed then
     if e.hp >= e.maxhp then e.disarmed = nil else return end
   end
@@ -677,13 +874,13 @@ end
 -- Look for an enemy to chase within sight
 function W:findChaseTarget(e)
   local w = e.def.weapon
-  if not w or e.disarmed then return nil end
+  if not w or e.disarmed or e.neutral then return nil end
   local best, bd
   local layer = self:layerOf(e)
-  self:query(e.x, e.y, e.def.sight + 40, function(o)
+  self:query(e.x, e.y, self:sightOf(e) + 40, function(o)
     if self:canTarget(e, o) then
       local d = U.dist(e.x, e.y, o.x, o.y)
-      if d <= e.def.sight and (not layer or d <= self:rangeOf(e) or self.map:canReach(layer, e.x, e.y, o.x, o.y, w.range * 0.9)) then
+      if d <= self:sightOf(e) and (not layer or d <= self:rangeOf(e) or self.map:canReach(layer, e.x, e.y, o.x, o.y, w.range * 0.9)) then
         local score = d - (o.def.weapon and 120 or 0) - (o.def.building and 0 or 60)
         if not bd or score < bd then best, bd = o, score end
       end
@@ -710,7 +907,8 @@ end
 function W:updateUnit(e, dt)
   e.moving = false
   e.retreating = false
-  if e.def.regen and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + e.def.regen * dt) end
+  local regen = (e.mods and e.mods.regen) or e.def.regen
+  if regen and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + regen * dt) end
   local o = e.orders[1]
   local focus = nil
 
@@ -718,7 +916,7 @@ function W:updateUnit(e, dt)
     -- idle: retaliate / defend area, then return home
     if e.def.weapon then
       local t = e.chase
-      if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > e.def.sight + 220) then t = nil end
+      if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > self:sightOf(e) + 220) then t = nil end
       if not t and e.retaliate and e.retaliate.alive and self:canTarget(e, e.retaliate) then t = e.retaliate end
       e.retaliate = nil
       if not t then
@@ -726,7 +924,7 @@ function W:updateUnit(e, dt)
         if e.idleScan <= 0 then
           e.idleScan = 0.5
           t = self:findChaseTarget(e)
-          if t and U.dist(e.homeX, e.homeY, t.x, t.y) > e.def.sight + 120 then t = nil end
+          if t and U.dist(e.homeX, e.homeY, t.x, t.y) > self:sightOf(e) + 120 then t = nil end
         end
       end
       e.chase = t
@@ -749,7 +947,7 @@ function W:updateUnit(e, dt)
     if self:followPath(e, dt, o.arrive or 8) then self:popOrder(e) end
   elseif o.type == "amove" or o.type == "patrol" then
     local t = e.chase
-    if t and (not t.alive or U.dist(e.x, e.y, t.x, t.y) > e.def.sight + 160) then t = nil; e.path = nil end
+    if t and (not t.alive or U.dist(e.x, e.y, t.x, t.y) > self:sightOf(e) + 160) then t = nil; e.path = nil end
     if not t and e.def.weapon then
       e.amScan = (e.amScan or 0) - dt
       if e.amScan <= 0 then
@@ -801,7 +999,7 @@ end
 -- Construction
 
 function W:builderInRange(e, b)
-  local reach = e.def.buildRange + (b.def.radius or 0)
+  local reach = self:buildRangeOf(e) + (b.def.radius or 0)
   return U.dist2(e.x, e.y, b.x, b.y) <= reach * reach
 end
 
@@ -812,20 +1010,20 @@ function W:updateBuildOrder(e, o, dt)
     if not b.alive or b.built >= 1 then self:popOrder(e); return end
     if not self:builderInRange(e, b) then
       if not e.path or e.destX ~= b.x then self:setDest(e, b.x, b.y) end
-      self:followPath(e, dt, e.def.buildRange * 0.5)
+      self:followPath(e, dt, self:buildRangeOf(e) * 0.5)
       return
     end
     e.path = nil
     e.buildTarget = b
-    self:applyBuild(e, b, e.def.buildPower, dt)
+    self:applyBuild(e, b, self:buildPowerOf(e), dt)
     return
   end
   -- frame not placed yet: walk there and place it
   local cx, cy = (o.tx + d.w / 2) * self.T, (o.ty + d.h / 2) * self.T
-  local reach = e.def.buildRange + d.w * self.T * 0.5
+  local reach = self:buildRangeOf(e) + d.w * self.T * 0.5
   if U.dist2(e.x, e.y, cx, cy) > reach * reach then
     if not e.path or e.destX ~= cx then self:setDest(e, cx, cy) end
-    if self:followPath(e, dt, e.def.buildRange * 0.6) then
+    if self:followPath(e, dt, self:buildRangeOf(e) * 0.6) then
       -- could not get close enough; check again next frame (path ends nearest reachable)
       if U.dist2(e.x, e.y, cx, cy) > reach * reach * 1.6 then
         o.fail = (o.fail or 0) + 1
@@ -859,6 +1057,7 @@ function W:applyBuild(e, b, power, dt)
   e.nanoTarget = b
   e.nanoTimer = 0.1
   if b.built >= 1 then
+    MODS.onBuilt(self, b)
     b.hp = math.min(b.maxhp, math.max(b.hp, b.maxhp * 0.98))
     self.economyDirty = true
     if b.def.factory and not b.rally then
@@ -879,23 +1078,23 @@ function W:updateAssist(e, o, dt)
   end
   if not self:builderInRange(e, b) then
     if not e.path or e.destX ~= b.x then self:setDest(e, b.x, b.y) end
-    self:followPath(e, dt, e.def.buildRange * 0.5)
+    self:followPath(e, dt, self:buildRangeOf(e) * 0.5)
     return
   end
   e.path = nil
   if needsBuild then
-    self:applyBuild(e, b, e.def.buildPower, dt)
+    self:applyBuild(e, b, self:buildPowerOf(e), dt)
   elseif needsRepair then
-    b.hp = math.min(b.maxhp, b.hp + b.maxhp * e.def.buildPower * dt / ((b.def.cost and b.def.cost.work or 200) * 1.5))
+    b.hp = math.min(b.maxhp, b.hp + b.maxhp * self:buildPowerOf(e) * dt / ((b.def.cost and b.def.cost.work or 200) * 1.5))
     e.nanoTarget = b; e.nanoTimer = 0.1
   elseif factoryHelp then
-    b.assistPower = (b.assistPower or 0) + e.def.buildPower
+    b.assistPower = (b.assistPower or 0) + self:buildPowerOf(e)
     e.nanoTarget = b; e.nanoTimer = 0.1
   end
 end
 
 function W:updateFactory(e, dt)
-  local power = e.def.buildPower + (e.assistPower or 0)
+  local power = self:buildPowerOf(e) + (e.assistPower or 0)
   e.assistPower = 0
   local key = e.queue[1]
   if not key then e.progress = 0; return end
@@ -948,7 +1147,7 @@ function W:updateFog(force)
   local T = self.T
   for _, e in ipairs(self.entities) do
     if e.alive and self.ally[e.team] == self.ally[self.playerTeam] then
-      local r = (e.built >= 1 and e.def.sight or 80) / T
+      local r = (e.built >= 1 and self:sightOf(e) or 80) / T
       local cx, cy = e.x / T, e.y / T
       local x0, x1 = math.max(0, math.floor(cx - r)), math.min(w - 1, math.floor(cx + r))
       local y0, y1 = math.max(0, math.floor(cy - r)), math.min(h - 1, math.floor(cy + r))
@@ -1022,8 +1221,8 @@ function W:update(dt)
       if e.healing then e.healing = e.healing - dt; if e.healing <= 0 then e.healing = nil end end
       if e.doom and self.time >= e.doom then self:kill(e) end
       if e.nanoTimer then e.nanoTimer = e.nanoTimer - dt; if e.nanoTimer <= 0 then e.nanoTimer = nil; e.nanoTarget = nil end end
-      if not e.alive then
-        -- just self-destructed
+      if not e.alive or e.dormant then
+        -- just self-destructed, or the dormant alien walker
       elseif e.def.building then
         if e.built >= 1 then
           if e.def.factory then self:updateFactory(e, dt) end
@@ -1043,6 +1242,10 @@ function W:update(dt)
 
   self:separate(dt)
   self:updateProjectiles(dt)
+  self:updateNukes(dt)
+  MODS.updateAlien(self, dt)
+  MODS.updateDrops(self, dt)
+  MODS.updateScore(self, dt)
   self:updateEffects(dt)
 
   -- compact dead entities

@@ -186,6 +186,53 @@ local function script()
   local t0 = love.timer.getTime()
   while love.timer.getTime() - t0 < 2 do game:update(1 / 60); frame() end
   shot("over.png")
+  -- Commander progression + nuke on a fresh game
+  game = startFn({ size = 96, water = 0.30, seed = 99 })
+  w = game.world
+  local c = w.teams[1].commander
+  local CMD = require("src.commander")
+  w:commanderXP(c, 250)
+  log("cmd level", c.clevel, "offers", #c.offers, c.offers[1] and (c.offers[1][1].name .. " / " .. c.offers[1][2].name))
+  frame(); shot("offer.png")
+  key("z")
+  log("after Z: upgrades", #c.upgrades, c.upgrades[1] and c.upgrades[1].name, "offers left", #c.offers)
+  w:commanderXP(c, 5000)
+  log("cmd level", c.clevel, "pending offers", #c.offers, "nuke unlocked", c.nukeReady ~= nil)
+  for _ = 1, 3 do key("x") end
+  log("upgrades now", #c.upgrades)
+  -- nuke the enemy start
+  local e2 = w.teams[2]
+  game:select({ c })
+  key("n")
+  log("mode after N:", game.mode)
+  local before = #w:teamEntities(2, function(e) return e.def.building end)
+  -- give the enemy something to lose
+  for i = 1, 3 do w:spawn("solar", 2, e2.startX + 80 * i, e2.startY + 60) end
+  game:centerOn(e2.startX, e2.startY)
+  local sx, sy = game:worldToScreen(e2.startX, e2.startY)
+  game:mousepressed(sx, sy, 1)
+  log("nukes in flight:", #w.nukes, "cooldown set:", c.nukeReady > w.time)
+  frame(); shot("nuke_flight.png")
+  for _ = 1, 30 * 12 do w:update(1 / 30) end
+  local after = #w:teamEntities(2, function(e) return e.def.building end)
+  log("enemy buildings before/after nuke:", before + 3, after, "enemy commander alive:", e2.commander.alive, "hp", math.floor(e2.commander.hp))
+  -- Dropship encounter with the human player (coin flip pause)
+  game = startFn({ size = 96, water = 0.30, seed = 7, mods = { drops = true, score = true, alien = true } })
+  w = game.world
+  local MOD = require("src.mods")
+  local cmdr = w.teams[1].commander
+  w.drops.nextAt = 0
+  for _ = 1, 3 do w:update(1 / 30) end
+  local sq = w.drops.squads[1]
+  log("drop squad:", sq and #sq.units, sq and sq.state)
+  for _, u in ipairs(sq.units) do u.x, u.y = cmdr.x + 150, cmdr.y + 30 end
+  for _ = 1, 30 do game:update(1 / 30) end
+  log("flip pending:", #game.flips, "squad state:", sq.state, "world time", math.floor(w.time * 10) / 10)
+  frame(); shot("coinflip.png")
+  local t0 = w.time
+  for _ = 1, 30 * 3 do game:update(1 / 30) end
+  log("after flip: state", sq.state, "result", sq.result, "unit team", sq.units[1] and sq.units[1].team, "world advanced", math.floor((w.time - t0) * 10) / 10)
+  frame(); shot("after_flip.png")
   log("DONE")
 end
 

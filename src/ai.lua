@@ -44,7 +44,10 @@ function AI.new(world, team, level, profileKey)
   return self
 end
 
-function AI:isHostile(team) return self.world:hostile(self.team, team) end
+function AI:isHostile(team)
+  if team == 0 then return false end -- the neutral, dormant alien walker
+  return self.world:hostile(self.team, team)
+end
 
 -- Focus on the nearest hostile player that is still alive
 function AI:chooseTarget()
@@ -147,7 +150,209 @@ function AI:update(dt)
   if self.armyTimer <= 0 then
     self.armyTimer = 1.0
     self:thinkArmy()
+    self:thinkCommander()
   end
+end
+
+---------------------------------------------------------------------------
+-- Commander: a super unit that loses the game if it dies. It levels up from
+-- its own kills, so it should fight - but only when the odds are good.
+
+local function cost(e) return (e.def.cost and e.def.cost.metal) or (e.key == "commander" and 400) or 50 end
+
+-- armed strength (metal value) of a side within r of a point
+function AI:strengthNear(x, y, r, hostileSide)
+  local s = 0
+  self.world:query(x, y, r, function(e)
+    if e.alive and e.def.weapon and e.built >= 1 and U.dist2(x, y, e.x, e.y) < r * r then
+      local isHostile = self:isHostile(e.team)
+      if isHostile == hostileSide and (hostileSide or self.world:allied(e.team, self.team)) then
+        s = s + cost(e) * (e.disarmed and 0 or 1)
+      end
+    end
+  end)
+  return s
+end
+
+function AI:pickUpgrade(c, offer)
+  local world = self.world
+  local style = self.profile.commander or "normal"
+  local enemyAir = self:enemyAirCount()
+  local army = #self:mine(function(e) return not e.def.building and e.def.weapon end)
+  local t = world.time
+  local base = {
+    hull = 6, shield = 6, regen = 5, secondwind = 6, recall = 5, cannon = 5, loader = 5, barrel = 4,
+    treads = 3, engineer = 3, nanolathe = 2, siphon = 4, storage = 1, flakmount = enemyAir > 2 and 7 or 1,
+    splash = 4, eye = 1, healaura = 4, rally = army > 15 and 5 or 3, salvage = 3, reinforce = t < 600 and 6 or 4,
+  }
+  local mul = {}
+  if style == "aggressive" then
+    mul = { cannon = 2, loader = 2, splash = 2, barrel = 1.6, treads = 1.6, salvage = 1.5, secondwind = 1.5, reinforce = 1.4 }
+  elseif style == "cautious" then
+    mul = { nanolathe = 2.5, engineer = 2, shield = 2, recall = 2, healaura = 1.5, cannon = 0.6, treads = 0.5 }
+  end
+  if self.profileName == "Boomer" then mul.siphon = 3; mul.engineer = 2; mul.storage = 2 end
+  if self.profileName == "Air" then mul.flakmount = 0.5 end
+  local best, bs
+  for i, u in ipairs(offer) do
+    local sc = (base[u.key] or 3) * (mul[u.key] or 1) + self.rng:random() * 1.5
+    if not bs or sc > bs then best, bs = i, sc end
+  end
+  return best or 1
+end
+
+-- Where to drop the nuke: most enemy value, least friendly value. Commanders are immune.
+function AI:bestNukeTarget()
+  local world = self.world
+  local CMD = require("src.commander")
+  local R = CMD.NUKE_RADIUS
+  local cands = {}
+  for _, e in ipairs(world.entities) do
+    if e.alive and self:isHostile(e.team) and not world.teams[e.team].dead then
+      if e.def.building or (e.def.weapon and e.key ~= "commander") then cands[#cands + 1] = e end
+    end
+  end
+  local best, bx, by
+  local step = math.max(1, math.floor(#cands / 120))
+  for i = 1, #cands, step do
+    local p = cands[i]
+    local score = 0
+    world:query(p.x, p.y, R + 40, function(o)
+      if o.alive and o.key ~= "commander" and U.dist2(p.x, p.y, o.x, o.y) < R * R then
+        local v = cost(o) * (o.def.building and 1 or 0.5)
+        if o.def.factory then v = v + 300 end
+        if self:isHostile(o.team) then score = score + v
+        else score = score - v * 2.5 end
+      end
+    end)
+    if not best or score > best then best, bx, by = score, p.x, p.y end
+  end
+  return bx, by, best or 0
+end
+
+-- The safest nearby spot: where our guns (towers, army, factory repair zones)
+-- most outweigh the enemy's. Running into the open just gets him caught.
+function AI:escapePoint(c)
+  local world = self.world
+  local cands = { { self.baseX - self.dirX * 220, self.baseY - self.dirY * 220 } }
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == self.team and e.built >= 1 and (e.def.factory or (e.def.building and e.def.weapon)) then
+      cands[#cands + 1] = { e.x, e.y }
+    end
+  end
+  local best, bx, by
+  for _, p in ipairs(cands) do
+    local d = U.dist(c.x, c.y, p[1], p[2])
+    if d < 1400 then
+      local score = self:strengthNear(p[1], p[2], 450, false) - 1.5 * self:strengthNear(p[1], p[2], 450, true) - d * 0.4
+      if not best or score > best then best, bx, by = score, p[1], p[2] end
+    end
+  end
+  if not bx then bx, by = cands[1][1], cands[1][2] end
+  return bx, by
+end
+
+function AI:thinkCommander()
+  local world = self.world
+  world.cmdModes = world.cmdModes or {}
+  world.cmdModes[self.team] = self.cmdMode
+  local c = world.teams[self.team].commander
+  if not c or not c.alive then return end
+  local style = self.profile.commander or "normal"
+  -- 1. spend level-ups
+  while #c.offers > 0 do world:chooseUpgrade(c, self:pickUpgrade(c, c.offers[1])) end
+  -- 2. nuke when it's worth it
+  if world:canNuke(c) then
+    local x, y, score = self:bestNukeTarget()
+    if x and score >= (style == "aggressive" and 350 or 600) then world:launchNuke(c, x, y) end
+  end
+
+  local hpf = c.hp / c.maxhp
+  local tk = c.taken
+  local tough = (tk.hull and 1 or 0) + (tk.shield and 1 or 0) + (tk.regen and 1 or 0) + (tk.secondwind and 1 or 0)
+    + (tk.recall and 1 or 0) + (tk.healaura and 1 or 0)
+  local homeX, homeY = self.baseX - self.dirX * 220, self.baseY - self.dirY * 220
+  local danger = self:strengthNear(c.x, c.y, 450, true)
+  local support = self:strengthNear(c.x, c.y, 450, false)
+
+  -- 3. retreat: hurt and under fire, or badly outgunned away from home
+  -- he is slower than most attackers, so he has to leave early
+  local retreatAt = style == "aggressive" and 0.5 or (style == "cautious" and 0.75 or 0.6)
+  local distHome = U.dist(c.x, c.y, self.baseX, self.baseY)
+  local outgunned = danger > (support + 600) * (style == "aggressive" and 1.5 or 1.0)
+  if (hpf < retreatAt and danger > 0) or outgunned then
+    self.cmdMode = "retreat"
+    local rx, ry = self:escapePoint(c)
+    world:issue(c, { type = "move", x = rx, y = ry })
+    return
+  end
+  if self.cmdMode == "retreat" then
+    -- once nothing is chasing him, go back to work (he repairs near factories while building)
+    if danger > 0 then return end
+    self.cmdMode = nil
+  end
+
+  -- 4. defend home when we can win the fight (and earn XP doing it)
+  local threat = self:enemyNearBase()
+  local leash = style == "aggressive" and 900 or (style == "cautious" and 450 or 650)
+  if threat and U.dist(threat.x, threat.y, self.baseX, self.baseY) < leash then
+    local theirs = self:strengthNear(threat.x, threat.y, 450, true)
+    local ours = self:strengthNear(threat.x, threat.y, 600, false) + 400 -- the commander himself
+    if ours >= theirs * (style == "aggressive" and 0.8 or (style == "cautious" and 1.6 or 1.25)) and hpf > retreatAt + 0.15 then
+      self.cmdMode = "defend"
+      world:issue(c, { type = "amove", x = threat.x, y = threat.y })
+      return
+    end
+  end
+  if self.cmdMode == "defend" and distHome > leash then
+    self.cmdMode = nil
+    world:issue(c, { type = "move", x = homeX, y = homeY })
+    return
+  end
+
+  -- 5. escort a strong attack wave from the back
+  local waveList, cx, cy = {}, 0, 0
+  for u in pairs(self.wave) do
+    if u.alive and u.def.domain == "land" and u.key ~= "scout" then
+      waveList[#waveList + 1] = u
+      cx, cy = cx + u.x, cy + u.y
+    end
+  end
+  local canEscort
+  if style == "aggressive" then canEscort = hpf > 0.75 and #waveList >= 6
+  elseif style == "normal" then
+    canEscort = hpf > 0.8 and #waveList >= 8 and world.time > 480 and ((c.clevel >= 2 and tough >= 1) or c.clevel >= 3)
+  else canEscort = false end
+  if canEscort then
+    cx, cy = cx / #waveList, cy / #waveList
+    -- trail behind the army, toward home
+    local bx, by = U.norm(self.baseX - cx, self.baseY - cy)
+    self.cmdMode = "escort"
+    world:issue(c, { type = "amove", x = cx + bx * 140, y = cy + by * 140 })
+    return
+  end
+
+  -- 6. Warlord: ride along with raiding parties to pick off extractors
+  if style == "aggressive" and hpf > 0.75 and self.raidSquad then
+    local n, rx, ry = 0, 0, 0
+    for _, u in ipairs(self.raidSquad) do
+      if u.alive and u.def.domain == "land" then n = n + 1; rx, ry = rx + u.x, ry + u.y end
+    end
+    if n >= 3 then
+      self.cmdMode = "hunt"
+      local bx, by = U.norm(self.baseX - rx / n, self.baseY - ry / n)
+      world:issue(c, { type = "amove", x = rx / n + bx * 100, y = ry / n + by * 100 })
+      return
+    end
+  end
+
+  -- 7. otherwise: back to base duty (the economy code hands out build jobs)
+  if self.cmdMode and self.cmdMode ~= "build" then
+    if U.dist(c.x, c.y, self.baseX, self.baseY) > 300 then
+      world:issue(c, { type = "move", x = homeX, y = homeY })
+    end
+  end
+  self.cmdMode = "build"
 end
 
 function AI:mine(pred)
@@ -319,7 +524,7 @@ function AI:thinkEconomy()
   local enemyAir = self:enemyAirCount()
 
   for _, b in ipairs(builders) do
-    if #b.orders == 0 then
+    if #b.orders == 0 and not (b.key == "commander" and self.cmdMode and self.cmdMode ~= "build") then
       local isCmd = b.key == "commander"
       local task = nil
       local bx, by = self:baseTile()
@@ -403,12 +608,6 @@ function AI:thinkEconomy()
         elseif not isCmd and U.dist(b.x, b.y, self.baseX, self.baseY) > 400 then
           world:issue(b, { type = "move", x = self.baseX + self.rng:random(-120, 120), y = self.baseY + self.rng:random(-120, 120) })
         end
-      end
-    end
-    -- commander: stay near home, retreat when hurt
-    if b.key == "commander" then
-      if b.hp < b.maxhp * 0.45 and self:threatAt(b.x, b.y, 350) > 0 then
-        world:issue(b, { type = "move", x = self.baseX - self.dirX * 150, y = self.baseY - self.dirY * 150 })
       end
     end
   end
@@ -570,6 +769,47 @@ function AI:pickTarget(domain)
   return nil
 end
 
+-- Alien Tech: send a strong group to take and hold the landing zone
+function AI:thinkAlien(army, inWave)
+  local a = self.world.alien
+  local world = self.world
+  local active = a and ((a.state == "announced" and world.time >= a.arriveAt - 25) or a.state == "dormant")
+  if not active then
+    if self.alienSquad then
+      for u in pairs(self.alienSquad) do self.wave[u] = nil end -- back to the home army
+      self.alienSquad = nil
+    end
+    return
+  end
+  self.alienSquad = self.alienSquad or {}
+  local n = 0
+  for u in pairs(self.alienSquad) do
+    if u.alive then n = n + 1 else self.alienSquad[u] = nil end
+  end
+  -- personality: aggressive types commit more
+  local share = (self.profile.commander == "aggressive" or self.profileName == "Aggressive") and 0.8
+    or (self.profileName == "Turtle" and 0.4 or 0.6)
+  local avail = {}
+  for _, u in ipairs(army) do
+    if not inWave[u] and not self.alienSquad[u] and u.key ~= "scout" and not u.disarmed
+      and (u.def.domain == "land" or u.def.domain == "air") then avail[#avail + 1] = u end
+  end
+  local want = math.max(4, math.floor((#avail + n) * share))
+  for _, u in ipairs(avail) do
+    if n >= want then break end
+    self.alienSquad[u] = true
+    self.wave[u] = true
+    inWave[u] = true
+    n = n + 1
+  end
+  -- keep the squad parked inside the zone (attack-move so they fight for it)
+  for u in pairs(self.alienSquad) do
+    if #u.orders == 0 and U.dist2(u.x, u.y, a.x, a.y) > 180 * 180 then
+      world:issue(u, { type = "amove", x = a.x + self.rng:random(-120, 120), y = a.y + self.rng:random(-120, 120) })
+    end
+  end
+end
+
 function AI:launchRaid(army, inWave)
   local world = self.world
   local map = world.map
@@ -594,6 +834,7 @@ function AI:launchRaid(army, inWave)
   end
   if #squad < 3 then return end
   self.lastRaid = world.time
+  self.raidSquad = squad
   for _, u in ipairs(squad) do
     local tx, ty = best.x, best.y
     if u.def.domain == "sea" then tx, ty = self:waterNear(best.x, best.y, 8) end
@@ -668,8 +909,9 @@ function AI:thinkArmy()
   end
 
   -- units in a wave that went idle push on to the next target
+  self:thinkAlien(army, inWave)
   for u in pairs(self.wave) do
-    if #u.orders == 0 and u.key ~= "scout" then
+    if #u.orders == 0 and u.key ~= "scout" and not (self.alienSquad and self.alienSquad[u]) then
       local dom = (u.def.domain == "sea" or u.def.domain == "sub") and "sea" or u.def.domain
       local tx, ty = self:pickTarget(dom)
       if tx then

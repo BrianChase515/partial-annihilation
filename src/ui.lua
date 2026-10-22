@@ -132,9 +132,9 @@ function UI.drawTop(game)
     local cx = 726
     lg.setFont(font(12))
     for i = 1, game.world.np do
-      local c = D.teamColor[i]
+      local cr, cg, cb = R.teamColor(i)
       local dead = game.world.teams[i].dead
-      lg.setColor(c[1], c[2], c[3], dead and 0.3 or 1)
+      lg.setColor(cr, cg, cb, dead and 0.3 or 1)
       lg.rectangle("fill", cx, 11, 16, 16, 3)
       lg.setColor(0, 0, 0)
       local lab = tostring(game.world.ally[i])
@@ -186,6 +186,42 @@ function UI.drawTop(game)
   lg.setFont(font(13))
   lg.setColor(0.8, 0.85, 0.9)
   lg.print(s, x - font(13):getWidth(s) - 4, 11)
+end
+
+---------------------------------------------------------------------------
+-- Score mode leaderboard
+
+function UI.drawLeaderboard(game)
+  local world = game.world
+  if not world.score then return end
+  local MOD = require("src.mods")
+  local w = lg.getWidth()
+  local rows = MOD.ranking(world)
+  local bw, rh = 236, 24
+  local x, y = w - bw - 10, UI.TOP_H + 8
+  local bh = 34 + #rows * rh
+  panelBox(x, y, bw, bh, 0.86)
+  lg.setFont(font(13))
+  lg.setColor(1, 0.85, 0.35)
+  local t, par = world.time, world.parTime
+  lg.print("SCORE", x + 10, y + 8)
+  if t <= par then lg.setColor(0.5, 1, 0.55) else lg.setColor(1, 0.55, 0.35) end
+  lg.print(string.format("%d:%02d / par %d:%02d", math.floor(t / 60), math.floor(t % 60), math.floor(par / 60), math.floor(par % 60)), x + 92, y + 8)
+  for i, r in ipairs(rows) do
+    local yy = y + 30 + (i - 1) * rh
+    local cr, cg, cb = R.teamColor(r.team)
+    lg.setColor(cr, cg, cb, r.dead and 0.35 or 1)
+    lg.rectangle("fill", x + 10, yy + 3, 14, 14, 3)
+    lg.setColor(1, 1, 1, r.dead and 0.4 or 1)
+    local name = r.team == 1 and "You" or D.teamName[r.team]
+    lg.print(string.format("%d. %s", i, name), x + 30, yy + 2)
+    lg.print(U.fmt(r.pts), x + 128, yy + 2)
+    if r.mult > 1 then
+      local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 8)
+      lg.setColor(1, 0.6, 0.2, pulse)
+      lg.print(string.format("x%.2f", r.mult), x + 180, yy + 2)
+    end
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -354,6 +390,17 @@ function UI.drawMinimap(game, L)
       end
     end
   end
+  local a = world.alien
+  if a and (a.state == "announced" or a.state == "dormant") then
+    local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+    lg.setColor(0.8, 0.45, 1, 0.6 + 0.4 * pulse)
+    lg.setLineWidth(2)
+    lg.circle("line", mm.x + a.x / T * s, mm.y + a.y / T * s, 6 + pulse * 2)
+  end
+  for _, n in ipairs(world.nukes or {}) do
+    lg.setColor(1, 0.2, 0.1, 0.9)
+    lg.circle("line", mm.x + n.tx / T * s, mm.y + n.ty / T * s, 7)
+  end
   -- camera rectangle
   local cam = game.cam
   lg.setColor(1, 1, 1, 0.85)
@@ -415,7 +462,12 @@ function UI.drawInfo(game, L)
     local hpTxt = string.format("HP %d / %d", math.max(0, e.hp), e.maxhp)
     if e.built < 1 then hpTxt = hpTxt .. string.format("    Under construction %d%%", e.built * 100) end
     if e.disarmed then hpTxt = hpTxt .. "    WEAPONS OFFLINE until fully repaired" end
-    if d.weapon and e.built >= 1 then
+    if e.key == "commander" then
+      local CMD = require("src.commander")
+      local L = e.clevel or 0
+      if L >= CMD.MAX_LEVEL then hpTxt = hpTxt .. "    Commander level 5 (max)"
+      else hpTxt = hpTxt .. string.format("    Commander level %d   XP %d / %d (earn it with his own kills)", L, e.cxp or 0, CMD.THRESHOLDS[L + 1]) end
+    elseif d.weapon and e.built >= 1 then
       local L = e.level or 0
       if L >= game.world.MAX_LEVEL then
         hpTxt = hpTxt .. string.format("    Level %d (max)", L)
@@ -441,6 +493,17 @@ function UI.drawInfo(game, L)
     if d.speed then info[#info + 1] = string.format("Speed %d   Sight %d", d.speed, d.sight) end
     lg.setColor(0.55, 0.75, 0.95)
     lg.print(table.concat(info, "     "), x + 72, y + 84)
+    if e.key == "commander" and e.upgrades then
+      local names = {}
+      for _, u in ipairs(e.upgrades) do names[#names + 1] = u.name end
+      local nuke = ""
+      if e.nukeReady then
+        local left = e.nukeReady - game.world.time
+        nuke = left <= 0 and "    NUKE READY (N)" or string.format("    Nuke recharging %d:%02d", math.floor(left / 60), math.floor(left % 60))
+      end
+      lg.setColor(1, 0.85, 0.35)
+      lg.print("Upgrades: " .. (#names > 0 and table.concat(names, ", ") or "none yet") .. nuke, x + 72, y + 126)
+    end
     -- factory queue
     if d.factory and e.built >= 1 then
       local qx, qy = x, y + 112
@@ -538,13 +601,20 @@ function UI.cardButtons(game, L)
     cmds = { { "Attack A", "amove" }, { "Stop S", "stop" }, { "Patrol P", "patrol" }, { "Retreat F", "retreat" } }
   end
   if #game:selectedFactories() > 0 then cmds[#cmds + 1] = { "Repeat G", "repeat" } end
+  local myc = game:myCommander()
+  if myc and game.selected[myc] and myc.nukeReady then cmds[#cmds + 1] = { "NUKE N", "nuke" } end
   local n = #game:selectedList()
   if n >= 2 then cmds[#cmds + 1] = { "Half H", "half" } end
   cmds[#cmds + 1] = { "All army", "all" }
   local per = math.max(4, #cmds)
-  local cw = (L.cardW - 6 * (per - 1)) / per
+  if per > 4 then
+    local short = { amove = "Atk A", stop = "Stop S", patrol = "Ptrl P", retreat = "Flee F", ["repeat"] = "Rpt G",
+      half = "Half H", all = "All", nuke = "NUKE N" }
+    for _, c in ipairs(cmds) do c[1] = short[c[2]] or c[1] end
+  end
+  local cw = (L.cardW - 4 * (per - 1)) / per
   for i, c in ipairs(cmds) do
-    btns[#btns + 1] = { x = L.cardX + (i - 1) * (cw + 6), y = L.cmdY + 2, w = cw, h = 26, kind = "cmd", label = c[1], action = c[2] }
+    btns[#btns + 1] = { x = L.cardX + (i - 1) * (cw + 4), y = L.cmdY + 2, w = cw, h = 26, kind = "cmd", label = c[1], action = c[2] }
   end
   return btns
 end
@@ -565,9 +635,10 @@ function UI.drawCard(game, L)
       lg.setColor(active and 0.2 or 0.13, active and 0.35 or 0.17, active and 0.25 or 0.22)
       if hover then lg.setColor(0.22, 0.3, 0.38) end
       lg.rectangle("fill", b.x, b.y, b.w, b.h, 4)
-      lg.setColor(0.85, 0.9, 0.95)
-      lg.setFont(font(12))
-      lg.print(b.label, b.x + b.w / 2 - font(12):getWidth(b.label) / 2, b.y + 6)
+      lg.setColor(b.action == "nuke" and 1 or 0.85, b.action == "nuke" and 0.55 or 0.9, b.action == "nuke" and 0.4 or 0.95)
+      local fs = b.w < 60 and 11 or 12
+      lg.setFont(font(fs))
+      lg.print(b.label, b.x + b.w / 2 - font(fs):getWidth(b.label) / 2, b.y + 6)
     else
       local d = D.units[b.key]
       local active = game.mode == "build" and game.buildKey == b.key
@@ -676,17 +747,20 @@ Game
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound on/off
   F11 = fullscreen,  F1 = this help
 
-Goal: destroy the enemy Commander. Lose yours and it's over.
+Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20
+  (Z / X or click a card). Level 5 = NUKE (N): destroys every building in the circle,
+  halves units, Commanders immune, 10 minute recharge. Risk him to grow him - lose him, lose the game.
+Goal: destroy the enemy Commanders. Lose yours and you're out.
 Veterancy: units level up (gold chevrons, max 5) from damage and kills: more damage, HP, fire rate, range.
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.
 ]]
 
 function UI.drawHelp()
   local w, h = lg.getDimensions()
-  local bw, bh = 760, math.min(h - 20, 690)
+  local bw, bh = 780, math.min(h - 20, 800)
   local x, y = (w - bw) / 2, (h - bh) / 2
   panelBox(x, y, bw, bh, 0.97)
-  lg.setFont(font(14))
+  lg.setFont(font(12))
   lg.setColor(0.9, 0.93, 0.97)
   lg.print(HELP, x + 24, y + 18)
 end
@@ -782,6 +856,23 @@ function UI.drawOver(game)
     end
   end
   local who = table.concat(ais, "    ")
+  if game.world.score then
+    local MOD = require("src.mods")
+    local parts = {}
+    for _, r in ipairs(MOD.ranking(game.world)) do
+      parts[#parts + 1] = (r.team == 1 and "You" or D.teamName[r.team]) .. " " .. U.fmt(r.pts)
+    end
+    who = "Points: " .. table.concat(parts, "   ")
+    if game.finalScore then
+      local f = game.finalScore
+      local final = string.format("Final score %s  =  %s pts  x%.2f difficulty  x%.2f time vs par %d:%02d%s",
+        U.fmt(f.total), U.fmt(f.pts), f.diffMul, f.timeMul, math.floor(game.world.parTime / 60), math.floor(game.world.parTime % 60),
+        game.highRank and ("   (#" .. game.highRank .. " high score)") or "")
+      lg.setFont(font(15))
+      lg.setColor(1, 0.85, 0.35)
+      lg.print(final, w / 2 - font(15):getWidth(final) / 2, h / 2 + 34)
+    end
+  end
   lg.setFont(font(13))
   lg.setColor(0.6, 0.68, 0.76)
   lg.print(who, w / 2 - font(13):getWidth(who) / 2, h / 2 + 10)
@@ -809,6 +900,7 @@ function UI.draw(game)
   local L = layout(w, h)
   UI.drawSidebar(game)
   UI.drawTop(game)
+  UI.drawLeaderboard(game)
   -- bottom panel
   lg.setColor(0.06, 0.08, 0.11, 0.95)
   lg.rectangle("fill", 0, L.panelY, w, UI.PANEL_H)
@@ -824,13 +916,55 @@ function UI.draw(game)
   local hint
   if game.mode == "build" then hint = "Placing " .. D.units[game.buildKey].name .. " - click to place, drag for an area, Shift for more, right-click/Esc cancels"
   elseif game.mode == "amove" then hint = "Attack-move: click a destination (Shift queues)"
-  elseif game.mode == "patrol" then hint = "Patrol: click a destination (Shift queues)" end
+  elseif game.mode == "patrol" then hint = "Patrol: click a destination (Shift queues)"
+  elseif game.mode == "nuke" then hint = "NUKE: click the target. Buildings in the circle are destroyed, units lose half their health. Esc cancels" end
   if hint then
     lg.setFont(font(14))
     local tw = font(14):getWidth(hint)
     panelBox(w / 2 - tw / 2 - 12, UI.TOP_H + 8, tw + 24, 30, 0.85)
     lg.setColor(1, 1, 1)
     lg.print(hint, w / 2 - tw / 2, UI.TOP_H + 14)
+  end
+
+  -- Commander upgrade choice (non-blocking)
+  game.offerBtns = nil
+  local myc = game:myCommander()
+  if myc and myc.offers and #myc.offers > 0 then
+    local offer = myc.offers[1]
+    local cw, ch = 330, 96
+    local total = #offer * cw + (#offer - 1) * 14
+    local ox = w / 2 - total / 2
+    local oy = L.panelY - ch - 34
+    lg.setFont(font(15))
+    local head = string.format("Commander level %d!  Choose an upgrade%s", myc.clevel - #myc.offers + 1,
+      #myc.offers > 1 and string.format("  (%d more waiting)", #myc.offers - 1) or "")
+    lg.setColor(0, 0, 0, 0.6)
+    lg.rectangle("fill", w / 2 - font(15):getWidth(head) / 2 - 10, oy - 28, font(15):getWidth(head) + 20, 24, 5)
+    lg.setColor(1, 0.85, 0.35)
+    lg.print(head, w / 2 - font(15):getWidth(head) / 2, oy - 25)
+    game.offerBtns = {}
+    local mx, my = love.mouse.getPosition()
+    for i, u in ipairs(offer) do
+      local bx = ox + (i - 1) * (cw + 14)
+      local hover = mx >= bx and mx <= bx + cw and my >= oy and my <= oy + ch
+      local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+      lg.setColor(0.08, 0.1, 0.14, 0.96)
+      if hover then lg.setColor(0.14, 0.18, 0.24, 0.98) end
+      lg.rectangle("fill", bx, oy, cw, ch, 8)
+      lg.setColor(1, 0.8, 0.3, 0.5 + 0.4 * pulse)
+      lg.setLineWidth(2)
+      lg.rectangle("line", bx + 1, oy + 1, cw - 2, ch - 2, 8)
+      lg.setFont(font(13))
+      lg.setColor(1, 0.85, 0.35)
+      lg.print(i == 1 and "Z" or "X", bx + 12, oy + 10)
+      lg.setFont(font(17))
+      lg.setColor(1, 1, 1)
+      lg.print(u.name, bx + 34, oy + 8)
+      lg.setFont(font(13))
+      lg.setColor(0.75, 0.82, 0.9)
+      lg.printf(u.desc, bx + 12, oy + 38, cw - 24)
+      game.offerBtns[#game.offerBtns + 1] = { x = bx, y = oy, w = cw, h = ch, i = i }
+    end
   end
 
   -- notices
@@ -844,6 +978,51 @@ function UI.draw(game)
     lg.setColor(1, 0.9, 0.6, a)
     lg.print(nt.text, w / 2 - tw / 2, ny + 4)
     ny = ny + 32
+  end
+
+  -- dropship coin flip
+  local flip = game.flips and game.flips[1]
+  if flip then
+    local MOD = require("src.mods")
+    local t = flip.t
+    local done = t >= MOD.FLIP_TIME
+    lg.setColor(0, 0, 0, 0.35)
+    lg.rectangle("fill", 0, 0, w, h)
+    panelBox(w / 2 - 230, h / 2 - 150, 460, 270, 0.97)
+    lg.setFont(font(20))
+    lg.setColor(0.85, 0.6, 1)
+    local head = "Alien drop crew encountered!"
+    lg.print(head, w / 2 - font(20):getWidth(head) / 2, h / 2 - 135)
+    lg.setFont(font(14))
+    lg.setColor(0.7, 0.76, 0.84)
+    local sub = "Heads they join you. Tails they attack."
+    lg.print(sub, w / 2 - font(14):getWidth(sub) / 2, h / 2 - 104)
+    -- the coin: spins fast, slows down, lands
+    local spin = done and 0 or (t * t * 3 + t * 18)
+    local face
+    if done then face = flip.sq.result == "join" and "heads" or "tails"
+    else face = (math.floor(spin / math.pi) % 2 == 0) and "heads" or "tails" end
+    local sx = done and 1 or math.abs(math.cos(spin))
+    local cx, cy, r = w / 2, h / 2 + 5, 58
+    local hop = done and 0 or math.sin(math.min(1, t / MOD.FLIP_TIME) * math.pi) * 40
+    lg.push()
+    lg.translate(cx, cy - hop)
+    lg.scale(math.max(0.06, sx), 1)
+    if face == "heads" then lg.setColor(0.95, 0.8, 0.3) else lg.setColor(0.75, 0.75, 0.8) end
+    lg.circle("fill", 0, 0, r)
+    lg.setColor(0.3, 0.22, 0.05)
+    lg.setLineWidth(4)
+    lg.circle("line", 0, 0, r - 6)
+    lg.setFont(font(22))
+    local lbl = face == "heads" and "JOIN" or "ATTACK"
+    lg.print(lbl, -font(22):getWidth(lbl) / 2, -14)
+    lg.pop()
+    if done then
+      lg.setFont(font(22))
+      local res = flip.sq.result == "join" and "They join you!" or "They attack!"
+      if flip.sq.result == "join" then lg.setColor(0.4, 1, 0.5) else lg.setColor(1, 0.4, 0.35) end
+      lg.print(res, w / 2 - font(22):getWidth(res) / 2, h / 2 + 80)
+    end
   end
 
   if game.showHelp then UI.drawHelp() end
@@ -873,6 +1052,12 @@ function UI.click(game, x, y, b)
   local w, h = lg.getDimensions()
   local L = layout(w, h)
   if game.showHelp then game.showHelp = false; return true end
+  for _, ob in ipairs(game.offerBtns or {}) do
+    if x >= ob.x and x <= ob.x + ob.w and y >= ob.y and y <= ob.y + ob.h then
+      game:pickUpgrade(ob.i)
+      return true
+    end
+  end
   if y <= UI.TOP_H then
     for _, tb in ipairs(game.topBtns or {}) do
       if x >= tb.x and x <= tb.x + tb.w and y >= tb.y and y <= tb.y + tb.h then
@@ -912,6 +1097,7 @@ function UI.click(game, x, y, b)
         elseif btn.action == "half" then
           if shift then game:selectOtherHalf() else game:selectHalf() end
         elseif btn.action == "all" then game:selectAllArmy()
+        elseif btn.action == "nuke" then game:startNuke()
         elseif btn.action == "retreat" then game:retreat(shift and "commander" or "flag")
         elseif btn.action == "repeat" then
           for _, f in ipairs(game:selectedFactories()) do f.repeatMode = not f.repeatMode end

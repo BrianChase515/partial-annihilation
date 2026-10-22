@@ -28,7 +28,7 @@ function G.new(opts)
   local income = {}
   for i, p in ipairs(players) do income[i] = p.human and 1 or D.aiLevel(p.level).income end
   self.world = World.new({
-    size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers,
+    size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
     playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income,
   })
   local world = self.world
@@ -41,10 +41,72 @@ function G.new(opts)
       p.profileName = ai.profileName
     end
   end
+  world.onCommanderLevel = function(e, offer)
+    if e.team == 1 then
+      if offer then
+        self:notice("Commander reached level " .. e.clevel .. "!  Pick an upgrade (Z / X)", 3)
+      else
+        self:notice("Commander level 5: NUKE ARMED.  Select him and press N", 5)
+      end
+      SFX.play("ready", 0.7, 0)
+    elseif e.clevel >= 5 and world:hostile(e.team, 1) then
+      self:notice(D.teamName[e.team] .. "'s Commander now has a NUKE.", 4)
+    end
+  end
+  world.onCommanderEvent = function(e, text)
+    if e.team == 1 then self:notice(text, 2)
+    elseif world:isVisible(e) then self:notice(D.teamName[e.team] .. " Commander: " .. text, 2) end
+  end
+  world.onNuke = function(e, x, y)
+    local secs = math.floor(U.dist(e.x, e.y, x, y) / require("src.commander").NUKE_SPEED + 0.5)
+    local who = e.team == 1 and "You" or D.teamName[e.team]
+    self:notice("NUKE LAUNCHED by " .. who .. "!  Impact in " .. secs .. "s  (red circle)", 5)
+    SFX.play("alert", 1, 0)
+  end
+  world.onDetonate = function(n)
+    if self:onScreen(n.tx, n.ty) then
+      SFX.play("boom", 1, 0)
+      self.shake = 0.6
+    end
+  end
+  world.onAlien = function(what, a, team)
+    if what == "announce" then
+      self:notice("ALIEN TECH incoming! Lands in 60s at the purple marker. Hold its zone for 15s to claim it.", 6)
+      SFX.play("alert", 0.8, 0)
+    elseif what == "land" then
+      self:notice("The Alien Walker has landed. Clear the zone and hold it!", 4)
+    elseif what == "claim" then
+      local who = team == 1 and "You" or ((world:hostile(team, 1) and "Enemy " or "Your ally ") .. D.teamName[team])
+      self:notice(who .. " claimed the Alien Walker!", 5)
+      SFX.play(team == 1 and "ready" or "alert", 0.9, 0)
+    end
+  end
+  world.onDrop = function(sq)
+    self:notice("Alien dropship spotted near the middle of the map. Its crew is undecided...", 4)
+  end
+  self.flips = {}
+  world.onDropEncounter = function(sq)
+    if sq.team == 1 then
+      self.flips[#self.flips + 1] = { sq = sq, t = 0 }
+      SFX.play("alert", 0.5, 0)
+      return true -- wait for the coin flip
+    end
+    return false
+  end
+  world.onDropResolved = function(sq)
+    if sq.team == 1 then return end
+    local seen = false
+    for _, u in ipairs(sq.units) do if u.alive and world:isVisible(u) then seen = true end end
+    if seen then
+      self:notice("A drop crew " .. (sq.result == "join" and "joined " or "attacked ") .. D.teamName[sq.team] .. "!", 3)
+    end
+  end
   world.onEliminate = function(team)
     local name = D.teamName[team]
     if team == 1 then
-      if not world.over then self:notice("Your Commander has fallen. Your allies fight on - you're spectating.", 6) end
+      local alliesLeft = false
+      for t = 2, world.np do if not world.teams[t].dead and world:allied(t, 1) then alliesLeft = true end end
+      if alliesLeft then self:notice("Your Commander has fallen. Your allies fight on - you're spectating.", 6) end
       self.spectating = true
     elseif world:hostile(team, 1) then
       self:notice(name .. " has been eliminated!", 4)
@@ -532,9 +594,45 @@ function G:update(dt)
     if not self.overShown then
       self.overShown = true
       self.overTime = love.timer.getTime()
+      local w = self.world
+      if w.score and not self.opts.autotest then
+        local ais, levels = {}, {}
+        for i, p in ipairs(self.players) do
+          if not p.human then
+            ais[#ais + 1] = (p.profileName or p.profile) .. " " .. p.level
+            if w:hostile(i, 1) then levels[#levels + 1] = p.level end
+          end
+        end
+        local total, diffMul, timeMul, win = require("src.mods").finalScore(w, 1, levels)
+        self.finalScore = { total = total, pts = math.floor(w.score[1].pts), diffMul = diffMul, timeMul = timeMul }
+        self.highRank = require("src.scores").add({
+          pts = total, result = win and "Win" or "Loss", date = os.date("%Y-%m-%d"),
+          desc = string.format("%d players vs %s, %d:%02d", w.np, table.concat(ais, ", "), math.floor(w.time / 60), math.floor(w.time % 60)),
+        })
+      end
     end
   end
   self:applyMouseLock()
+  -- dropship encounter: a brief, suspenseful pause while the coin flips
+  local flip = self.flips and self.flips[1]
+  if flip and not self.menuOpen then
+    flip.t = flip.t + dt
+    local MOD = require("src.mods")
+    if flip.t >= MOD.FLIP_TIME + 1.2 then
+      table.remove(self.flips, 1)
+    elseif flip.t >= MOD.FLIP_TIME and not flip.applied then
+      flip.applied = true
+      MOD.applyDrop(self.world, flip.sq)
+      if flip.sq.result == "join" then
+        self:notice("Heads! The drop crew joins you (" .. #flip.sq.units .. " units)", 3)
+        SFX.play("ready", 0.9, 0)
+      else
+        self:notice("Tails! The drop crew attacks!", 3)
+        SFX.play("boom", 0.7, 0)
+      end
+    end
+    if not flip.applied then return end
+  end
   if self.paused or self.menuOpen or self.naming then return end
 
   -- camera panning: arrows / screen edge (wider zone, speeds up near the very edge)
@@ -598,6 +696,10 @@ function G:draw()
   cam.wx0, cam.wy0 = self:screenToWorld(0, 0)
   cam.wx1, cam.wy1 = self:screenToWorld(w, h)
   lg.push()
+  if self.shake and self.shake > 0 then
+    self.shake = self.shake - love.timer.getDelta()
+    lg.translate((math.random() - 0.5) * 18 * self.shake, (math.random() - 0.5) * 18 * self.shake)
+  end
   lg.scale(cam.zoom)
   lg.translate(-cam.x, -cam.y)
   R.drawWorld(cam, self)
@@ -678,6 +780,27 @@ function G:drawOverlays()
     end
   end
 
+  -- nuke targeting
+  if self.mode == "nuke" then
+    local mx, my = love.mouse.getPosition()
+    local wx, wy = self:screenToWorld(mx, my)
+    local R = require("src.commander").NUKE_RADIUS
+    local own = 0
+    world:query(wx, wy, R + 40, function(o)
+      if o.alive and o.def.building and not world:hostile(o.team, 1) and U.dist2(wx, wy, o.x, o.y) < R * R then own = own + 1 end
+    end)
+    lg.setColor(1, 0.2, 0.1, 0.12)
+    lg.circle("fill", wx, wy, R)
+    lg.setColor(1, 0.3, 0.15, 0.9)
+    lg.setLineWidth(3)
+    lg.circle("line", wx, wy, R)
+    lg.line(wx - 20, wy, wx + 20, wy); lg.line(wx, wy - 20, wx, wy + 20)
+    if own > 0 then
+      lg.setFont(require("src.render").font(16))
+      lg.setColor(1, 0.9, 0.3)
+      lg.print("WARNING: " .. own .. " of your/allied buildings in the blast", wx - 150, wy + R + 8)
+    end
+  end
   -- drag-to-build preview
   if self.mode == "build" and self.buildKey and self.buildDrag then
     local mx, my = love.mouse.getPosition()
@@ -750,6 +873,10 @@ function G:mousepressed(x, y, button)
     elseif self.mode == "amove" or self.mode == "patrol" then
       self:commandMove(wx, wy, self.mode, shift)
       if not shift then self.mode = nil end
+      return
+    elseif self.mode == "nuke" then
+      self.world:launchNuke(self:myCommander(), wx, wy)
+      self.mode = nil
       return
     end
     self.boxStart = { x, y }
@@ -992,6 +1119,14 @@ function G:keypressed(key)
     if shift then self:selectOtherHalf() else self:selectHalf() end
     return
   end
+  if key == "z" or key == "x" then
+    self:pickUpgrade(key == "z" and 1 or 2)
+    return
+  end
+  if key == "n" then
+    self:startNuke()
+    return
+  end
   if key == "f" then
     if ctrl then
       local mx, my = love.mouse.getPosition()
@@ -1085,6 +1220,34 @@ function G:namingKey(key)
     self.naming = nil
   end
   if not self.naming then love.keyboard.setTextInput(false) end
+end
+
+function G:myCommander()
+  local c = self.world.teams[1].commander
+  if c and c.alive then return c end
+end
+
+function G:pickUpgrade(i)
+  local c = self:myCommander()
+  if not c or #c.offers == 0 then return end
+  local u = self.world:chooseUpgrade(c, i)
+  if u then
+    self:notice("Upgrade: " .. u.name, 2)
+    SFX.play("ready", 0.6, 0)
+  end
+end
+
+function G:startNuke()
+  local c = self:myCommander()
+  if not c then return end
+  if not c.nukeReady then
+    self:notice("The Nuke unlocks at Commander level 5", 1.5)
+  elseif not self.world:canNuke(c) then
+    local left = math.ceil(c.nukeReady - self.world.time)
+    self:notice(string.format("Nuke recharging: %d:%02d", math.floor(left / 60), left % 60), 1.5)
+  else
+    self.mode = "nuke"
+  end
 end
 
 function G:setSpeed(v)

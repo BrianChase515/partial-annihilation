@@ -97,6 +97,14 @@ D.units = {
     desc = "Torpedoes ships. Only ships can hit it.",
   },
 
+  walker = {
+    name = "Alien Walker", short = "W", domain = "land", shape = "walker",
+    radius = 26, hp = 9000, speed = 42, sight = 480, regen = 15,
+    weapon = { damage = 150, range = 340, reload = 1.1, speed = 520, splash = 60, targets = { land = true, sea = true, air = true } },
+    cost = { metal = 1500, energy = 0, work = 1 },
+    desc = "Alien tech. Devastating guns that hit land, sea and air. Claimed by holding its zone.",
+  },
+
   -- Buildings ---------------------------------------------------------
   mex = {
     name = "Metal Extractor", short = "M", domain = "building", building = true,
@@ -178,12 +186,23 @@ end
 D.hotkeys = { "q", "w", "e", "r", "t", "y", "u", "i" }
 
 D.teamColor = {
+  [0] = { 0.72, 0.42, 1.00 },  -- neutral alien tech / undecided drop crews
+  [-1] = { 0.62, 0.52, 0.30 }, -- marauders (drop crews that attacked)
   [1] = { 0.30, 0.62, 1.00 },
   [2] = { 1.00, 0.34, 0.28 },
   [3] = { 0.35, 0.85, 0.40 },
   [4] = { 1.00, 0.78, 0.22 },
 }
-D.teamName = { "Blue", "Red", "Green", "Gold" }
+D.teamName = { "Blue", "Red", "Green", "Gold", [0] = "Neutral", [-1] = "Marauders" }
+-- Groovy modifier palette (60s/70s): turquoise, hot pink, lime, tangerine
+D.groovyColor = {
+  [-1] = { 0.95, 0.95, 0.30 },
+  [0] = { 0.85, 0.35, 1.00 },
+  [1] = { 0.10, 0.88, 0.85 },
+  [2] = { 1.00, 0.22, 0.68 },
+  [3] = { 0.62, 1.00, 0.18 },
+  [4] = { 1.00, 0.58, 0.08 },
+}
 
 -- AI strength by level 1..10 (5 matches the original "Normal")
 function D.aiLevel(n)
@@ -210,7 +229,7 @@ D.profiles = {
   { key = "Aggressive", desc = "Rushes early and keeps the pressure on.",
     firstWaveMul = 0.55, waveMul = 0.7, turretMul = 0.3, expandMul = 0.8,
     weights = { tank = 1.4, scout = 1.6, artillery = 0.5 } },
-  { key = "Turtle",     desc = "Fortifies heavily, attacks late with big waves.",
+  { key = "Turtle",     desc = "Fortifies heavily, attacks late with big waves.", commander = "cautious",
     firstWaveMul = 1.7, waveMul = 1.6, turretMul = 3, turretBonus = 2, aaBonus = 2,
     weights = { artillery = 2.2, flak = 1.5, destroyer = 1.5 } },
   { key = "Boomer",     desc = "Grabs the whole map's metal, then floods you.",
@@ -221,6 +240,8 @@ D.profiles = {
     weights = { destroyer = 1.5, sub = 1.3, boat = 1.3 } },
   { key = "Raider",     desc = "Constant hit-and-run attacks on your extractors.", raidEvery = 50,
     weights = { scout = 2.5, gunship = 1.6, boat = 1.4 } },
+  { key = "Warlord",    desc = "Its Commander leads from the front, hunts for kills and nukes early.", commander = "aggressive",
+    firstWaveMul = 0.8, builderBonus = 1, weights = { tank = 1.3, artillery = 1.2 } },
   { key = "Random",     desc = "One of the above, chosen secretly." },
 }
 function D.profile(key)

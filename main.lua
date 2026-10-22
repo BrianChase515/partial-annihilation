@@ -14,6 +14,16 @@ local function startGame(opts)
   state = "game"
 end
 
+local function parseMods(args)
+  for i, a in ipairs(args or {}) do
+    if a == "--mods" and args[i + 1] then
+      local m = {}
+      for k in args[i + 1]:gmatch("[^,]+") do m[k] = true end
+      return m
+    end
+  end
+end
+
 function love.load(args)
   love.graphics.setDefaultFilter("linear", "linear")
   love.keyboard.setKeyRepeat(false)
@@ -36,12 +46,12 @@ function love.load(args)
       end
       if mode == "3" then players[4] = nil end
       startGame({ size = autotest.size, water = 0.30, seed = autotest.seed, autotest = true, players = players,
-        level1 = 5, profile1 = profs[1] })
+        level1 = 5, profile1 = profs[1], mods = parseMods(args) })
       return
     end
   end
   if autotest then
-    startGame({ size = autotest.size, water = 0.30, seed = autotest.seed, autotest = true,
+    startGame({ size = autotest.size, water = 0.30, seed = autotest.seed, autotest = true, mods = parseMods(args),
       level = autotest.level2, profile = autotest.profile2, level1 = autotest.level1, profile1 = autotest.profile1 })
     return
   end
@@ -62,9 +72,11 @@ end
 local function runAutotest()
   local world = game.world
   local dt = 1 / 30
+  world.debugDeaths = true
   local t0 = love.timer.getTime()
   local nextReport = 60
   local maxSec = autotest.minutes * 60
+  for i, a in ipairs(arg or {}) do if a == "--shotat" then maxSec = tonumber(arg[i + 1]) end end
   while world.time < maxSec and not world.over do
     world:update(dt)
     for _, ai in ipairs(game.ais) do ai:update(dt) end
@@ -87,6 +99,10 @@ local function runAutotest()
           if e.team == t and e.def.weapon then lv[(e.level or 0) + 1] = lv[(e.level or 0) + 1] + 1 end
         end
         ks[#ks + 1] = "LV:" .. table.concat(lv, "/")
+        local c = tm.commander
+        local ups = {}
+        for _, u in ipairs(c.upgrades or {}) do ups[#ups + 1] = u.key end
+        ks[#ks + 1] = string.format("CMD:L%d xp%d {%s}", c.clevel or 0, c.cxp or 0, table.concat(ups, ","))
         for k, n in pairs(kinds) do ks[#ks + 1] = k .. "=" .. n end
         table.sort(ks)
         s[#s + 1] = string.format("T%d m=%d(+%.1f) e=%d(+%.0f) units=%d blds=%d cmdHP=%d [%s]", t, tm.metal, tm.mIncome, tm.energy, tm.eIncome,
@@ -99,6 +115,13 @@ local function runAutotest()
   end
   local dead = {}
   for t = 1, world.np do if world.teams[t].dead then dead[#dead + 1] = t .. "@" .. math.floor(world.teams[t].deadTime) end end
+  print("NUKES", world.nukeCount or 0)
+  if world.alien then print("ALIEN captures", world.alien.captures, "state", world.alien.state, "lastOwner", world.alien.lastOwner) end
+  if world.score then
+    local t = {}
+    for p = 1, world.np do t[#t + 1] = p .. "=" .. math.floor(world.score[p].pts) end
+    print("SCORES", table.concat(t, " "))
+  end
   print("RESULT", world.over and ("winner alliance " .. world.over.winnerAlly .. " at " .. math.floor(world.over.time) .. "s") or "no winner",
     "eliminated:", table.concat(dead, ","), "entities", #world.entities)
   -- point the camera at the action for the screenshot

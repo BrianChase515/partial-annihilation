@@ -40,8 +40,38 @@ function R.updateFogImage()
   world.fogChanged = false
 end
 
+local function groovy() return R.world and R.world.mods and R.world.mods.groovy end
+R.groovy = groovy
+
+-- hue 0..1 -> bright rgb
+local function hsv(h, s, v)
+  h = (h % 1) * 6
+  local i = math.floor(h)
+  local f = h - i
+  local p, q, t = v * (1 - s), v * (1 - s * f), v * (1 - s * (1 - f))
+  if i == 0 then return v, t, p elseif i == 1 then return q, v, p elseif i == 2 then return p, v, t
+  elseif i == 3 then return p, q, v elseif i == 4 then return t, p, v else return v, p, q end
+end
+R.hsv = hsv
+
+-- a flower: petals around a center, used instead of explosions in Groovy mode
+local function flower(x, y, r, petals, hue, alpha, spin)
+  local lg = love.graphics
+  for i = 0, petals - 1 do
+    local a = spin + i * math.pi * 2 / petals
+    local pr, pg, pb = hsv(hue + i * 0.07, 0.85, 1)
+    lg.setColor(pr, pg, pb, alpha)
+    lg.circle("fill", x + math.cos(a) * r * 0.55, y + math.sin(a) * r * 0.55, r * 0.42)
+  end
+  lg.setColor(1, 0.92, 0.2, alpha)
+  lg.circle("fill", x, y, r * 0.35)
+  lg.setColor(1, 0.55, 0.1, alpha)
+  lg.circle("fill", x, y, r * 0.18)
+end
+R.flower = flower
+
 local function teamColor(team, k)
-  local c = D.teamColor[team]
+  local c = (groovy() and D.groovyColor[team]) or D.teamColor[team] or D.teamColor[0]
   k = k or 1
   return c[1] * k, c[2] * k, c[3] * k
 end
@@ -117,6 +147,43 @@ function R.drawEntity(e, cam, selected)
       lg.setColor(1, 1, 1, 0.95)
       drawLabel(d.short, x, y + (d.weapon and 0 or 0), d.w >= 3 and 18 or 12, zoom)
     end
+  elseif d.shape == "walker" then
+    local r = d.radius
+    local x, y = e.x, e.y
+    local t = (R.world and R.world.time or 0)
+    -- legs
+    lg.setColor(0.1, 0.08, 0.14)
+    lg.setLineWidth(4)
+    for i = 0, 3 do
+      local a = e.angle + math.pi / 4 + i * math.pi / 2
+      local step = math.sin(t * 4 + i * 1.6) * (e.dormant and 0 or 5)
+      lg.line(x, y, x + math.cos(a) * (r + 12 + step), y + math.sin(a) * (r + 12 + step))
+    end
+    -- hexagonal body
+    local pts = {}
+    for i = 0, 5 do
+      local a = e.angle + i * math.pi / 3
+      pts[#pts + 1] = x + math.cos(a) * r
+      pts[#pts + 1] = y + math.sin(a) * r
+    end
+    lg.setColor(cr * 0.6, cg * 0.6, cb * 0.6)
+    lg.polygon("fill", pts)
+    lg.setColor(cr, cg, cb)
+    lg.circle("fill", x, y, r * 0.55)
+    lg.setColor(0.05, 0.03, 0.08)
+    lg.setLineWidth(2)
+    lg.polygon("line", pts)
+    -- glowing eye
+    local glow = 0.6 + 0.4 * math.sin(t * 3)
+    lg.setColor(0.9, 1, 0.6, e.dormant and glow * 0.6 or glow)
+    lg.circle("fill", x, y, r * 0.22)
+    if e.turret then
+      lg.setColor(0.06, 0.06, 0.08)
+      lg.setLineWidth(5)
+      lg.line(x, y, x + math.cos(e.turret) * (r + 14), y + math.sin(e.turret) * (r + 14))
+    end
+    lg.setColor(1, 1, 1, 0.9)
+    drawLabel(e.dormant and "?" or "W", x, y + r * 0.62, 12, zoom)
   else
     local r = d.radius
     local x, y = e.x, e.y
@@ -204,6 +271,11 @@ function R.drawEntity(e, cam, selected)
     lg.setLineWidth(1.5)
     lg.line(e.x - r, e.y + r, e.x + r, e.y - r)
   end
+  if e.invulnUntil and R.world and R.world.time < e.invulnUntil then
+    lg.setColor(1, 1, 0.6, 0.35 + 0.25 * math.sin(R.world.time * 12))
+    lg.setLineWidth(3)
+    lg.circle("line", e.x, e.y, d.radius + 10)
+  end
   -- repairing indicator
   if e.healing and zoom > 0.35 then
     local r = d.radius
@@ -212,8 +284,8 @@ function R.drawEntity(e, cam, selected)
     lg.line(e.x - r - 6, e.y - r, e.x - r, e.y - r)
     lg.line(e.x - r - 3, e.y - r - 3, e.x - r - 3, e.y - r + 3)
   end
-  -- veterancy chevrons
-  local L = e.level or 0
+  -- veterancy chevrons (the Commander shows his own level)
+  local L = e.key == "commander" and (e.clevel or 0) or (e.level or 0)
   if L > 0 and zoom > 0.35 then
     local r = d.building and d.w * D.TILE / 2 or d.radius
     local bx, by = e.x + r + 3, e.y - r - 2
@@ -256,11 +328,26 @@ function R.drawWorld(cam, game)
 
   -- terrain
   lg.setColor(1, 1, 1)
+  if groovy() then
+    -- slowly cycling psychedelic tint
+    local r1, g1, b1 = hsv(world.time * 0.03, 0.45, 1)
+    lg.setColor(0.55 + r1 * 0.6, 0.55 + g1 * 0.6, 0.55 + b1 * 0.6)
+  end
   local s = T / map.imagePx
   lg.draw(map.image, 0, 0, 0, s, s)
-
   -- visible bounds in world coords
   local x0, y0, x1, y1 = cam.wx0, cam.wy0, cam.wx1, cam.wy1
+  if groovy() then
+    -- drifting blobs of color
+    local cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    local span = math.min(x1 - x0, 6000)
+    for i = 1, 5 do
+      local a = world.time * 0.15 + i * 1.3
+      local rr, gg, bb = hsv(world.time * 0.04 + i * 0.2, 0.9, 1)
+      lg.setColor(rr, gg, bb, 0.07)
+      lg.circle("fill", cx + math.cos(a) * span * 0.35, cy + math.sin(a * 1.3) * span * 0.35, span * 0.3, 48)
+    end
+  end
 
   -- grid lines when zoomed in
   if cam.zoom > 0.9 then
@@ -293,7 +380,7 @@ function R.drawWorld(cam, game)
   local list = {}
   for _, e in ipairs(world.entities) do
     if e.alive and e.x > x0 - margin and e.x < x1 + margin and e.y > y0 - margin and e.y < y1 + margin then
-      local show = world:isVisible(e) or (e.def.building and e.seen[world.playerTeam])
+      local show = e.dormant or world:isVisible(e) or (e.def.building and e.seen[world.playerTeam])
       if e.def.domain == "sub" and world:hostile(e.team, world.playerTeam) and not world.noFog then
         -- enemy subs are only revealed near your ships
         show = show and game:subRevealed(e)
@@ -355,10 +442,16 @@ function R.drawWorld(cam, game)
         lg.circle("fill", p.x, p.y, 2.5)
       else
         local nx, ny = U.norm(p.tx - p.x, p.ty - p.y)
-        local cr, cg, cb = teamColor(p.team)
-        lg.setColor(math.min(1, cr + 0.5), math.min(1, cg + 0.5), math.min(1, cb + 0.4))
-        lg.setLineWidth(2)
-        lg.line(p.x, p.y, p.x - nx * 8, p.y - ny * 8)
+        if groovy() then
+          local rr, gg, bb = hsv(world.time * 2 + p.sx * 0.01, 0.9, 1)
+          lg.setColor(rr, gg, bb)
+          lg.circle("fill", p.x, p.y, 3)
+        else
+          local cr, cg, cb = teamColor(p.team)
+          lg.setColor(math.min(1, cr + 0.5), math.min(1, cg + 0.5), math.min(1, cb + 0.4))
+          lg.setLineWidth(2)
+          lg.line(p.x, p.y, p.x - nx * 8, p.y - ny * 8)
+        end
       end
     end
   end
@@ -366,7 +459,21 @@ function R.drawWorld(cam, game)
   -- effects
   for _, fx in ipairs(world.effects) do
     local k = fx.t / fx.life
-    if fx.kind == "boom" then
+    if groovy() and (fx.kind == "boom" or fx.kind == "splash" or fx.kind == "hit" or fx.kind == "nuke") then
+      -- flower power
+      local size = fx.kind == "hit" and 7 or fx.size
+      local grow = fx.kind == "nuke" and (0.3 + k * 1.3) or (0.4 + k * 0.8)
+      local hue = (fx.x * 0.003 + fx.y * 0.002) % 1
+      flower(fx.x, fx.y, size * grow, fx.kind == "nuke" and 12 or 6, hue, 1 - k * k, k * 2)
+      if fx.kind == "nuke" then
+        for ring = 1, 6 do
+          local rr, gg, bb = hsv(ring / 6 + world.time * 0.2, 0.9, 1)
+          lg.setColor(rr, gg, bb, (1 - k) * 0.7)
+          lg.setLineWidth(8)
+          lg.circle("line", fx.x, fx.y, fx.size * (0.2 + k * 1.4) + ring * 10)
+        end
+      end
+    elseif fx.kind == "boom" then
       lg.setColor(1, 0.75 - k * 0.5, 0.2, 1 - k)
       lg.circle("fill", fx.x, fx.y, fx.size * (0.4 + k * 0.6))
       lg.setColor(1, 1, 0.8, (1 - k) * 0.8)
@@ -379,6 +486,35 @@ function R.drawWorld(cam, game)
     elseif fx.kind == "hit" then
       lg.setColor(1, 1, 0.7, 1 - k)
       lg.circle("fill", fx.x, fx.y, fx.size)
+    elseif fx.kind == "nuke" then
+      local R0 = fx.size
+      local flash = math.max(0, 1 - k * 3)
+      lg.setColor(1, 1, 0.9, flash * 0.9)
+      lg.circle("fill", fx.x, fx.y, R0 * (0.3 + k * 1.2))
+      lg.setColor(1, 0.55, 0.15, (1 - k) * 0.6)
+      lg.circle("fill", fx.x, fx.y, R0 * (0.5 + k * 0.6))
+      lg.setColor(1, 0.85, 0.5, 1 - k)
+      lg.setLineWidth(6)
+      lg.circle("line", fx.x, fx.y, R0 * (0.2 + k * 1.4))
+      lg.setColor(0.3, 0.25, 0.2, (1 - k) * 0.5)
+      lg.circle("fill", fx.x, fx.y - k * 60, R0 * 0.35 * (0.5 + k))
+    elseif fx.kind == "dropship" then
+      -- the dropship descends, hovers, then lifts off
+      local alt = (k < 0.4) and (1 - k / 0.4) * 300 or ((k > 0.75) and (k - 0.75) / 0.25 * 300 or 0)
+      lg.setColor(0, 0, 0, 0.35)
+      lg.ellipse("fill", fx.x, fx.y, 70, 30)
+      local px, py = fx.x, fx.y - 40 - alt
+      local cr, cg, cb = teamColor(0)
+      lg.setColor(cr * 0.6, cg * 0.6, cb * 0.6)
+      lg.ellipse("fill", px, py, 70, 26)
+      lg.setColor(cr, cg, cb)
+      lg.ellipse("fill", px, py - 8, 40, 16)
+      lg.setColor(0.9, 1, 0.6, 0.8)
+      for i = -2, 2 do lg.circle("fill", px + i * 22, py + 10, 4) end
+      if alt < 50 then
+        lg.setColor(0.8, 1, 0.6, 0.25)
+        lg.polygon("fill", px - 30, py + 12, px + 30, py + 12, fx.x + 50, fx.y, fx.x - 50, fx.y)
+      end
     elseif fx.kind == "levelup" then
       lg.setColor(1, 0.85, 0.3, 1 - k)
       lg.setLineWidth(2.5)
@@ -395,6 +531,71 @@ function R.drawWorld(cam, game)
     if world.fogChanged then R.updateFogImage() end
     lg.setColor(1, 1, 1)
     lg.draw(R.fogImage, 0, 0, 0, T, T)
+  end
+
+  -- Alien Tech landing zone (everyone sees it)
+  local a = world.alien
+  if a and (a.state == "announced" or a.state == "dormant") then
+    local MOD = require("src.mods")
+    local Rz = MOD.ALIEN_RADIUS
+    local pulse = 0.5 + 0.5 * math.sin(world.time * 3)
+    if a.state == "announced" then
+      lg.setColor(0.75, 0.4, 1, 0.5 + 0.3 * pulse)
+      lg.setLineWidth(3)
+      for i = 0, 23 do
+        local a1 = i * math.pi / 12 + world.time * 0.3
+        lg.arc("line", "open", a.x, a.y, Rz, a1, a1 + math.pi / 24)
+      end
+      local secs = math.max(0, math.ceil(a.arriveAt - world.time))
+      local f = R.font(18)
+      lg.setFont(f)
+      local txt = "ALIEN TECH lands in " .. secs .. "s"
+      lg.setColor(0, 0, 0, 0.6)
+      lg.print(txt, a.x - f:getWidth(txt) / 2 + 2, a.y - 10 + 2)
+      lg.setColor(0.85, 0.6, 1)
+      lg.print(txt, a.x - f:getWidth(txt) / 2, a.y - 10)
+    else
+      local hc = a.holder and ((groovy() and D.groovyColor or D.teamColor)[a.holder] or D.teamColor[0]) or { 0.85, 0.85, 0.85 }
+      lg.setColor(0.75, 0.4, 1, 0.08)
+      lg.circle("fill", a.x, a.y, Rz)
+      lg.setColor(0.75, 0.4, 1, 0.6)
+      lg.setLineWidth(2)
+      lg.circle("line", a.x, a.y, Rz)
+      if a.progress and a.progress > 0 then
+        lg.setColor(hc[1], hc[2], hc[3], 0.95)
+        lg.setLineWidth(8)
+        lg.arc("line", "open", a.x, a.y, Rz + 8, -math.pi / 2, -math.pi / 2 + math.pi * 2 * (a.progress / MOD.ALIEN_HOLD))
+      end
+      local f = R.font(15)
+      lg.setFont(f)
+      local txt = a.contested and "CONTESTED" or (a.holder and string.format("Capturing %d%%", a.progress / MOD.ALIEN_HOLD * 100) or "Hold the zone 15s to claim")
+      lg.setColor(0, 0, 0, 0.6)
+      lg.print(txt, a.x - f:getWidth(txt) / 2 + 2, a.y + Rz + 14)
+      lg.setColor(a.contested and 1 or 0.9, a.contested and 0.4 or 0.8, a.contested and 0.3 or 1)
+      lg.print(txt, a.x - f:getWidth(txt) / 2, a.y + Rz + 12)
+    end
+  end
+
+  -- nukes: everyone sees the launch, the missile and where it will land
+  local CMD = require("src.commander")
+  for _, n in ipairs(world.nukes or {}) do
+    local blink = 0.5 + 0.5 * math.sin(world.time * 10)
+    lg.setColor(1, 0.15, 0.1, 0.10 + 0.08 * blink)
+    lg.circle("fill", n.tx, n.ty, CMD.NUKE_RADIUS)
+    lg.setColor(1, 0.2, 0.1, 0.6 + 0.4 * blink)
+    lg.setLineWidth(3)
+    lg.circle("line", n.tx, n.ty, CMD.NUKE_RADIUS)
+    lg.line(n.tx - 24, n.ty, n.tx + 24, n.ty); lg.line(n.tx, n.ty - 24, n.tx, n.ty + 24)
+    -- trail and missile
+    local dx, dy = U.norm(n.tx - n.x, n.ty - n.y)
+    lg.setColor(1, 0.8, 0.5, 0.35)
+    lg.setLineWidth(6)
+    lg.line(n.x - dx * 90, n.y - dy * 90, n.x, n.y)
+    lg.setColor(0.95, 0.95, 0.95)
+    lg.setLineWidth(1)
+    lg.polygon("fill", n.x + dx * 16, n.y + dy * 16, n.x - dx * 10 - dy * 6, n.y - dy * 10 + dx * 6, n.x - dx * 10 + dy * 6, n.y - dy * 10 - dx * 6)
+    lg.setColor(1, 0.6, 0.2, blink)
+    lg.circle("fill", n.x - dx * 12, n.y - dy * 12, 5)
   end
 end
 

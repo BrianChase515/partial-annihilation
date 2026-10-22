@@ -3,6 +3,7 @@ local UI = require("src.ui")
 local R = require("src.render")
 local D = require("src.defs")
 local Maps = require("src.maps")
+local U_fmt = require("src.util").fmt
 
 local Menu = {}
 Menu.__index = Menu
@@ -22,6 +23,7 @@ function Menu.new(prev)
     { on = false, team = 4, level = 5, prof = 1 },
   }
   self.savedMap = prev and prev.savedMap or nil
+  self.mods = prev and prev.mods or { alien = false, drops = false, score = false, groovy = false }
   self.maps = Maps.load()
   self.t = 0
   self.shapes = {}
@@ -51,8 +53,14 @@ function Menu:rects()
   for i, o in ipairs(WATER) do
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 44, w = 110, h = 34, label = o[1], field = "water", value = i, rowLabel = i == 1 and "Water" or nil }
   end
+  -- modifiers (toggles, can combine)
+  local MODLIST = { { "alien", "Alien Tech" }, { "drops", "Dropships" }, { "score", "Score mode" }, { "groovy", "Groovy" } }
+  for i, m in ipairs(MODLIST) do
+    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 88, w = 110, h = 34, label = m[2], modkey = m[1],
+      active = self.mods[m[1]], rowLabel = i == 1 and "Modifiers" or nil }
+  end
   -- player slots
-  local ty = y + 112
+  local ty = y + 160
   for i, s in ipairs(self.slots) do
     local yy = ty + (i - 1) * 46
     local name = i == 1 and "You" or ("CPU " .. (i - 1))
@@ -78,7 +86,7 @@ function Menu:rects()
   local px = x0 + 580
   r[#r + 1] = { x = px, y = y, w = 300, h = 34, label = "Random new map", action = "random", active = not self.savedMap }
   for i, m in ipairs(self.maps) do
-    if i > 9 then break end
+    if i > 6 then break end
     local yy = y + 44 + (i - 1) * 40
     r[#r + 1] = { x = px, y = yy, w = 262, h = 34, label = m.name, map = m, active = self.savedMap and self.savedMap.name == m.name }
     r[#r + 1] = { x = px + 268, y = yy, w = 32, h = 34, label = "x", delmap = m }
@@ -143,7 +151,7 @@ function Menu:draw()
   -- column headers for player slots
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  local ty = y + 112
+  local ty = y + 160
   lg.print("Players", x0 - 130, ty - 22)
   lg.print("Team", x0 + 78, ty - 22)
   lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
@@ -151,7 +159,7 @@ function Menu:draw()
   lg.print("SAVED MAPS", x0 + 580, y - 22)
 
   local mx, my = love.mouse.getPosition()
-  local hoverProf
+  local hoverProf, hoverMod
   for _, r in ipairs(self:rects()) do
     if r.rowLabel then
       lg.setFont(R.font(16))
@@ -161,6 +169,7 @@ function Menu:draw()
     local hover = mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h
     local active = (r.field == "size" and self.size == r.value) or (r.field == "water" and self.water == r.value) or r.active
     if r.kind == "prof" and hover then hoverProf = self.slots[r.slot] end
+    if r.modkey and hover then hoverMod = r.modkey end
     if r.kind == "chip" then
       local c = D.teamColor[r.slot]
       local on = self.slots[r.slot].on
@@ -202,15 +211,37 @@ function Menu:draw()
   lg.setFont(R.font(14))
   lg.setColor(0.65, 0.72, 0.8)
   local desc
-  if hoverProf then desc = D.profiles[hoverProf.prof].key .. ": " .. D.profiles[hoverProf.prof].desc
+  local MODDESC = {
+    alien = "Alien Tech: a huge alien walker lands near the middle. Hold its zone 15s with no enemies inside to claim it. Repeats.",
+    score = "Score mode: kill-streak multiplier (holds until 10s with no enemy deaths), par time, difficulty bonus, leaderboard, high scores.",
+    drops = "Dropships: from 3:00, alien crews drop near the middle and wander. When you meet one, a coin flip decides: join you or attack.",
+    groovy = "Groovy: flower-power explosions, far-out colors and a slowly tripping landscape. Purely cosmetic.",
+  }
+  if hoverMod then desc = MODDESC[hoverMod]
+  elseif hoverProf then desc = D.profiles[hoverProf.prof].key .. ": " .. D.profiles[hoverProf.prof].desc
   else desc = "Same team number = allies. Hover a personality to see what it does." end
   lg.print(desc, x0, ty + 4 * 46 + 8)
   if self.savedMap then
     lg.setColor(0.6, 0.85, 0.65)
-    lg.print("Playing saved map: " .. self.savedMap.name .. "  (seed " .. self.savedMap.seed .. ")", x0 + 580, y + 44 + math.min(9, #self.maps) * 40 + 8)
+    lg.print("Playing saved map: " .. self.savedMap.name .. "  (seed " .. self.savedMap.seed .. ")", x0 + 580, y + 44 + math.min(6, #self.maps) * 40 + 8)
   elseif #self.maps == 0 then
     lg.setColor(0.5, 0.56, 0.64)
     lg.printf("No saved maps yet. In a game, open the menu (Esc) and choose \"Save this map\" to keep one you like.", x0 + 580, y + 48, 300)
+  end
+  -- high scores (Score mode)
+  self.scores = self.scores or require("src.scores").load()
+  local hy = y + 44 + 6 * 40 + 40
+  lg.setFont(R.font(13))
+  lg.setColor(0.55, 0.62, 0.7)
+  lg.print("HIGH SCORES (Score mode)", x0 + 580, hy)
+  if #self.scores == 0 then
+    lg.setColor(0.45, 0.5, 0.58)
+    lg.print("None yet - turn on Score mode and play.", x0 + 580, hy + 22)
+  end
+  for i, sc in ipairs(self.scores) do
+    if i > 5 then break end
+    lg.setColor(i == 1 and 1 or 0.85, i == 1 and 0.85 or 0.88, i == 1 and 0.35 or 0.92)
+    lg.print(string.format("%d. %s  %s  %s", i, U_fmt(sc.pts), sc.result, sc.date), x0 + 580, hy + 4 + i * 20)
   end
   lg.setFont(R.font(13))
   lg.setColor(0.5, 0.56, 0.64)
@@ -225,7 +256,8 @@ function Menu:mousepressed(x, y, b)
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       local s = r.slot and self.slots[r.slot]
       local dir = (b == 2) and -1 or 1
-      if r.field then self[r.field] = r.value; self.savedMap = nil
+      if r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
+      elseif r.field then self[r.field] = r.value; self.savedMap = nil
       elseif r.kind == "toggle" then
         s.on = not s.on
         -- keep slots contiguous so colors stay put
@@ -271,6 +303,7 @@ function Menu:options()
   local o = {
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
+    mods = { alien = self.mods.alien, drops = self.mods.drops, score = self.mods.score, groovy = self.mods.groovy },
   }
   if self.savedMap then
     o.seed = self.savedMap.seed
