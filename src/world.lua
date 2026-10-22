@@ -105,7 +105,7 @@ function W:spawn(key, team, x, y, built)
     end
     -- extractor on a rich offshore deposit
     local dp = d.place == "deposit" and self.map.deposit[self.map:idx(e.tx, e.ty)]
-    if dp and dp.sea then e.mods = { income = { metal = 1.0, energy = 0 } } end
+    if dp and (dp.sea or dp.rich) then e.mods = { income = { metal = 1.0, energy = 0 } } end
     e.angle = 0
     -- nudge any ground/sea units standing on the footprint out of the way
     if self.grid then

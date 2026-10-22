@@ -465,10 +465,10 @@ function M:placeDeposits(rng)
     end
     return true
   end
-  local function add(x, y)
+  local function add(x, y, rich)
     for _, f in ipairs(syms) do
       local sx, sy = f(x, y)
-      deps[#deps + 1] = { x = sx, y = sy }
+      deps[#deps + 1] = { x = sx, y = sy, rich = rich }
     end
   end
   -- near-base deposits
@@ -483,13 +483,29 @@ function M:placeDeposits(rng)
       add(x, y); placed = placed + 1
     end
   end
-  -- scattered deposits, often in small clusters
-  local target = math.floor(w * h / 260)
+  -- rich land deposits around the middle of the map: worth fighting over
+  local cx, cy = math.floor(w / 2), math.floor(h / 2)
+  local richWant, richN = #syms == 2 and 2 or 1, 0
   tries = 0
-  while #deps < target * 2 and tries < 5000 do
+  while richN < richWant and tries < 800 do
+    tries = tries + 1
+    local r = 2 + rng:random() * w * 0.09
+    local a = rng:random() * math.pi * 2
+    local x, y = math.floor(cx + math.cos(a) * r + 0.5), math.floor(cy + math.sin(a) * r + 0.5)
+    if okAll(x, y) then add(x, y, true); richN = richN + 1 end
+  end
+  -- scattered deposits: scarcer than they used to be, and thinner near the bases so
+  -- the metal that matters is out in the contested parts of the map
+  local target = math.floor(w * h / 380)
+  local far = w * 0.38
+  tries = 0
+  while #deps < target * 2 and tries < 8000 do
     tries = tries + 1
     local x, y = rng:random(2, w - 3), rng:random(2, h - 3)
-    if okAll(x, y) then
+    local dmin = math.huge
+    for _, st in ipairs(self.starts) do dmin = math.min(dmin, U.dist(x, y, st.x, st.y)) end
+    local weight = math.max(0.15, math.min(1, (dmin - 8) / far))
+    if rng:random() < weight and okAll(x, y) then
       add(x, y)
       -- buddy deposit nearby
       if rng:random() < 0.6 then

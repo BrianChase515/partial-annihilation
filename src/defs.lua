@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.6"  -- bump to start a fresh high-score season
+D.VERSION = "0.7"  -- bump to start a fresh high-score season
 
 D.units = {
   commander = {
@@ -128,7 +128,7 @@ D.units = {
     w = 1, h = 1, place = "deposit", hp = 400,
     income = { metal = 1.6 },
     cost = { metal = 50, energy = 300, work = 45 },
-    desc = "Build on a metal deposit. +1.6 metal per second (+2.6 on a rich offshore deposit).",
+    desc = "Build on a metal deposit. +1.6 metal per second (+2.6 on a rich deposit: gold ring in the middle, teal ring offshore).",
   },
   solar = {
     name = "Solar Collector", short = "E", domain = "building", building = true,

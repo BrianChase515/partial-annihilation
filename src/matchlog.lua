@@ -37,6 +37,11 @@ function L.start(game)
   self:raw(string.format("Map: %dx%d seed %d, water %.0f%% (%s), modifiers: %s, official score: %s",
     w.map.w, w.map.h, w.map.seed, 100 * water / total, w.map.ring and "ocean ring" or "no ring",
     #mods > 0 and table.concat(mods, ",") or "none", w.official and "yes" or "no"))
+  local land, rich, sea = 0, 0, 0
+  for _, dp in ipairs(w.map.deposits) do
+    if dp.sea then sea = sea + 1 elseif dp.rich then rich = rich + 1 else land = land + 1 end
+  end
+  self:raw(string.format("Metal deposits: %d land, %d rich land (center), %d rich offshore", land, rich, sea))
   for i, p in ipairs(game.players) do
     self:raw(string.format("  P%d %-7s team %d  %s", i, D.teamName[i] or "?", p.team or w.ally[i],
       p.human and "HUMAN" or (tostring(p.profileName or p.profile) .. " level " .. tostring(p.level))))

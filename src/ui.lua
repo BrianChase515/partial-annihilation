@@ -833,7 +833,8 @@ Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out 
 Goal: destroy the enemy Commanders. Lose yours and you're out.
 Veterancy: units level up (gold chevrons, max 5) from damage and kills: more damage, HP, fire rate, range.
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.
-The sea: teal-ringed offshore deposits are rich (+2.6 metal). Shipyards build Sea Constructors for them and
+Rich deposits (+2.6 metal): gold rings near the map center, teal rings offshore. Land metal near home is scarce.
+The sea: Shipyards build Sea Constructors for them and
   for Tidal Generators (+24 energy). Battleships (shipyard 4) shell anything within 25 tiles - hunt them down.
 ]]
 

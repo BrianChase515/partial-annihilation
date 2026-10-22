@@ -390,9 +390,9 @@ function R.drawWorld(cam, game)
   for _, dpos in ipairs(map.deposits) do
     local cx, cy = (dpos.x + 0.5) * T, (dpos.y + 0.5) * T
     if cx > x0 - T and cx < x1 + T and cy > y0 - T and cy < y1 + T then
-      if dpos.sea then
-        -- rich offshore deposit: teal ring
-        lg.setColor(0.35, 0.95, 0.9, 0.7)
+      if dpos.sea or dpos.rich then
+        -- rich deposit: teal ring offshore, gold ring on land
+        if dpos.sea then lg.setColor(0.35, 0.95, 0.9, 0.7) else lg.setColor(1, 0.8, 0.25, 0.85) end
         lg.setLineWidth(2)
         lg.circle("line", cx, cy, 14)
       end

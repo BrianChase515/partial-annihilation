@@ -36,8 +36,11 @@ Victory and defeat get their own fanfares. A robotic voice calls out "Warning. N
 
 Combine them however you like. Score keeps running, but only games without Alien Tech or Dropships count as official.
 
+### Metal you have to go and take
+Metal near your base is scarce. Most deposits sit out in the contested middle of the map, and the richest ones (+2.6 metal, against +1.6 for a normal deposit) are a gold-ringed cluster at the very center and teal-ringed fields offshore. Turtling at home means falling behind.
+
 ### A navy worth fighting for
-Most maps are ringed by ocean, and every body of water connects. The richest metal in the game sits offshore (teal rings), and only Sea Constructors can reach most of it. They also build Tidal Generators, which outproduce solar. A player who hides inland is leaving that economy to whoever controls the sea.
+Most maps are ringed by ocean, and every body of water connects. Much of the richest metal sits offshore, and only Sea Constructors can reach most of it. They also build Tidal Generators, which outproduce solar. A player who hides inland is leaving that economy to whoever controls the sea.
 
 The **Battleship** brings the sea to the land. It shells anything within 25 tiles: not much damage per shot, but constant pressure on a whole base. It's slow and expensive, and it can't hit aircraft or submarines, so everyone hunts it. The computer players send bombers and subs after any battleship near their base, escort their own with destroyers, and either besiege your coast or keep it home as a harbor guard.
 
