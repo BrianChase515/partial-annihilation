@@ -1096,7 +1096,8 @@ function M:buildImages()
       elseif t == M.LAND and self.river and self.river[i] then
         -- Arena river: shallow ford, walkable
         r, g, b = 0.22, 0.40, 0.46
-      elseif t == M.LAND then
+      elseif t == M.LAND or t == 4 then
+        -- (4 = a Commander Craft tree: grass underneath, the tree is drawn on top)
         local k = U.clamp((hv - self.waterLevel) * 3, 0, 1)
         r, g, b = 0.30 + k * 0.06, 0.42 + k * 0.03, 0.24 + k * 0.02
       elseif t == M.HILL then
@@ -1139,9 +1140,11 @@ function M:buildImages()
   for ty = 0, h - 1 do
     for tx = 0, w - 1 do
       local r, g, b = id:getPixel(tx * P + 4, ty * P + 4)
+      if self.terrain[ty * w + tx] == 4 then r, g, b = 0.12, 0.27, 0.12 end
       mm:setPixel(tx, ty, r, g, b, 1)
     end
   end
+  self.mmData = mm
   self.minimap = love.graphics.newImage(mm)
   self.minimap:setFilter("linear", "linear")
 end

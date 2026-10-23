@@ -768,8 +768,10 @@ function AI:thinkEconomy()
       end
       if not task then
         local wantAA = math.min(6, (enemyAir > 2 and 1 + math.floor(enemyAir / 4) or 0) + (t > 300 and self.diff.aaBonus or 0))
-        if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 then task = "shipyard"
-        elseif p.airFirst and airfacs == 0 and factories >= 1 and mFuture > 4 then task = "airfac"
+        -- (from level 5 the specialists grab land first: their plant comes once the economy runs)
+        local lateSpec = (self.diff.level or 5) >= 5 and (t < 200 or mFuture < 14)
+        if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "shipyard"
+        elseif p.airFirst and airfacs == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "airfac"
         elseif landfacs == 0 and factories >= 1 and mFuture > 6 then task = "landfac"
         elseif airfacs == 0 and mFuture > 6.5 and t > 150 then task = "airfac"
         elseif yards == 0 and hasWater and mFuture > 7.5 and t > 200 then task = "shipyard"
@@ -927,8 +929,10 @@ function AI:pickUnit(f)
   local builders = self:countPlanned("builder") + self:queued("builder")
   -- expand early: a third constructor right away, then one more every 2.5 minutes
   -- (Turtles get extra builders for their walls through builderBonus but expand slowly)
-  local wantBuilders = 3 + math.floor(t / 150) + self.diff.builderBonus
-  wantBuilders = math.min(wantBuilders, 7 + self.diff.builderBonus)
+  local lvl = self.diff.level or 5
+  -- better players expand much faster (a fourth constructor right away, then one every 100 s)
+  local wantBuilders = (lvl >= 5 and 4 + math.floor(t / 100) or 3 + math.floor(t / 150)) + self.diff.builderBonus
+  wantBuilders = math.min(wantBuilders, (lvl >= 5 and 8 or 7) + self.diff.builderBonus)
   local enemyAir = self:enemyAirCount()
   local enemySubs = self:enemyCount("sub")
   local enemyShips = self:enemyCount("sea") + enemySubs

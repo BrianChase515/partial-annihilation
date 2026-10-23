@@ -410,7 +410,7 @@ R.REL_COLOR = { me = { 1, 1, 1 }, ally = { 0.35, 1, 0.45 }, enemy = { 1, 0.35, 0
 
 -- progress to the next Commander level: frac (0..1), level, isMax
 function R.cmdXP(e)
-  local T = R.world and R.world.arena and require("src.arena").THRESHOLDS or require("src.commander").THRESHOLDS
+  local T = R.world and R.world.heroes and require("src.arena").THRESHOLDS or require("src.commander").THRESHOLDS
   local L = e.clevel or 0
   local lo = L > 0 and T[L] or 0
   local hi = T[L + 1]
@@ -422,7 +422,7 @@ end
 function R.drawNameplate(e, zoom)
   if e.key ~= "commander" or not e.alive or zoom < 0.3 then return end
   local rel = R.relation(e.team)
-  local A = R.world.arena and require("src.arena")
+  local A = R.world.heroes and require("src.arena")
   local cls = A and e.class and A.byClass[e.class]
   local tag = rel == "me" and "YOU" or (rel == "ally" and "ALLY" or (rel == "enemy" and "ENEMY" or ""))
   local who = cls and cls.name or D.teamName[e.team]
@@ -566,6 +566,7 @@ function R.drawWorld(cam, game)
   for _, e in ipairs(world.entities) do
     if e.alive and e.x > x0 - margin and e.x < x1 + margin and e.y > y0 - margin and e.y < y1 + margin then
       local show = e.dormant or world:isVisible(e) or (e.def.building and e.seen[world.playerTeam])
+      if e.inMine then show = false end
       if e.def.domain == "sub" and world:hostile(e.team, world.playerTeam) and not world.noFog then
         -- enemy subs are only revealed near your ships
         show = show and game:subRevealed(e)
@@ -593,6 +594,7 @@ function R.drawWorld(cam, game)
   end
 
   if world.arena and world.arena.jungle then require("src.jungle").draw(world) end
+  if world.craft then require("src.craft_ui").drawWorld(world, x0, y0, x1, y1, list) end
   for _, e in ipairs(list) do R.drawEntity(e, cam, sel[e]) end
 
   -- nano build beams

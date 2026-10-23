@@ -151,7 +151,7 @@ local function chain(w, src, x, y, dmg, bounces, jump, color)
 end
 
 local function later(w, delay, fn)
-  local st = w.arena
+  local st = w.hs or w.arena
   st.pending[#st.pending + 1] = { at = w.time + delay, fn = fn }
 end
 
@@ -251,9 +251,20 @@ local function charm(w, c, o, dur)
   o.team = c.team
   o.orders, o.path, o.chase, o.retaliate = {}, nil, nil, nil
   local st = w.arena
-  local core = st.cores[st.teamSide[o.charm.team]]
+  local core = st and st.cores and st.cores[st.teamSide[o.charm.team]]
   local tx, ty = o.x, o.y
-  if core and core.alive then tx, ty = core.x, core.y end
+  if core and core.alive then tx, ty = core.x, core.y
+  elseif w.craft then
+    -- Commander Craft: march on the nearest building of their own side
+    local best, bd
+    for _, b in ipairs(w.entities) do
+      if b.alive and b.def.building and b.team == o.charm.team then
+        local d = U.dist(o.x, o.y, b.x, b.y)
+        if not bd or d < bd then best, bd = b, d end
+      end
+    end
+    if best then tx, ty = best.x, best.y end
+  end
   w:issue(o, { type = "amove", x = tx, y = ty })
   fx(w, "curse", o.x, o.y, 30, 0.6)
 end
@@ -331,7 +342,7 @@ A.SKILLS = {
   raise = { name = "Raise Wrecks", aim = "point", range = 450, cd = 10, tags = { "summon" },
     desc = "Rebuilds up to 3 recent wrecks near the target as your drones (max 5, more with Legion).",
     use = function(w, c, tx, ty)
-      local st = w.arena
+      local st = w.hs or w.arena
       local maxN = 5 + ((c.mods and c.mods.extraMinions) or 0)
       local have = countOwned(w, c, "drone")
       local raised = 0
@@ -351,7 +362,7 @@ A.SKILLS = {
   corpseburst = { name = "Corpse Burst", aim = "point", range = 500, cd = 9, tags = { "dmg", "aoe" },
     desc = "Detonate wrecks near the target. Each one blasts its surroundings.",
     use = function(w, c, tx, ty)
-      local st = w.arena
+      local st = w.hs or w.arena
       local n = 0
       for i = #st.wrecks, 1, -1 do
         local wr = st.wrecks[i]
@@ -576,7 +587,7 @@ A.SKILLS = {
   sanctuary = { name = "Inner Sanctuary", aim = "self", range = 240, cd = 60, ult = true, tags = { "defend", "ult" },
     desc = "ULTIMATE: a holy ground for 7 seconds - allies inside take half damage, enemies inside are slowed.",
     use = function(w, c)
-      local st = w.arena
+      local st = w.hs or w.arena
       st.zones = st.zones or {}
       st.zones[#st.zones + 1] = { x = c.x, y = c.y, r = 240, untilT = w.time + 7, team = c.team, kind = "sanctuary" }
       fx(w, "ring", c.x, c.y, 240, 0.8, { color = { 1, 0.95, 0.6 } })
@@ -615,7 +626,8 @@ A.SKILLS = {
     use = function(w, c, tx, ty)
       local n = 0
       for _, o in ipairs(hostiles(w, c, tx, ty, 170)) do
-        if n < 4 and o.creep and not o.charm then charm(w, c, o, 7); n = n + 1 end
+        local able = o.creep or (w.craft and not o.def.building and o.key ~= "commander" and not o.def.worker)
+        if n < 4 and able and not o.charm then charm(w, c, o, 7); n = n + 1 end
       end
       if n == 0 then return false end
     end },
@@ -849,6 +861,8 @@ end
 function A.offer(w, e, kind)
   local cls = A.byClass[e.class]
   local pool = {}
+  -- every skill slot full (a Commander Craft hero starts with a skill): offer an upgrade instead
+  if kind == "skill" and e.skills and e.skills[1] and e.skills[2] and e.skills[3] then kind = "passive" end
   if kind == "skill" then
     for _, k in ipairs(cls.skills) do if not e.taken[k] then pool[#pool + 1] = k end end
   else
@@ -1139,15 +1153,40 @@ function A.update(w, dt)
     st.waveAt = st.waveAt + A.WAVE_EVERY
     A.spawnWave(w)
   end
-  -- delayed skill effects
-  for i = #st.pending, 1, -1 do
-    local p = st.pending[i]
-    if t >= p.at then table.remove(st.pending, i); p.fn() end
-  end
   -- respawns
   for tt = 1, w.np do
     local c = w.teams[tt].commander
     if c and not c.alive and c.respawnAt and t >= c.respawnAt and not st.sideDead[st.teamSide[tt]] then A.respawn(w, c) end
+  end
+  local tick = A.tickHeroes(w, dt, st)
+  if tick and st.jungle then require("src.jungle").update(w, dt) end
+  if tick then
+    -- fountain: heal friendly Commanders at their Core
+    for side = 1, st.nSides do
+      local core = st.cores[side]
+      if core and core.alive then
+        for _, tt in ipairs(st.sideTeams[side]) do
+          local c = w.teams[tt].commander
+          if c and c.alive and U.dist(c.x, c.y, core.x, core.y) < A.FOUNTAIN_R then
+            c.hp = math.min(c.maxhp, c.hp + c.maxhp * 0.025)
+            c.healing = 0.4
+          end
+        end
+      end
+    end
+  end
+end
+
+-- Hero effects shared by the Arena and Commander Craft: delayed skill effects, pulses,
+-- heal/damage over time, stances, hexes, shields, ground zones, auras, summons following.
+-- `st` is the mode's state table (it holds pending, wrecks, zones). Returns true on the
+-- quarter-second tick.
+function A.tickHeroes(w, dt, st)
+  local t = w.time
+  -- delayed skill effects
+  for i = #st.pending, 1, -1 do
+    local p = st.pending[i]
+    if t >= p.at then table.remove(st.pending, i); p.fn() end
   end
   -- wrecks fade after 40 seconds
   for i = #st.wrecks, 1, -1 do if t - st.wrecks[i].t > 40 then table.remove(st.wrecks, i) end end
@@ -1155,8 +1194,10 @@ function A.update(w, dt)
   st.slow = (st.slow or 0) - dt
   local tick = st.slow <= 0
   if tick then st.slow = 0.25 end
+  local heroes = {}
   for _, e in ipairs(w.entities) do
     if e.alive then
+      if e.key == "commander" and e.skills then heroes[#heroes + 1] = e end
       -- pulse skills (whirlwind, hammers, cyclone)
       if e.pulse then
         if t > e.pulse.untilT then e.pulse = nil
@@ -1186,7 +1227,7 @@ function A.update(w, dt)
       end
       -- gorilla stance regeneration
       if e.stanceRegen and e.alive then e.hp = math.min(e.maxhp, e.hp + e.maxhp * e.stanceRegen * dt) end
-      -- Sacrifice: the hexed creep bursts when the hex ends
+      -- Sacrifice: the hexed unit bursts when the hex ends
       if e.charm and t > e.charm.untilT and e.alive then
         local src = e.charm.src
         e.team = e.charm.team
@@ -1202,7 +1243,6 @@ function A.update(w, dt)
     end
   end
 
-  if tick and st.jungle then require("src.jungle").update(w, dt) end
   -- ground zones (Inner Sanctuary)
   if tick and st.zones then
     for i = #st.zones, 1, -1 do
@@ -1220,23 +1260,9 @@ function A.update(w, dt)
     end
   end
   if tick then
-    -- fountain: heal friendly Commanders at their Core
-    for side = 1, st.nSides do
-      local core = st.cores[side]
-      if core and core.alive then
-        for _, tt in ipairs(st.sideTeams[side]) do
-          local c = w.teams[tt].commander
-          if c and c.alive and U.dist(c.x, c.y, core.x, core.y) < A.FOUNTAIN_R then
-            c.hp = math.min(c.maxhp, c.hp + c.maxhp * 0.025)
-            c.healing = 0.4
-          end
-        end
-      end
-    end
     -- auras (Warden)
-    for tt = 1, w.np do
-      local c = w.teams[tt].commander
-      if c and c.alive and c.mods then
+    for _, c in ipairs(heroes) do
+      if c.mods then
         if c.mods.auraMight or c.mods.auraMend then
           for _, u in ipairs(friends(w, c, c.x, c.y, 350)) do
             if c.mods.auraMight then A.buff(u, "dmg", 1.2, 0.6, w) end
@@ -1266,6 +1292,7 @@ function A.update(w, dt)
       end
     end
   end
+  return tick
 end
 
 ---------------------------------------------------------------------------

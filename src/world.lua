@@ -6,6 +6,7 @@ local Map = require("src.map")
 local CMD = require("src.commander")
 local MODS = require("src.mods")
 local ARENA -- loaded lazily (src.arena requires this module's siblings)
+local CRAFT -- Commander Craft, loaded lazily too
 
 local W = {}
 W.__index = W
@@ -14,7 +15,12 @@ local CELL = 96
 
 function W.new(opts)
   local self = setmetatable({}, W)
-  if opts.arena then
+  if opts.craft then
+    ARENA = ARENA or require("src.arena")
+    CRAFT = CRAFT or require("src.craft")
+    self.craft = true
+    self.map = require("src.craft_map").generate(opts)
+  elseif opts.arena then
     ARENA = ARENA or require("src.arena")
     self.map = Map.generateArena(opts)
   else
@@ -64,7 +70,9 @@ function W.new(opts)
   MODS.init(self, opts.mods)
   -- random starting corners. On four-corner maps every player gets a random corner, so
   -- the enemy may be next to you or across the map; teammates get neighbouring corners.
-  if not opts.arena and not opts.fixedStarts then
+  -- heroes with skills and level-up cards: the Arena and Commander Craft
+  self.heroes = opts.arena or opts.craft or nil
+  if not opts.arena and not opts.craft and not opts.fixedStarts then
     if love.math.random() < 0.5 then self.map:flipX() end
     local sites = self.map.starts
     if #sites >= 4 and self.np <= #sites then
@@ -126,6 +134,9 @@ function W.new(opts)
   if opts.arena then
     ARENA.setup(self, opts)
     self.parTime = ARENA.par(self)
+  elseif opts.craft then
+    CRAFT.setup(self, opts)
+    self.parTime = CRAFT.par(self)
   end
   self:recomputeEconomy()
   self.grid = {}
@@ -301,6 +312,7 @@ end
 -- Resources are shared proportionally: if total demand exceeds what's available,
 -- every consumer is slowed by the same factor (computed from last tick's demand).
 function W:spend(team, cost, power, dt)
+  if self.craft then return power * dt / cost.work end
   local tm = self.teams[team]
   local f = power * dt / cost.work
   local m, en = cost.metal * f, cost.energy * f
@@ -520,7 +532,7 @@ end
 -- Commander progression (see src/commander.lua)
 
 function W:commanderXP(e, amount)
-  if self.arena then return ARENA.commanderXP(self, e, amount) end
+  if self.heroes then return ARENA.commanderXP(self, e, amount) end
   e.cxp = (e.cxp or 0) + amount
   while (e.clevel or 0) < CMD.MAX_LEVEL and e.cxp >= CMD.THRESHOLDS[(e.clevel or 0) + 1] do
     e.clevel = (e.clevel or 0) + 1
@@ -687,7 +699,7 @@ function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) end
 function W:speedOf(e)
   local flee = e.retreating and (e.key == "commander" and 1.5 or 1.25) or 1
   local sp = e.def.speed * (1 + 0.04 * (e.level or 0)) * flee * (self:modsOf(e).speed or 1)
-  if self.arena then
+  if self.heroes then
     sp = sp * (self:bv(e, "speed") or 1)
     if e.slowUntil and self.time < e.slowUntil then sp = sp * 0.6 end
   end
@@ -696,6 +708,7 @@ end
 
 -- Units out of combat near their Commander or a factory slowly repair
 function W:repairZones()
+  if self.craft then return end -- Commander Craft: healing comes from Clerics, skills and time
   -- Repair Aura: heals everything near the Commander, even mid-fight
   for t = 1, self.np do
     local c = self.teams[t].commander
@@ -730,6 +743,7 @@ end
 
 function W:gainXP(e, amount)
   if not e or not e.alive or not e.def.weapon then return end
+  if self.craft then return end -- Commander Craft: units only improve through research
   if e.key == "commander" or e.creep then return end
   e.xp = (e.xp or 0) + amount
   local L = e.level or 0
@@ -865,7 +879,8 @@ function W:fire(e, o)
     dmg = dmg * 1.25
   end
   if self.generals and not self.arena then dmg = dmg * self:generalBoost(e) end
-  if self.arena then
+  if self.craft then dmg = dmg * CRAFT.damageMul(self, e, o) end
+  if self.heroes then
     dmg = dmg * (self:bv(e, "dmg") or 1) * (e.dmgMul or 1)
     if o.def.building and m.breaker then dmg = dmg * m.breaker end
     if m.crit and math.random() < m.crit then dmg = dmg * 2 end
@@ -881,11 +896,11 @@ function W:fire(e, o)
     speed = w.speed, damage = dmg, splash = math.max(w.splash, m.splash or 0), team = e.team,
     weapon = wpn, sx = e.x, sy = e.y, source = e, hitsAir = m.hitsAir,
   }
-  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.arena and (self:bv(e, "rof") or 1) or 1)
-  if self.arena and (m.chill or e.stanceChill) then self.projectiles[#self.projectiles].chill = true end
-  if self.arena and e.stancePoison then self.projectiles[#self.projectiles].poison = e.stancePoison end
+  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.heroes and (self:bv(e, "rof") or 1) or 1)
+  if self.heroes and (m.chill or e.stanceChill) then self.projectiles[#self.projectiles].chill = true end
+  if self.heroes and e.stancePoison then self.projectiles[#self.projectiles].poison = e.stancePoison end
   -- melee fighters (Ascetic) strike instead of shoot: the blow lands at once and leaves no trail
-  if self.arena and m.melee then
+  if self.heroes and (m.melee or e.def.melee) then
     local p = self.projectiles[#self.projectiles]
     p.melee, p.speed = true, 4000
   end
@@ -921,7 +936,8 @@ end
 
 function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
-  if self.arena then
+  if self.craft then amount = amount * CRAFT.armorMul(self, o, attacker) end
+  if self.heroes then
     if o.protected then return end
     -- early towers are fortified: half damage for 2:30, then 25% less until 5:00
     if o.arenaTower and o.key ~= "core" then
@@ -1009,6 +1025,13 @@ end
 function W:kill(o, attacker)
   if not o.alive then return end
   self:remove(o)
+  if self.craft then
+    CRAFT.onKill(self, o, attacker)
+    if self.onKill then self.onKill(o, attacker) end
+    local size = o.def.building and o.def.radius * 1.4 or o.def.radius * 2
+    self.effects[#self.effects + 1] = { kind = "boom", x = o.x, y = o.y, t = 0, life = 0.6, size = size }
+    return
+  end
   if self.arena then
     ARENA.onKill(self, o, attacker)
     if o.key == "commander" then
@@ -1084,7 +1107,7 @@ function W:updateProjectiles(dt)
         if self.onImpact then self.onImpact(p) end
       elseif p.target and p.target.alive then
         if p.chill then p.target.slowUntil = math.max(p.target.slowUntil or 0, self.time + 1) end
-        if p.poison and self.arena then require("src.arena").dot(self, p.source, p.target, p.poison, 3) end
+        if p.poison and self.heroes then require("src.arena").dot(self, p.source, p.target, p.poison, 3) end
         self:damage(p.target, p.damage, p.source)
         self.effects[#self.effects + 1] = { kind = "hit", x = p.tx, y = p.ty, t = 0, life = p.melee and 0.22 or 0.15, size = p.melee and 13 or 6 }
       end
@@ -1172,7 +1195,7 @@ function W:updateUnit(e, dt)
   e.retreating = false
   if e.stunUntil and self.time < e.stunUntil then return end
   local regen = (e.mods and e.mods.regen) or e.def.regen
-  if e.key == "commander" and not self.arena then
+  if e.key == "commander" and not self.heroes then
     -- the Commander only repairs himself at his spawn point (his "base"); the Nano
     -- Regeneration upgrade works anywhere
     local tm = self.teams[e.team]
@@ -1294,6 +1317,8 @@ function W:updateUnit(e, dt)
     return
   elseif o.type == "build" then
     self:updateBuildOrder(e, o, dt)
+  elseif o.type == "harvest" then
+    CRAFT.updateHarvest(self, e, o, dt)
   elseif o.type == "repairzone" then
     self:updateRepairZone(e, o, dt)
   elseif o.type == "assist" then
@@ -1351,6 +1376,11 @@ function W:updateBuildOrder(e, o, dt)
     return
   end
   if not self:canPlace(o.key, o.tx, o.ty, e.team) then
+    self:popOrder(e)
+    return
+  end
+  -- Commander Craft: the full price is paid when the foundation goes down
+  if self.craft and not CRAFT.payFor(self, e.team, o.key, e) then
     self:popOrder(e)
     return
   end
@@ -1455,12 +1485,15 @@ function W:updateFactory(e, dt)
   if e.progress >= 1 then
     e.progress = 0
     local done = table.remove(e.queue, 1)
-    if e.repeatMode then e.queue[#e.queue + 1] = done end
+    if e.repeatMode and not self.craft then e.queue[#e.queue + 1] = done end
     self:produce(e, done)
+    -- Commander Craft: repeat re-orders (and pays again) if it can
+    if e.repeatMode and self.craft and not D.units[done].research and not D.units[done].heroRecruit then CRAFT.enqueue(self, e, done) end
   end
 end
 
 function W:produce(f, key)
+  if self.craft and CRAFT.produce(self, f, key) then return end
   local d = D.units[key]
   local T = self.T
   local x, y
@@ -1476,6 +1509,7 @@ function W:produce(f, key)
   end
   local u = self:spawn(key, f.team, x, y)
   u.homeX, u.homeY = x, y
+  if self.craft then CRAFT.onSpawn(self, u) end
   local rt = f.rally and f.rally.type == "guard" and f.rally.target
   if rt and rt.alive and self:layerOf(rt) == self:layerOf(u) or (rt and rt.alive and d.domain == "air") then
     -- rally onto a unit: new units join it and follow it around
@@ -1487,6 +1521,7 @@ function W:produce(f, key)
   else
     self:issue(u, { type = "move", x = x + math.random(-60, 60), y = y + 70 })
   end
+  if self.craft and u.def.worker and not (f.rally and f.rally.x) then CRAFT.autoGather(self, u) end
   if self.onProduce then self.onProduce(u, f) end
 end
 
@@ -1598,6 +1633,7 @@ function W:update(dt)
   self:updateProjectiles(dt)
   self:updateNukes(dt)
   if self.arena then ARENA.update(self, dt) end
+  if self.craft then CRAFT.update(self, dt) end
   MODS.updateAlien(self, dt)
   MODS.updateDrops(self, dt)
   MODS.updateScore(self, dt)

@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.12.1"  -- the first two numbers are the high-score season
+D.VERSION = "0.12.2"  -- the first two numbers are the high-score season
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 
 D.units = {
@@ -272,8 +272,8 @@ D.units = {
   },
   turret = {
     name = "Gun Tower", short = "T", domain = "building", building = true,
-    w = 1, h = 1, place = "land", hp = 1100,
-    weapon = { damage = 26, range = 240, reload = 0.5, speed = 650, targets = { land = true, sea = true } },
+    w = 1, h = 1, place = "land", hp = 1600,
+    weapon = { damage = 30, range = 300, reload = 0.5, speed = 650, targets = { land = true, sea = true } },
     cost = { metal = 85, energy = 650, work = 80 },
     desc = "Defensive tower against land units and ships.",
   },
@@ -285,6 +285,9 @@ D.units = {
     desc = "Defensive tower against aircraft.",
   },
 }
+
+-- Commander Craft (Warcraft-style mode): its own units, buildings, research and races
+require("src.craft_defs")(D)
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do
@@ -344,7 +347,7 @@ function D.aiLevel(n)
     waveGrow = 1 + math.floor(n / 4),
     firstWave = math.max(90, 540 - 75 * (n - 1)),
     maxFactories = 2 + math.floor(n / 2),
-    turrets = 1 + math.floor(n / 3),
+    turrets = 1 + math.floor(n / 3) + (n >= 5 and 1 or 0),
     builderBonus = n >= 7 and 1 or 0,
     retreat = n >= 4,          -- pulls badly damaged units home
     raids = n >= 6,            -- occasional harassment of outlying extractors

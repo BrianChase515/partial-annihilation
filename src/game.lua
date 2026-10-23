@@ -11,6 +11,7 @@ local MUSIC = require("src.music")
 local MatchLog = require("src.matchlog")
 local ARENA = require("src.arena")
 local ArenaAI = require("src.arena_ai")
+local CG -- Commander Craft player logic (loaded for that mode)
 
 local G = {}
 G.__index = G
@@ -35,15 +36,16 @@ function G.new(opts)
     }
   end
   if opts.autotest then
-    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", class = players[1].class }
+    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", class = players[1].class, race = players[1].race }
   end
   self.arena = opts.mode == "arena"
+  self.craft = opts.mode == "craft"
   self.players = players
   local income = {}
   for i, p in ipairs(players) do income[i] = p.human and 1 or D.aiLevel(p.level).income end
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
-    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, template = opts.template,
+    playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, craft = self.craft, template = opts.template,
   })
   local world = self.world
   world.humanTeams = {}
@@ -51,7 +53,13 @@ function G.new(opts)
   R.init(world)
   self.ais = {}
   for i, p in ipairs(players) do
-    if self.arena then
+    if self.craft then
+      if not p.human then
+        local ai = require("src.craft_ai").new(world, i, p.level)
+        self.ais[#self.ais + 1] = ai
+        p.profileName = ai.profileName
+      end
+    elseif self.arena then
       if not p.human then
         local ai = ArenaAI.new(world, i, p.level)
         self.ais[#self.ais + 1] = ai
@@ -67,7 +75,7 @@ function G.new(opts)
     if self.log then self.log:event(string.format("%s Commander reached level %d", D.teamName[e.team] or "?", e.clevel or 0)) end
     if e.team == 1 then
       self.stats.cmdLevel = e.clevel
-      if self.arena then
+      if self.arena or self.craft then
         if offer and #offer > 0 then
           self:notice("Level " .. e.clevel .. "!  " .. (offer[1].skill and "Choose a new skill" or "Choose an upgrade") .. " (Z / X)", 3)
         elseif not offer then
@@ -313,6 +321,10 @@ function G.new(opts)
       if self.log and def.ult then self.log:event(string.format("%s used %s", D.teamName[c.team], def.name)) end
     end
   end
+  if self.craft then
+    CG = require("src.craft_game")
+    CG.init(self)
+  end
   self.lastAttackNotice = -100
   self.voiceState = { cmdHp = c.hp, nukeReady = false, lowM = 0, lowE = 0 }
   if not self.opts.autotest then VOICE.say("commander_online") end
@@ -419,6 +431,7 @@ end
 function G:selectedBuilders()
   local out = {}
   if self.arena then return out end
+  if self.craft then return CG.selectedBuilders(self) end
   for _, e in ipairs(self:selectedList()) do
     if e.def.builds and not e.def.factory and e.built >= 1 then out[#out + 1] = e end
   end
@@ -435,6 +448,7 @@ end
 
 -- What the command card shows: a builder's build list or a factory's unit list
 function G:commandContext()
+  if self.craft then return CG.commandContext(self) end
   local b = self:selectedBuilders()
   if #b > 0 then return "builder", b[1].def.builds, b end
   local f = self:selectedFactories()
@@ -550,6 +564,7 @@ function G:rightClick(wx, wy, queue)
     end
     return
   end
+  if self.craft and CG.rightClick(self, wx, wy, queue) then return end
   if self.arena and target and target.creep and world:allied(target.team, 1) then
     local ok = false
     for _, u in ipairs(units) do
@@ -602,7 +617,7 @@ function G:orderAction(action, shift)
   local slot = tonumber(tostring(action):match("^skill(%d)"))
   if slot then
     -- clicking a targeted skill's button waits for a click on the map
-    local c = self:myCommander()
+    local c = self.craft and CG.activeHero(self) or self:myCommander()
     local sk = c and c.skills and c.skills[slot]
     if sk and ARENA.SKILLS[sk.key].aim == "point" then
       self.mode, self.skillSlot = "skill", slot
@@ -629,6 +644,8 @@ function G:orderAction(action, shift)
   elseif action == "destroy" then self:selfDestruct()
   elseif action == "army" then self:selectAllArmy()
   elseif action == "half" then if shift then self:selectOtherHalf() else self:selectHalf() end
+  elseif action == "builder" and self.craft then CG.idleWorker(self)
+  elseif action == "cmd" and self.craft then CG.cycleHero(self)
   elseif action == "builder" then self:selectIdleBuilder()
   elseif action == "cmd" then
     local c = self.world.teams[1].commander
@@ -658,6 +675,7 @@ end
 
 -- Arena: use the skill in a slot at the mouse position
 function G:useSkill(slot)
+  if self.craft then return CG.useSkill(self, slot) end
   local c = self.world.teams[1].commander
   if not c or not c.alive then return end
   local mx, my = love.mouse.getPosition()
@@ -877,6 +895,7 @@ function G:builderCan(b, key)
 end
 
 function G:queueUnit(key, count, remove)
+  if self.craft then return CG.queueUnit(self, key, count, remove) end
   local factories = {}
   for _, f in ipairs(self:selectedFactories()) do
     for _, k in ipairs(f.def.builds) do if k == key then factories[#factories + 1] = f; break end end
@@ -1312,7 +1331,7 @@ function G:mousepressed(x, y, button)
       self.mode = nil
       return
     elseif self.mode == "skill" then
-      local c = self:myCommander()
+      local c = self.craft and CG.activeHero(self) or self:myCommander()
       if c then
         local ok, why = ARENA.useSkill(self.world, c, self.skillSlot, wx, wy)
         if not ok and why then self:notice(why, 1.2) end
@@ -1622,6 +1641,12 @@ function G:keypressed(key)
     return
   end
   if key == "d" and self.holdToggle then self.holdToggle = false end
+  if self.craft then
+    if CG.heroKey(self, key) then return end
+    if key == "n" then return end
+    if key == "c" and not shift then CG.cycleHero(self); return end
+    if key == "tab" then CG.idleWorker(self); return end
+  end
   if self.arena then
     -- Arena: Q W E R fire skills at the mouse; F heads home to heal
     for slot, k in ipairs(ARENA.KEYS) do
@@ -1750,6 +1775,7 @@ function G:namingKey(key)
 end
 
 function G:myCommander()
+  if self.craft then return CG.offerHero(self) end
   local c = self.world.teams[1].commander
   if c and c.alive then return c end
 end

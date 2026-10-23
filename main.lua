@@ -79,6 +79,22 @@ function love.load(args)
     end
   end
   for i, a in ipairs(args or {}) do
+    -- love . --crafttest <minutes> <seed> <levelA/levelB> [raceA,raceB] [classA,classB]
+    if a == "--crafttest" then
+      autotest = { minutes = tonumber(args[i + 1]) or 20, seed = tonumber(args[i + 2]) or 5, size = 88, craft = true }
+      local la, lb = (args[i + 3] or "5/5"):match("^(%d+)/(%d+)$")
+      local races, classes = {}, {}
+      for k in (args[i + 4] or ""):gmatch("[^,]+") do races[#races + 1] = k end
+      for k in (args[i + 5] or ""):gmatch("[^,]+") do classes[#classes + 1] = k end
+      local players = {
+        { ally = 1, level = tonumber(la) or 5, race = races[1], class = classes[1] },
+        { ally = 2, level = tonumber(lb) or 5, race = races[2], class = classes[2] },
+      }
+      startGame({ size = 88, seed = autotest.seed, autotest = true, players = players, mode = "craft" })
+      return
+    end
+  end
+  for i, a in ipairs(args or {}) do
     -- love . --arenatest <minutes> <seed> <size> <1v1|2v2|1v2> <level> [class1,class2,...]
     if a == "--arenatest" then
       autotest = { minutes = tonumber(args[i + 1]) or 20, seed = tonumber(args[i + 2]) or 5, size = tonumber(args[i + 3]) or 80, arena = true }
@@ -164,7 +180,32 @@ local function runAutotest()
   while world.time < maxSec and not world.over do
     world:update(dt)
     for _, ai in ipairs(game.ais) do ai:update(dt) end
-    if world.arena and world.time >= nextReport then
+    if world.craft and world.time >= nextReport then
+      nextReport = nextReport + 60
+      for t = 1, world.np do
+        local tm = world.teams[t]
+        local kinds, workers, gold, wood = {}, 0, 0, 0
+        for _, e in ipairs(world.entities) do
+          if e.alive and e.team == t then
+            kinds[e.key] = (kinds[e.key] or 0) + 1
+            local o = e.orders and e.orders[1]
+            if e.def.worker then workers = workers + 1 end
+            if o and o.type == "harvest" then if o.kind == "gold" then gold = gold + 1 else wood = wood + 1 end end
+          end
+        end
+        local ks = {}
+        for k, n in pairs(kinds) do ks[#ks + 1] = k .. "=" .. n end
+        table.sort(ks)
+        local heroes = {}
+        for _, h in ipairs(require("src.craft").heroesOf(world, t, true)) do
+          heroes[#heroes + 1] = string.format("%s L%d%s", h.class, h.clevel or 0, h.alive and "" or " DEAD")
+        end
+        print(string.format("[%4ds] T%d %s tier%d gold %d (+%d/min) wood %d (+%d/min) food %d/%d workers %d (g%d w%d) | heroes %s | %s",
+          world.time, t, tm.race, tm.tier, tm.gold, tm.goldRate or 0, tm.wood, tm.woodRate or 0, tm.foodUsed or 0, tm.foodCap or 0,
+          workers, gold, wood, table.concat(heroes, ", "), table.concat(ks, " ")))
+      end
+      io.stdout:flush()
+    elseif world.arena and world.time >= nextReport then
       nextReport = nextReport + 60
       local st = world.arena
       local alive = {}
