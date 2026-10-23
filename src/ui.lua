@@ -153,7 +153,7 @@ function UI.drawArenaTop(game)
   for _, t in ipairs(st.sideTeams[1]) do deaths = deaths + (st.deaths[t] or 0) end
   lg.setFont(font(14))
   lg.setColor(0.85, 0.9, 0.95)
-  local txt = string.format("Kills %d  Deaths %d     Towers %d vs %d%s     Next wave %ds", st.kills[1], deaths, mine, theirs,
+  local txt = string.format("Kills %d  Deaths %d   Towers %d vs %d%s   Wave in %ds", st.kills[1], deaths, mine, theirs,
     st.ffa and string.format("  (%d rivals left)", (function() local n = 0; for sd = 2, st.nSides do if not st.sideDead[sd] then n = n + 1 end end; return n end)()) or "",
     math.max(0, math.ceil(st.waveAt - w.time)))
   if not c.alive and c.respawnAt then
@@ -176,14 +176,62 @@ function UI.drawTop(game)
   resourceBar(370, 7, "ENERGY", tm.energy, tm.eStore, tm.eIncome, tm.eSpend, { 1, 0.85, 0.3 })
   end
   if tm.stalled and not game.arena then
+    -- under the bar, centered, so it never collides with the bar's contents
     lg.setFont(font(13))
+    local msg = "LOW RESOURCES - building slowed"
+    local mw = font(13):getWidth(msg) + 20
+    lg.setColor(0.08, 0.04, 0.04, 0.8)
+    lg.rectangle("fill", w / 2 - mw / 2, UI.TOP_H + 4, mw, 22, 4)
     lg.setColor(1, 0.4, 0.3, 0.6 + 0.4 * math.sin(love.timer.getTime() * 6))
-    lg.print("LOW RESOURCES - building slowed", (game.chipsRight or (732 + game.world.np * 22)) + 8, 11)
+    lg.print(msg, w / 2 - mw / 2 + 10, UI.TOP_H + 7)
+  end
+  -- right side: clickable controls (speed, pause, help, menu), then time and unit count
+  local t = game.world.time
+  local units = 0
+  for _, e in ipairs(game.world.entities) do if e.team == 1 and not e.def.building then units = units + 1 end end
+  local mx, my = love.mouse.getPosition()
+  local btns = {}
+  local x = w - 10
+  local function addBtn(label, action, bw)
+    lg.setFont(font(13))
+    bw = bw or (font(13):getWidth(label) + 18)
+    x = x - bw
+    btns[#btns + 1] = { x = x, y = 6, w = bw, h = UI.TOP_H - 12, label = label, action = action }
+    x = x - 6
+  end
+  addBtn("Menu", "menu")
+  addBtn("Help", "help")
+  addBtn(game.paused and "Resume" or "Pause", "pause", 70)
+  addBtn("+", "faster", 26)
+  addBtn(string.format("%.1fx", game.speed), "speed1", 46)
+  addBtn("-", "slower", 26)
+  for _, b in ipairs(btns) do
+    local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
+    local active = (b.action == "pause" and game.paused)
+    lg.setColor(active and 0.45 or (hover and 0.22 or 0.13), hover and 0.3 or 0.17, hover and 0.38 or 0.22)
+    lg.rectangle("fill", b.x, b.y, b.w, b.h, 4)
+    lg.setColor(0.85, 0.9, 0.95)
+    lg.setFont(font(13))
+    lg.print(b.label, b.x + b.w / 2 - font(13):getWidth(b.label) / 2, b.y + 4)
+  end
+  game.topBtns = btns
+  local s = string.format("%d:%02d    Units %d    Speed", math.floor(t / 60), math.floor(t % 60), units)
+  if game.paused then s = "PAUSED    " .. s end
+  lg.setFont(font(13))
+  lg.setColor(0.8, 0.85, 0.9)
+  lg.print(s, x - font(13):getWidth(s) - 4, 11)
+  -- player chips sit just left of the clock; measure first, then draw
+  do
+    local world = game.world
+    local seen, groups = {}, 0
+    for i = 1, world.np do if not seen[world.ally[i]] then seen[world.ally[i]] = true; groups = groups + 1 end end
+    local cw = world.np * 20 + groups * 4 + (groups > 1 and (font(12):getWidth("vs") + 6) or 0) + math.max(0, groups - 2) * 6
+    game.chipsX = math.floor(x - font(13):getWidth(s) - 4 - 18 - cw)
   end
   -- player chips grouped by side: YOUR TEAM [you][allies]  VS  [enemy team] [enemy team]...
   do
     local world = game.world
-    local cx = 726
+    local cx = game.chipsX or 726
     local function chip(i)
       local cr, cg, cb = R.teamColor(i)
       local dead = world.teams[i].dead
@@ -234,41 +282,6 @@ function UI.drawTop(game)
     end
     game.chipsRight = cx
   end
-  -- right side: clickable controls (speed, pause, help, menu), then time and unit count
-  local t = game.world.time
-  local units = 0
-  for _, e in ipairs(game.world.entities) do if e.team == 1 and not e.def.building then units = units + 1 end end
-  local mx, my = love.mouse.getPosition()
-  local btns = {}
-  local x = w - 10
-  local function addBtn(label, action, bw)
-    lg.setFont(font(13))
-    bw = bw or (font(13):getWidth(label) + 18)
-    x = x - bw
-    btns[#btns + 1] = { x = x, y = 6, w = bw, h = UI.TOP_H - 12, label = label, action = action }
-    x = x - 6
-  end
-  addBtn("Menu", "menu")
-  addBtn("Help", "help")
-  addBtn(game.paused and "Resume" or "Pause", "pause", 70)
-  addBtn("+", "faster", 26)
-  addBtn(string.format("%.1fx", game.speed), "speed1", 46)
-  addBtn("-", "slower", 26)
-  for _, b in ipairs(btns) do
-    local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
-    local active = (b.action == "pause" and game.paused)
-    lg.setColor(active and 0.45 or (hover and 0.22 or 0.13), hover and 0.3 or 0.17, hover and 0.38 or 0.22)
-    lg.rectangle("fill", b.x, b.y, b.w, b.h, 4)
-    lg.setColor(0.85, 0.9, 0.95)
-    lg.setFont(font(13))
-    lg.print(b.label, b.x + b.w / 2 - font(13):getWidth(b.label) / 2, b.y + 4)
-  end
-  game.topBtns = btns
-  local s = string.format("%d:%02d    Units %d    Speed", math.floor(t / 60), math.floor(t % 60), units)
-  if game.paused then s = "PAUSED    " .. s end
-  lg.setFont(font(13))
-  lg.setColor(0.8, 0.85, 0.9)
-  lg.print(s, x - font(13):getWidth(s) - 4, 11)
 end
 
 ---------------------------------------------------------------------------
@@ -294,6 +307,7 @@ function UI.drawLeaderboard(game)
   for i = 2, #rows do if rows[i].ally ~= rows[i - 1].ally then seps = seps + 1 end end
   local bh = 34 + #rows * rh + seps * 8
   panelBox(x, y, bw, bh, 0.86)
+  game.scoreBottom = y + bh
   lg.setFont(font(13))
   lg.setColor(1, 0.85, 0.35)
   local t, par = world.time, world.parTime
@@ -326,6 +340,72 @@ function UI.drawLeaderboard(game)
     end
     yy = yy + rh
   end
+end
+
+---------------------------------------------------------------------------
+-- Commander card (top right, under the scoreboard): health, level, XP, status.
+-- Click it to jump to him.
+
+function UI.drawCommanderCard(game)
+  local world = game.world
+  local c = world.teams[1].commander
+  if not c then return end
+  local w = lg.getWidth()
+  local bw, bh = 236, 58
+  local x, y = w - bw - 10, (world.score and game.scoreBottom or UI.TOP_H) + 6
+  game.cmdCard = { x = x, y = y, w = bw, h = bh }
+  local hitRecently = c.alive and world.time - (c.lastHit or -99) < 1.2
+  panelBox(x, y, bw, bh, 0.86)
+  if hitRecently then
+    lg.setColor(1, 0.2, 0.15, 0.25 + 0.25 * math.sin(love.timer.getTime() * 14))
+    lg.rectangle("fill", x, y, bw, bh, 6)
+  end
+  lg.setFont(font(13))
+  lg.setColor(0.95, 0.85, 0.5)
+  local A = world.arena and require("src.arena")
+  local cls = A and c.class and A.byClass[c.class]
+  local L = c.clevel or 0
+  lg.print(string.format("%s  Lv %d", cls and cls.name or "COMMANDER", L), x + 10, y + 6)
+  -- status on the right
+  local status, sc = nil, { 0.7, 0.8, 0.9 }
+  if not c.alive then
+    status = c.respawnAt and string.format("respawn %ds", math.max(0, math.ceil(c.respawnAt - world.time))) or "DESTROYED"
+    sc = { 1, 0.4, 0.35 }
+  elseif world:isFleeing(c) then status, sc = "fleeing", { 1, 0.75, 0.3 }
+  elseif c.disarmed then status, sc = "powered down", { 1, 0.75, 0.3 }
+  elseif c.healing and c.healing > 0 and c.hp < c.maxhp then status, sc = "repairing", { 0.5, 1, 0.6 }
+  elseif hitRecently then status, sc = "UNDER FIRE", { 1, 0.4, 0.35 } end
+  if status then
+    lg.setFont(font(11))
+    lg.setColor(sc[1], sc[2], sc[3])
+    lg.print(status, x + bw - 10 - font(11):getWidth(status), y + 8)
+  end
+  -- health
+  local frac = c.alive and c.hp / c.maxhp or 0
+  lg.setColor(0.12, 0.14, 0.18)
+  lg.rectangle("fill", x + 10, y + 26, bw - 20, 12, 3)
+  lg.setColor(0.2 + (1 - frac) * 0.8, 0.3 + frac * 0.6, 0.15)
+  lg.rectangle("fill", x + 10, y + 26, (bw - 20) * frac, 12, 3)
+  lg.setFont(font(10))
+  lg.setColor(1, 1, 1)
+  local ht = c.alive and string.format("%d / %d", math.floor(c.hp), c.maxhp) or "-"
+  lg.print(ht, x + bw / 2 - font(10):getWidth(ht) / 2, y + 26)
+  -- XP
+  local xf, _, max = R.cmdXP(c)
+  lg.setColor(0.1, 0.08, 0.2)
+  lg.rectangle("fill", x + 10, y + 43, bw - 20, 6, 2)
+  if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.65, 0.55, 1) end
+  lg.rectangle("fill", x + 10, y + 43, (bw - 20) * xf, 6, 2)
+end
+
+function UI.cmdCardClick(game, x, y)
+  local r = game.cmdCard
+  if r and x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
+    local c = game.world.teams[1].commander
+    if c and c.alive then game:centerOn(c.x, c.y); game:select({ c }) end
+    return true
+  end
+  return false
 end
 
 ---------------------------------------------------------------------------
@@ -1325,6 +1405,7 @@ function UI.draw(game)
   UI.drawSidebar(game)
   UI.drawTop(game)
   UI.drawLeaderboard(game)
+  UI.drawCommanderCard(game)
   -- bottom panel
   lg.setColor(0.06, 0.08, 0.11, 0.95)
   lg.rectangle("fill", 0, L.panelY, w, UI.PANEL_H)
@@ -1479,6 +1560,7 @@ function UI.click(game, x, y, b)
   local w, h = lg.getDimensions()
   local L = layout(w, h)
   if game.showHelp then game.showHelp = false; return true end
+  if b == 1 and UI.cmdCardClick(game, x, y) then return true end
   for _, ob in ipairs(game.offerBtns or {}) do
     if x >= ob.x and x <= ob.x + ob.w and y >= ob.y and y <= ob.y + ob.h then
       game:pickUpgrade(ob.i)
