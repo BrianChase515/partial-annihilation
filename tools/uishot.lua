@@ -39,8 +39,21 @@ local function script(mode, secs)
     -- a skill call-out for the camera
     w.effects[#w.effects + 1] = { kind = "label", text = "Frost Nova", x = c.x + 120, y = c.y - 60, t = 0.3, life = 1.6, color = { 1, 0.5, 0.42 }, size = 13 }
   end
+  if tmpl then
+    -- also show the jungle panel at a normal zoom
+    w.noFog = false
+    game.cam.zoom = 1
+    game:centerOn(c.x, c.y)
+    for _ = 1, 4 do game:update(1 / 30); frame() end
+  end
   pending = "uishot_" .. mode .. ".png"
   frame(); frame()
+  if os.getenv("PA_OVER") and w.arena then
+    require("src.arena").eliminateSide(w, 2)
+    for _ = 1, 30 do game:update(1 / 30); frame() end
+    pending = "uishot_" .. mode .. "_over.png"
+    frame(); frame()
+  end
   print("UISHOT", love.filesystem.getSaveDirectory() .. "/" .. "uishot_" .. mode .. ".png")
 end
 function S.start(fn, mode, secs) startFn = fn; co = coroutine.create(function() script(mode, secs) end) end

@@ -411,12 +411,88 @@ function UI.drawCommanderCard(game)
   lg.setColor(1, 1, 1)
   local ht = c.alive and string.format("%d / %d", math.floor(c.hp), c.maxhp) or "-"
   lg.print(ht, x + bw / 2 - font(10):getWidth(ht) / 2, y + 26)
+  game.cardBottom = y + bh
   -- XP
   local xf, _, max = R.cmdXP(c)
   lg.setColor(0.1, 0.08, 0.2)
   lg.rectangle("fill", x + 10, y + 43, bw - 20, 6, 2)
   if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.65, 0.55, 1) end
   lg.rectangle("fill", x + 10, y + 43, (bw - 20) * xf, 6, 2)
+end
+
+-- Arena jungle maps: who holds which shrine and what it's worth, the Crest, and the Colossus
+function UI.drawJunglePanel(game)
+  local world = game.world
+  local st = world.arena
+  local j = st and st.jungle
+  if not j then return end
+  local J = require("src.jungle")
+  local w = lg.getWidth()
+  local t = world.time
+  local mySide = st.teamSide[1]
+  -- one line per side that holds something, then the Colossus
+  local lines = {}
+  for side = 1, st.nSides do
+    local held = 0
+    for _, sh in ipairs(j.shrines) do if sh.owner == side then held = held + 1 end end
+    local crest = j.crest[side] and t < j.crest[side] and (j.crest[side] - t) or nil
+    if held > 0 or crest or side == mySide then
+      lines[#lines + 1] = { side = side, held = held, crest = crest }
+    end
+  end
+  local bw = UI.SCORE_W
+  local crests = 0
+  for _, l in ipairs(lines) do if l.crest then crests = crests + 1 end end
+  local bh = 26 + #lines * 20 + crests * 18 + 20
+  local x, y = w - bw - 10, (game.cardBottom or (UI.TOP_H + 200)) + 6
+  panelBox(x, y, bw, bh, 0.86)
+  lg.setFont(font(12))
+  lg.setColor(0.72, 0.42, 1)
+  lg.print("JUNGLE", x + 10, y + 6)
+  lg.setColor(0.6, 0.66, 0.74)
+  local free = 0
+  for _, sh in ipairs(j.shrines) do if not sh.owner then free = free + 1 end end
+  local note = t < J.SHRINE_FIRST and string.format("shrines open in %ds", math.ceil(J.SHRINE_FIRST - t))
+    or (free > 0 and (free .. " shrine" .. (free > 1 and "s" or "") .. " unclaimed") or "")
+  lg.print(note, x + bw - 10 - font(12):getWidth(note), y + 6)
+  local yy = y + 26
+  for _, l in ipairs(lines) do
+    local friend = l.side == mySide
+    local cr, cg, cb = R.teamColor(st.sideOwner[l.side])
+    lg.setColor(cr, cg, cb)
+    lg.rectangle("fill", x + 10, yy + 3, 10, 10, 2)
+    lg.setColor(1, 1, 1, 0.92)
+    lg.print(friend and "Your side" or (st.ffa and D.teamName[st.sideOwner[l.side]] or "Enemy"), x + 26, yy)
+    local bx = x + 100
+    for k = 1, l.held do
+      lg.setColor(cr, cg, cb)
+      lg.polygon("fill", bx + 5, yy + 1, bx + 10, yy + 8, bx + 5, yy + 15, bx, yy + 8)
+      bx = bx + 13
+    end
+    local txt = l.held > 0 and string.format("+%d%% speed & dmg", math.floor(J.SHRINE_BONUS * 100 * l.held + 0.5)) or "no shrines"
+    if l.held > 0 then lg.setColor(0.85, 0.9, 0.95) else lg.setColor(0.55, 0.6, 0.66) end
+    lg.print(txt, math.max(bx + 4, x + 128), yy)
+    yy = yy + 20
+    if l.crest then
+      lg.setColor(1, 0.8, 0.35)
+      lg.setFont(font(11))
+      lg.print(string.format("Crest %d:%02d: +20%% dmg, tougher creeps", math.floor(l.crest / 60), math.floor(l.crest % 60)), x + 26, yy - 1)
+      lg.setFont(font(12))
+      yy = yy + 18
+    end
+  end
+  -- the Colossus
+  local ctext
+  if j.boss and j.boss.alive then ctext = string.format("Colossus AWAKE  %d%%", math.floor(j.boss.hp / j.boss.maxhp * 100 + 0.5))
+  elseif #j.pits > 0 then
+    local left = math.max(0, j.bossAt - t)
+    ctext = string.format("Colossus %s %d:%02d", j.boss == nil and t < J.BOSS_FIRST and "wakes in" or "returns in", math.floor(left / 60), math.floor(left % 60))
+  end
+  if ctext then
+    lg.setColor(1, 0.6, 0.45)
+    lg.print(ctext, x + 10, yy)
+  end
+  game.jungleRect = { x = x, y = y, w = bw, h = bh }
 end
 
 function UI.cmdCardClick(game, x, y)
@@ -1361,7 +1437,33 @@ function UI.drawOver(game)
     { "Commander level", tostring(st.cmdLevel or 0) .. ((st.nukes or 0) > 0 and ("   nukes launched " .. st.nukes) or "") },
     { "Best kill streak", sc and (sc.bestStreak .. " kills  (x" .. string.format("%.1f", sc.bestMult) .. ")") or "-" },
   } end
-  for i, r in ipairs(rows) do row(lx, ly + 6 + i * 24, r[1], r[2], 410) end
+  -- rows; a value too long for one line (3v3 opponent lists) wraps underneath in a smaller font
+  local yy = ly + 30
+  -- split "ally ..." entries of the lineup into their own row
+  for i, r in ipairs(rows) do
+    if r[1] == "Opponents" and r[2]:find("ally ") then
+      local opp, al = {}, {}
+      for part in (r[2] .. ", "):gmatch("(.-), ") do
+        if part:sub(1, 5) == "ally " then al[#al + 1] = part:sub(6) else opp[#opp + 1] = part end
+      end
+      r[2] = table.concat(opp, ", ")
+      table.insert(rows, i + 1, { "Allies", table.concat(al, ", ") })
+      break
+    end
+  end
+  for _, r in ipairs(rows) do
+    local lw = font(14):getWidth(r[1])
+    if font(14):getWidth(r[2]) <= 410 - lw - 14 then
+      row(lx, yy, r[1], r[2], 410)
+      yy = yy + 24
+    else
+      row(lx, yy, r[1], "", 410)
+      lg.setFont(font(12)); lg.setColor(1, 1, 1)
+      local _, wr = font(12):getWrap(r[2], 410 - 20)
+      lg.printf(r[2], lx + 20, yy + 20, 410 - 20)
+      yy = yy + 22 + #wr * (font(12):getHeight() + 1) + 4
+    end
+  end
   -- everyone's points
   if world.score then
     local parts = {}
@@ -1369,7 +1471,7 @@ function UI.drawOver(game)
       parts[#parts + 1] = (r.team == 1 and "You" or D.teamName[r.team]) .. " " .. U.fmt(r.pts)
     end
     lg.setFont(font(12)); lg.setColor(0.6, 0.66, 0.74)
-    lg.printf("Points (before multipliers): " .. table.concat(parts, "   "), lx, ly + 6 + 11 * 24 + 4, 410)
+    lg.printf("Points (before multipliers): " .. table.concat(parts, "   "), lx, math.max(yy + 4, ly + 6 + 11 * 24 + 4), 410)
   end
 
   -- right column: how the score was made
@@ -1498,6 +1600,7 @@ function UI.draw(game)
   UI.drawTop(game)
   UI.drawLeaderboard(game)
   UI.drawCommanderCard(game)
+  UI.drawJunglePanel(game)
   UI.drawCommanderHover(game)
   -- bottom panel
   lg.setColor(0.06, 0.08, 0.11, 0.95)

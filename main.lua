@@ -109,6 +109,13 @@ function love.load(args)
     return
   end
   for i, a in ipairs(args or {}) do
+    if a == "--trailer" then
+      smoke = require("tools.trailer")
+      menu = Menu.new()
+      state = "menu"
+      smoke.start(function(opts) startGame(opts) return game end, args[i + 1] or "rts")
+      return
+    end
     if a == "--uishot" then
       smoke = require("tools.uishot")
       menu = Menu.new()
