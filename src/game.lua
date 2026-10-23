@@ -35,7 +35,7 @@ function G.new(opts)
     }
   end
   if opts.autotest then
-    players[1] = { ally = players[1].ally or 1, level = opts.level1 or 5, profile = opts.profile1 or "Balanced", class = players[1].class }
+    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", class = players[1].class }
   end
   self.arena = opts.mode == "arena"
   self.players = players
@@ -209,7 +209,7 @@ function G.new(opts)
       end
     end
     if e.team == 1 or world:isVisible(e) then
-      local snd = SFX.weaponSound(e.def.weapon)
+      local snd = (e.mods and e.mods.melee) and "punch" or SFX.weaponSound(e.def.weapon)
       -- Arena creeps fire constantly: keep them a notch under the Commanders and towers
       local v = (self.arena and e.key ~= "commander" and not e.def.building) and 0.6 or 1
       if snd then SFX.at(snd, e.x, e.y, self:soundView(), v) end

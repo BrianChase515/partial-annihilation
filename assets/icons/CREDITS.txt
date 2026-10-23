@@ -47,3 +47,10 @@ Arena jungle:
 scavenger    spider-bot by delapouite  https://game-icons.net/1x1/delapouite/spider-bot.html
 ravager      rock-golem by delapouite  https://game-icons.net/1x1/delapouite/rock-golem.html
 colossus     giant by delapouite  https://game-icons.net/1x1/delapouite/giant.html
+
+New Arena classes and summons:
+cls_ascetic      meditation by lorc  https://game-icons.net/1x1/lorc/meditation.html
+cls_hexer        totem-mask by lorc  https://game-icons.net/1x1/lorc/totem-mask.html
+cls_spiritcaller tiger-head by delapouite  https://game-icons.net/1x1/delapouite/tiger-head.html
+ghoul            shambling-zombie by delapouite  https://game-icons.net/1x1/delapouite/shambling-zombie.html
+gargantuan       ogre by delapouite  https://game-icons.net/1x1/delapouite/ogre.html

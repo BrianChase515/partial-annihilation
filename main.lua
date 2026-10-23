@@ -83,6 +83,7 @@ function love.load(args)
     if a == "--arenatest" then
       autotest = { minutes = tonumber(args[i + 1]) or 20, seed = tonumber(args[i + 2]) or 5, size = tonumber(args[i + 3]) or 80, arena = true }
       local fmt = args[i + 4] or "1v1"
+      local lvlA, lvlB = (args[i + 5] or ""):match("^(%d+)/(%d+)$")
       local lvl = tonumber(args[i + 5]) or 5
       local classes = {}
       for k in (args[i + 6] or ""):gmatch("[^,]+") do classes[#classes + 1] = k end
@@ -93,8 +94,8 @@ function love.load(args)
       else
         local a1, a2 = fmt:match("(%d)v(%d)")
         a1, a2 = tonumber(a1) or 1, tonumber(a2) or 1
-        for p = 1, a1 do players[#players + 1] = { ally = 1, level = lvl } end
-        for p = 1, a2 do players[#players + 1] = { ally = 2, level = lvl } end
+        for p = 1, a1 do players[#players + 1] = { ally = 1, level = tonumber(lvlA) or lvl } end
+        for p = 1, a2 do players[#players + 1] = { ally = 2, level = tonumber(lvlB) or lvl } end
       end
       for p, pl in ipairs(players) do pl.class = classes[p] end
       local tmpl

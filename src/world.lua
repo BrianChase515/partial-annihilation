@@ -671,6 +671,9 @@ function W:bv(e, key)
   -- standing bonuses from the Arena jungle (shrines, the Colossus Crest)
   local z = e.zoneMul and e.zoneMul[key]
   if z then v = (v or 1) * z end
+  -- the Spiritcaller's stance
+  local sm = e.stanceMul and e.stanceMul[key]
+  if sm then v = (v or 1) * sm end
   return v
 end
 
@@ -879,7 +882,13 @@ function W:fire(e, o)
     weapon = wpn, sx = e.x, sy = e.y, source = e, hitsAir = m.hitsAir,
   }
   e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.arena and (self:bv(e, "rof") or 1) or 1)
-  if self.arena and m.chill then self.projectiles[#self.projectiles].chill = true end
+  if self.arena and (m.chill or e.stanceChill) then self.projectiles[#self.projectiles].chill = true end
+  if self.arena and e.stancePoison then self.projectiles[#self.projectiles].poison = e.stancePoison end
+  -- melee fighters (Ascetic) strike instead of shoot: the blow lands at once and leaves no trail
+  if self.arena and m.melee then
+    local p = self.projectiles[#self.projectiles]
+    p.melee, p.speed = true, 4000
+  end
   -- Ranger's Volley: two extra arrows per shot, at other enemies in range when there are any
   if e.volleyUntil and self.time < e.volleyUntil then
     local main = self.projectiles[#self.projectiles]
@@ -918,7 +927,12 @@ function W:damage(o, amount, attacker)
     if o.arenaTower and o.key ~= "core" then
       if self.time < 150 then amount = amount * 0.5 elseif self.time < 300 then amount = amount * 0.75 end
     end
+    -- the Core is fortified early on: a lone lane pushed in the first minutes can't end the game
+    if o.key == "core" then
+      if self.time < 480 then amount = amount * 0.5 elseif self.time < 720 then amount = amount * 0.75 end
+    end
     if o.ampUntil and self.time < o.ampUntil then amount = amount * 1.5 end
+    if o.sanctuaryUntil and self.time < o.sanctuaryUntil then amount = amount * 0.5 end
     amount = amount * (self:bv(o, "armor") or 1)
     if o.mods and o.mods.dodge and math.random() < o.mods.dodge then return end
     if o.absorb then
@@ -928,8 +942,9 @@ function W:damage(o, amount, attacker)
       if o.absorb <= 0 then o.absorb, o.absorbUntil = nil, nil end
       if amount <= 0 then o.hitTimer = 0.1; return end
     end
-    if attacker and attacker.alive and attacker.mods and attacker.mods.lifesteal then
-      attacker.hp = math.min(attacker.maxhp, attacker.hp + math.min(amount, o.hp) * attacker.mods.lifesteal)
+    local ls = ((attacker and attacker.mods and attacker.mods.lifesteal) or 0) + ((attacker and attacker.stanceLifesteal) or 0)
+    if attacker and attacker.alive and ls > 0 then
+      attacker.hp = math.min(attacker.maxhp, attacker.hp + math.min(amount, o.hp) * ls)
     end
     -- a Commander who hits an enemy Commander draws tower fire for a few seconds
     if attacker and attacker.key == "commander" and o.key == "commander" then attacker.towerAggro = self.time + 3 end
@@ -1069,8 +1084,9 @@ function W:updateProjectiles(dt)
         if self.onImpact then self.onImpact(p) end
       elseif p.target and p.target.alive then
         if p.chill then p.target.slowUntil = math.max(p.target.slowUntil or 0, self.time + 1) end
+        if p.poison and self.arena then require("src.arena").dot(self, p.source, p.target, p.poison, 3) end
         self:damage(p.target, p.damage, p.source)
-        self.effects[#self.effects + 1] = { kind = "hit", x = p.tx, y = p.ty, t = 0, life = 0.15, size = 6 }
+        self.effects[#self.effects + 1] = { kind = "hit", x = p.tx, y = p.ty, t = 0, life = p.melee and 0.22 or 0.15, size = p.melee and 13 or 6 }
       end
     else
       p.x, p.y = p.x + nx * step, p.y + ny * step

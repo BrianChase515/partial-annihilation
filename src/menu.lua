@@ -24,9 +24,9 @@ local ATEMPLATES = {
   { "battlefield", "Battlefield", "Battlefield (DOTA style): three lanes, a river, jungle camps in every quarter, two shrines and a Colossus that alternates between two pits. Randomized every match." },
 }
 local ASIZES = { { "Small", 64 }, { "Medium", 80 }, { "Large", 96 }, { "Huge", 112 } }
-local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2, 1 }, { "3v3", 3, 3 }, { "FFA 3", 1, 0, ffa = 3 }, { "FFA 4", 1, 0, ffa = 4 } }
+local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2, 1 }, { "3v3", 3, 3 }, { "5v5", 5, 5 }, { "FFA 3", 1, 0, ffa = 3 }, { "FFA 4", 1, 0, ffa = 4 } }
 -- arena slots: 1 you, 2 ally, 3 enemy, 4 enemy 2, 5 ally 2, 6 enemy 3
-local ASLOT_NAMES = { "You", "Ally", "Enemy", "Enemy 2", "Ally 2", "Enemy 3" }
+local ASLOT_NAMES = { "You", "Ally", "Enemy", "Enemy 2", "Ally 2", "Enemy 3", "Ally 3", "Enemy 4", "Ally 4", "Enemy 5" }
 
 local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
@@ -49,7 +49,7 @@ function Menu.new(prev)
     size = 2, format = 1,
     slots = { { human = true, class = 0 }, { class = 0, level = 5 }, { class = 0, level = 5 }, { class = 0, level = 5 } },
   }
-  for i = #self.arena.slots + 1, 6 do self.arena.slots[i] = { class = 0, level = 5 } end
+  for i = #self.arena.slots + 1, 10 do self.arena.slots[i] = { class = 0, level = 5 } end
   self.mods = prev and prev.mods or { alien = false, drops = false, score = false, groovy = false }
   self.maps = Maps.load()
   self.t = 0
@@ -81,15 +81,15 @@ end
 -- which arena slots are in play for the chosen format: you, ally, enemy 1, enemy 2
 function Menu:arenaActive()
   local f = AFORMATS[self.arena.format]
-  if f.ffa then return { true, f.ffa >= 4, true, true, false, false } end
-  return { true, f[2] >= 2, true, f[3] >= 2, f[2] >= 3, f[3] >= 3 }
+  if f.ffa then return { true, f.ffa >= 4, true, true, false, false, false, false, false, false } end
+  return { true, f[2] >= 2, true, f[3] >= 2, f[2] >= 3, f[3] >= 3, f[2] >= 4, f[3] >= 4, f[2] >= 5, f[3] >= 5 }
 end
 
 -- the order players are created in (it decides their colors): you, enemy, ally, enemy 2, ally 2, enemy 3
 function Menu:arenaOrder()
   local act = self:arenaActive()
   local out = {}
-  for _, i in ipairs({ 1, 3, 2, 4, 5, 6 }) do if act[i] then out[#out + 1] = i end end
+  for _, i in ipairs({ 1, 3, 2, 4, 5, 6, 7, 8, 9, 10 }) do if act[i] then out[#out + 1] = i end end
   return out
 end
 
@@ -107,7 +107,7 @@ function Menu:arenaRects()
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y, w = 110, h = 34, label = o[1], afield = "size", value = i, active = A.size == i, rowLabel = i == 1 and "Arena size" or nil }
   end
   for i, o in ipairs(AFORMATS) do
-    r[#r + 1] = { x = x0 + (i - 1) * 78, y = y + 44, w = 72, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
+    r[#r + 1] = { x = x0 + (i - 1) * 70, y = y + 44, w = 66, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
   end
   for i, o in ipairs(ATEMPLATES) do
     -- two groups: simple lane maps, then the jungle maps (camps, shrines, the Colossus)
@@ -121,10 +121,32 @@ function Menu:arenaRects()
   for k, i in ipairs(self:arenaOrder()) do colorSlot[i] = k end
   local act = self:arenaActive()
   local nAct = 0
-  for i = 1, 6 do if act[i] then nAct = nAct + 1 end end
+  for i = 1, 10 do if act[i] then nAct = nAct + 1 end end
   local rowH = nAct > 4 and 38 or 46
   local row = 0
-  for _, i in ipairs(ffa and { 1, 3, 4, 2 } or { 1, 2, 5, 3, 4, 6 }) do
+  local compact = nAct > 6
+  -- 5v5: allies in a left column, enemies on the right, all narrower
+  if compact then
+    local sideRow = { 0, 0 }
+    for _, i in ipairs({ 1, 2, 5, 7, 9, 3, 4, 6, 8, 10 }) do
+      if act[i] then
+        local col = (i == 1 or i == 2 or i == 5 or i == 7 or i == 9) and 0 or 1
+        local yy = ty + sideRow[col + 1] * rowH
+        sideRow[col + 1] = sideRow[col + 1] + 1
+        local xx = x0 - 130 + col * 352
+        local sl = A.slots[i]
+        r[#r + 1] = { x = xx, y = yy, w = 72, h = rowH - 4, label = names[i], slot = colorSlot[i], kind = "chip", on = true, small = true }
+        r[#r + 1] = { x = xx + 76, y = yy, w = 120, h = rowH - 4, label = self:className(sl.class), aslot = i, kind = "aclass" }
+        if not sl.human then
+          r[#r + 1] = { x = xx + 200, y = yy, w = 26, h = rowH - 4, label = "-", aslot = i, kind = "alvdown" }
+          r[#r + 1] = { x = xx + 228, y = yy, w = 64, h = rowH - 4, label = tostring(sl.level), aslot = i, kind = "lvlabel", alevel = true }
+          r[#r + 1] = { x = xx + 294, y = yy, w = 26, h = rowH - 4, label = "+", aslot = i, kind = "alvup" }
+        end
+      end
+    end
+    row = math.max(sideRow[1], sideRow[2])
+  end
+  for _, i in ipairs(compact and {} or ffa and { 1, 3, 4, 2 } or { 1, 2, 5, 3, 4, 6 }) do
     if act[i] then
       local yy = ty + row * rowH
       row = row + 1
@@ -138,14 +160,16 @@ function Menu:arenaRects()
       end
     end
   end
-  local by = ty + math.max(4 * 46, nAct * rowH) + 54
+  local by = ty + math.max(4 * 46, (compact and row or nAct) * rowH) + 54
   self.arenaStartY = by
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
   -- class roster (hover for details)
   for i, c in ipairs(ARENA.CLASSES) do
-    r[#r + 1] = { x = x0 + 580, y = y + (i - 1) * 34, w = 300, h = 30, label = c.name, roster = i, kind = "roster",
+    local half = math.ceil(#ARENA.CLASSES / 2)
+    local col, row = (i - 1) >= half and 1 or 0, (i - 1) % half
+    r[#r + 1] = { x = x0 + 580 + col * 152, y = y + row * 34, w = 148, h = 30, label = c.name, roster = i, kind = "roster",
       active = A.slots[1].class == i }
   end
   self:updateRect(r, w)
@@ -280,9 +304,15 @@ function Menu:draw()
   lg.setColor(0.55, 0.62, 0.7)
   local ty = y + 160
   if self.mode == "arena" then
-    lg.print("Commanders", x0 - 130, ty - 22)
-    lg.print("Class (click to cycle)", x0, ty - 22)
-    lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
+    local fm = AFORMATS[self.arena.format]
+    if not fm.ffa and fm[2] + fm[3] > 6 then
+      lg.print("Your side  (class / difficulty)", x0 - 130, ty - 22)
+      lg.print("Enemy side", x0 + 222, ty - 22)
+    else
+      lg.print("Commanders", x0 - 130, ty - 22)
+      lg.print("Class (click to cycle)", x0, ty - 22)
+      lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
+    end
     lg.print("CLASSES  (click one to play it)", x0 + 580, y - 22)
   else
     lg.print("Players", x0 - 130, ty - 22)
@@ -294,6 +324,7 @@ function Menu:draw()
 
   local mx, my = love.mouse.getPosition()
   local hoverProf, hoverMod, hoverClass, hoverTmpl
+  self.hoverLevel = nil
   for _, r in ipairs(self:rects()) do
     if r.rowLabel then
       lg.setFont(R.font(16))
@@ -311,6 +342,7 @@ function Menu:draw()
     end
     if r.afield then active = r.active end
     if hover and r.tmpl then hoverTmpl = r.tmpl end
+    if hover and r.alevel and self.mode == "arena" then self.hoverLevel = self.arena.slots[r.aslot].level end
     if r.kind == "chip" then
       local c = D.teamColor[r.slot]
       local on = r.on
@@ -318,10 +350,17 @@ function Menu:draw()
       lg.setColor(c[1] * 0.35, c[2] * 0.35, c[3] * 0.35, on and 1 or 0.4)
       lg.rectangle("fill", r.x, r.y, r.w, r.h, 6)
       lg.setColor(c[1], c[2], c[3], on and 1 or 0.4)
-      lg.rectangle("fill", r.x + 8, r.y + 10, 16, 16, 3)
-      lg.setFont(R.font(16))
-      lg.setColor(1, 1, 1, on and 1 or 0.45)
-      lg.print(r.label, r.x + 32, r.y + 8)
+      if r.small then
+        lg.rectangle("fill", r.x + 5, r.y + r.h / 2 - 5, 10, 10, 2)
+        lg.setFont(R.font(13))
+        lg.setColor(1, 1, 1, on and 1 or 0.45)
+        lg.print(r.label, r.x + 19, r.y + r.h / 2 - 8)
+      else
+        lg.rectangle("fill", r.x + 8, r.y + 10, 16, 16, 3)
+        lg.setFont(R.font(16))
+        lg.setColor(1, 1, 1, on and 1 or 0.45)
+        lg.print(r.label, r.x + 32, r.y + 8)
+      end
     else
       if r.action == "start" then
         if self:validTeams() then
@@ -458,7 +497,13 @@ function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   lg.setFont(R.font(14))
   lg.setColor(0.65, 0.72, 0.8)
   local desc
-  if hoverTmpl then
+  if self.hoverLevel then
+    local L = self.hoverLevel
+    desc = "Difficulty " .. L .. " (" .. LEVEL_NAMES[L] .. "): " .. (L <= 2 and "slow to react, rarely uses skills." or
+      L <= 4 and "reacts in about a second, uses skills sometimes, denies from 4." or
+      L <= 6 and "last-hits, denies, backs off from stronger Commanders, leads skill shots at 6." or
+      "fast reactions, near-perfect last hits and skill use" .. (L >= 8 and string.format("; also +%d%% experience.", (L - 7) * 10) or "."))
+  elseif hoverTmpl then
     desc = ATEMPLATES[hoverTmpl][3]
   elseif hoverClass and hoverClass > 0 then
     local c = ARENA.CLASSES[hoverClass]
@@ -473,7 +518,7 @@ function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   lg.printf(desc, x0, (self.arenaStartY and self.arenaStartY - 48) or (ty + 4 * 46 + 4), 520)
   -- arena high scores and online board
   self.arenaScores = self.arenaScores or require("src.scores").load("arena")
-  local hy = y + 7 * 34 + 24
+  local hy = y + 5 * 34 + 30
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
   lg.print("ARENA HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
@@ -571,6 +616,8 @@ function Menu:mousepressed(x, y, b)
       local as = r.aslot and self.arena.slots[r.aslot]
       if r.tab then self.mode = r.tab
       elseif r.afield then self.arena[r.afield] = r.value
+        -- ten Commanders need room: 5v5 starts on a Huge map (you can still pick another)
+        if r.afield == "format" and AFORMATS[r.value][1] == "5v5" then self.arena.size = #ASIZES end
       elseif r.kind == "aclass" then as.class = (as.class + dir) % (#ARENA.CLASSES + 1)
       elseif r.kind == "alvdown" then as.level = math.max(1, as.level - 1)
       elseif r.kind == "alvup" then as.level = math.min(10, as.level + 1)
@@ -628,7 +675,7 @@ function Menu:options()
     local A = self.arena
     local act = self:arenaActive()
     local players = {}
-    local allyOf = AFORMATS[A.format].ffa and { 1, 4, 2, 3 } or { 1, 1, 2, 2, 1, 2 }
+    local allyOf = AFORMATS[A.format].ffa and { 1, 4, 2, 3 } or { 1, 1, 2, 2, 1, 2, 1, 2, 1, 2 }
     for _, i in ipairs(self:arenaOrder()) do
       do
         local sl = A.slots[i]

@@ -7,11 +7,11 @@ local last = {}
 
 -- name, variations, voices per variation
 S.FILES = { { "rifle", 3, 3 }, { "blaster", 3, 3 }, { "heavy", 2, 2 }, { "artillery", 2, 2 }, { "impact", 3, 2 },
-  { "flak", 2, 2 }, { "torpedo", 1, 2 }, { "boom", 3, 2 }, { "bigboom", 2, 2 }, { "skill", 2, 2 } }
+  { "flak", 2, 2 }, { "torpedo", 1, 2 }, { "boom", 3, 2 }, { "bigboom", 2, 2 }, { "skill", 2, 2 }, { "punch", 3, 3 } }
 -- loudness and minimum gap between plays of each kind (keeps big battles from turning into noise)
 S.MIX = { rifle = { 0.32, 0.06 }, blaster = { 0.34, 0.07 }, heavy = { 0.55, 0.12 }, artillery = { 0.6, 0.18 },
   impact = { 0.5, 0.1 }, flak = { 0.3, 0.09 }, torpedo = { 0.5, 0.25 }, boom = { 0.55, 0.08 },
-  bigboom = { 0.85, 0.25 }, skill = { 0.5, 0.05 } }
+  bigboom = { 0.85, 0.25 }, skill = { 0.5, 0.05 }, punch = { 0.42, 0.08 } }
 
 -- which sound a weapon makes when it fires
 function S.weaponSound(w)

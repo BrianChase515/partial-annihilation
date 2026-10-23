@@ -7,7 +7,13 @@ local function script(mode, secs)
   frame()
   local opts = { size = mode == "arena" and 80 or 112, water = 0.3, seed = 31, autotest = true,
     players = { { ally = 1, level = 5 }, { ally = 2, level = 5 }, { ally = 1, level = 5 }, { ally = 2, level = 5 } } }
-  if mode == "arena" then opts.mode = "arena"; opts.players[1].class = "ranger" end
+  if mode == "arena" then opts.mode = "arena"; opts.players[1].class = os.getenv("PA_CLASS") or "ranger" end
+  if mode == "arena" and os.getenv("PA_FIVE") then
+    opts.size, opts.template = 112, "battlefield"
+    opts.players = {}
+    for i = 1, 10 do opts.players[i] = { ally = i % 2 == 1 and 1 or 2, level = 5 } end
+    opts.players[1].class = os.getenv("PA_CLASS") or "ranger"
+  end
   local tmpl = mode:match("^arena%-(%a+)")
   if tmpl then
     opts.mode, opts.template, opts.size = "arena", tmpl, 96

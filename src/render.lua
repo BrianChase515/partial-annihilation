@@ -639,7 +639,7 @@ function R.drawWorld(cam, game)
 
   -- projectiles
   for _, p in ipairs(world.projectiles) do
-    if p.x > x0 - 20 and p.x < x1 + 20 and p.y > y0 - 20 and p.y < y1 + 20 then
+    if not p.melee and p.x > x0 - 20 and p.x < x1 + 20 and p.y > y0 - 20 and p.y < y1 + 20 then
       if p.weapon.ballistic then
         local total = U.dist(p.sx, p.sy, p.tx, p.ty)
         local left = U.dist(p.x, p.y, p.tx, p.ty)

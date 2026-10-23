@@ -8,15 +8,17 @@ local ARENA = require("src.arena")
 local AI = {}
 AI.__index = AI
 
+local MODELOG = os.getenv("PA_MODELOG")
 function AI.new(world, team, level, opts)
   local self = setmetatable({}, AI)
   self.world = world
   self.team = team
   self.level = math.max(1, math.min(10, level or 5))
+  if world.teams[team].commander then world.teams[team].commander.aiLevel = self.level end
   self.rng = love.math.newRandomGenerator(team * 977 + (world.map.seed % 100000))
   self.think = 0
   -- reaction time and boldness by difficulty
-  self.thinkEvery = math.max(0.25, 1.1 - self.level * 0.08)
+  self.thinkEvery = math.max(0.2, 1.1 - self.level * 0.09)
   self.skillChance = 0.35 + self.level * 0.065
   self.brave = 0.8 + self.level * 0.04
   local st = world.arena
@@ -27,7 +29,9 @@ function AI.new(world, team, level, opts)
   if st.ffa then
     self:pickLane()
   else
-    local order = #st.sideTeams[self.side] == 1 and { "mid" } or { "top", "bot", "mid" }
+    local order = #st.sideTeams[self.side] == 1 and { "mid" } or { "top", "bot", "mid", "bot", "top" }
+    -- big teams on a jungle map with three lanes: the fourth Commander jungles (2-1-1 + jungler)
+    if world.map.jungleT and world.map.lanesByName.mid and idx == 4 then self.role = "jungle" end
     if world.map.jungleT and not world.map.lanesByName.mid then
       order = #st.sideTeams[self.side] == 1 and { "top" } or { "top", "bot" }
       if idx == 3 then self.role = "jungle" end
@@ -103,7 +107,15 @@ function AI:pickOffer(c)
       if u.skill then
         local s = ARENA.SKILLS[u.key]
         local v = 1
-        for _, tg in ipairs(s.tags) do if tg == "dmg" or tg == "cc" then v = v + 1 end end
+        for _, tg in ipairs(s.tags) do
+          if tg == "dmg" or tg == "cc" then v = v + 1 end
+          if tg == "stance" then
+            -- one or two stances are worth a lot; a third adds little
+            local have = 0
+            for i = 1, 3 do local sk = c.skills[i]; if sk and ARENA.SKILLS[sk.key].tags[1] == "stance" then have = have + 1 end end
+            v = v + (have == 0 and 1.6 or have == 1 and 1.1 or -0.5)
+          end
+        end
         return v + self.rng:random()
       end
       return 1 + self.rng:random()
@@ -176,13 +188,66 @@ function AI:clusterTarget(c, reach, radius)
   return bx, by, bn
 end
 
+-- where to aim at a moving Commander: good players lead their shots
+function AI:leadAim(o, c)
+  local w = self.world
+  self.track = self.track or {}
+  local tr = self.track[o]
+  local x, y = o.x, o.y
+  if self.level >= 6 and tr and w.time - tr.t > 0.05 and w.time - tr.t < 1.5 then
+    local vx, vy = (o.x - tr.x) / (w.time - tr.t), (o.y - tr.y) / (w.time - tr.t)
+    local lead = math.min(0.6, 0.35 + U.dist(c.x, c.y, o.x, o.y) / 1500) * math.min(1, (self.level - 5) / 3)
+    x, y = o.x + vx * lead, o.y + vy * lead
+  end
+  return x, y
+end
+
+function AI:trackEnemies()
+  local w = self.world
+  self.track = self.track or {}
+  for t = 1, w.np do
+    local o = w.teams[t].commander
+    if o and o.alive and w:hostile(t, self.team) then
+      local tr = self.track[o]
+      if not tr or w.time - tr.t > 0.4 then self.track[o] = { x = o.x, y = o.y, t = w.time } end
+    end
+  end
+end
+
 function AI:useSkills(c, enemyC, danger)
   local w = self.world
   if self.rng:random() > self.skillChance then return end
+  -- Spiritcaller: pick the stance that fits the moment
+  local stances = {}
+  for slot = 1, 3 do
+    local sk = c.skills[slot]
+    if sk and ARENA.SKILLS[sk.key].tags[1] == "stance" then stances[sk.key] = slot end
+  end
+  if next(stances) and c.stance ~= "avatar" then
+    local hpf = c.hp / c.maxhp
+    local near = enemyC and U.dist(c.x, c.y, enemyC.x, enemyC.y) < 380
+    local _, _, crowd = self:clusterTarget(c, 300, 200)
+    local want
+    if (danger or near) and hpf < 0.6 then want = { "gorilla", "centipede", "jaguar", "eaglestance" }
+    elseif near then want = hpf < 0.85 and { "centipede", "jaguar", "gorilla", "eaglestance" } or { "jaguar", "centipede", "eaglestance", "gorilla" }
+    elseif (crowd or 0) >= 3 then want = { "jaguar", "centipede", "eaglestance", "gorilla" }
+    else want = { "eaglestance", "jaguar", "centipede", "gorilla" } end
+    for _, k in ipairs(want) do
+      local slot = stances[k]
+      if slot then
+        local cur = c.stance == "eagle" and "eaglestance" or c.stance
+        if cur ~= k and w.time >= c.skills[slot].readyAt then
+          if ARENA.useSkill(w, c, slot, c.x, c.y) then return end
+        end
+        break
+      end
+    end
+  end
   for slot = 1, 4 do
     local sk = c.skills[slot]
     if sk and w.time >= sk.readyAt then
       local def = ARENA.SKILLS[sk.key]
+      if def.tags[1] == "stance" then goto continue end
       local tags = {}
       for _, tg in ipairs(def.tags) do tags[tg] = true end
       local tx, ty, go
@@ -204,13 +269,15 @@ function AI:useSkills(c, enemyC, danger)
         tx, ty = self:clusterTarget(c, 450, 200)
         if not tx then tx, ty = c.x, c.y end
       elseif tags.cc and enemyC and U.dist(c.x, c.y, enemyC.x, enemyC.y) < (def.range > 0 and def.range or 220) then
-        tx, ty, go = enemyC.x, enemyC.y, true
+        tx, ty, go = self:leadAim(enemyC, c)
+        go = true
       elseif tags.dmg then
         local reach = def.aim == "self" and def.range or def.range
         local ex, ey, n = self:clusterTarget(c, reach, def.aim == "self" and reach or 150)
         local need = tags.ult and 4 or 2
         if enemyC and U.dist(c.x, c.y, enemyC.x, enemyC.y) < reach then
-          ex, ey, n = enemyC.x, enemyC.y, need
+          ex, ey = self:leadAim(enemyC, c)
+          n = need
         end
         if ex and n >= need then tx, ty, go = ex, ey, true end
         -- siege ultimates also go on towers when pushing
@@ -223,6 +290,7 @@ function AI:useSkills(c, enemyC, danger)
         if ARENA.useSkill(w, c, slot, tx or c.x, ty or c.y) then return end
       end
     end
+    ::continue::
   end
 end
 
@@ -419,7 +487,20 @@ function AI:update(dt)
   if not c then return end
   self.think = self.think - dt
   if self.think > 0 then return end
-  self.think = self.thinkEvery * (0.8 + self.rng:random() * 0.4)
+  local dtThink = self.thinkEvery * (0.8 + self.rng:random() * 0.4)
+  self.think = dtThink
+  if MODELOG then
+    self.modeT = self.modeT or {}
+    local k = c.alive and (self.mode or "?") or "dead"
+    self.modeT[k] = (self.modeT[k] or 0) + dtThink
+    if w.time >= (self.modePrintAt or 600) then
+      self.modePrintAt = (self.modePrintAt or 600) + 600
+      local parts = {}
+      for mk, v in pairs(self.modeT) do parts[#parts + 1] = string.format("%s %.0f", mk, v) end
+      table.sort(parts)
+      print(string.format("MODES T%d L%d %s: %s", self.team, self.level, c.class, table.concat(parts, ", ")))
+    end
+  end
   if not c.alive then self.mode = "lane"; return end
   if w.arena.ffa then
     local other = self.laneObj.a == self.side and self.laneObj.b or self.laneObj.a
@@ -447,6 +528,7 @@ function AI:update(dt)
   local tower = self:towerThreat(c.x, c.y)
 
   self:useSkills(c, enemyC, danger)
+  self:trackEnemies()
 
   -- go home to heal
   if self.mode == "heal" then
@@ -458,7 +540,8 @@ function AI:update(dt)
       return
     end
   end
-  if hpf < 0.3 or (hpf < 0.5 and danger and theirs > mine * 2) then
+  local leaveAt = 0.3 + ((enemyC and self.level >= 5) and 0.03 * (self.level - 4) or 0)
+  if hpf < leaveAt or (hpf < 0.5 and danger and theirs > mine * 2) then
     self.mode = "heal"
     w:issue(c, { type = "move", x = homeX, y = homeY, arrive = 120 })
     return
@@ -478,6 +561,41 @@ function AI:update(dt)
           w:issue(ally, { type = "attack", target = enemyC })
         end
       end
+      self.mode = "dive"
+      return
+    end
+  end
+
+  -- respect a stronger enemy Commander: better players don't trade into a losing fight
+  if enemyC and self.level >= 5 and ed < 650 then
+    local lvGap = (enemyC.clevel or 0) - (c.clevel or 0)
+    local ehp = enemyC.hp / enemyC.maxhp
+    local myPow = c.hp * (1 + 0.12 * (c.clevel or 0))
+    local theirPow = enemyC.hp * (1 + 0.12 * (enemyC.clevel or 0))
+    if (lvGap >= 2 and ehp > 0.4 and hpf < 0.85) or (theirPow > myPow * 1.6 and mine < theirs * 1.2) then
+      local safeF = self:ownTowerFront()
+      if safeF then
+        local sx, sy = self:lanePoint(safeF - 0.01)
+        if U.dist(c.x, c.y, sx, sy) > 120 then
+          w:issue(c, { type = "move", x = sx, y = sy, arrive = 60 })
+          self.mode = "respect"
+          return
+        end
+      end
+    end
+  end
+
+  -- trade: better players punish an enemy Commander standing in range when the fight favors them
+  if enemyC and self.level >= 4 and ed < w:rangeOf(c) + 60 and hpf > 0.5 then
+    local theirTower = self:towerThreat(enemyC.x, enemyC.y)
+    local myPow = c.hp * (1 + 0.12 * (c.clevel or 0))
+    local theirPow = enemyC.hp * (1 + 0.12 * (enemyC.clevel or 0))
+    if not theirTower and myPow > theirPow * 0.9 and mine * 1.1 >= theirs
+      and self.rng:random() < 0.15 + 0.12 * (self.level - 4) then
+      if not (c.orders[1] and c.orders[1].type == "attack" and c.orders[1].target == enemyC) then
+        w:issue(c, { type = "attack", target = enemyC })
+      end
+      self.mode = "trade"
       return
     end
   end
@@ -493,6 +611,7 @@ function AI:update(dt)
     end)
     if best then
       w:issue(c, { type = "attack", target = best })
+      self.mode = "deny"
       return
     end
   end
@@ -530,6 +649,7 @@ function AI:update(dt)
   if w.arena.jungle and self:jungleThink(c, hpf, enemyC, danger) then return end
 
   -- lane: stand a little behind our frontmost creep, fight what's in range
+  self.mode = "lane"
   local front = 0.12
   for _, e in ipairs(w.entities) do
     if e.alive and e.creep and e.lane == self.lane and e.team ~= nil and not w:hostile(e.team, self.team) then
@@ -537,7 +657,8 @@ function AI:update(dt)
       if f > front then front = f end
     end
   end
-  local wantF = front - 0.035
+  -- melee Commanders fight at the front of the wave, not behind it
+  local wantF = front - ((c.mods and c.mods.melee) and 0.005 or 0.035)
   -- badly out-leveled by the enemies here: hang back near our own tower and farm safely
   local behind = 0
   for t = 1, w.np do
@@ -562,7 +683,24 @@ function AI:update(dt)
   if tower and self:creepsNear(tower.x, tower.y, tower.def.weapon.range, false) < 2 and not (enemyC and enemyC.hp < enemyC.maxhp * 0.2) then
     -- standing under an enemy tower with no creeps: back off now
     w:issue(c, { type = "move", x = tx, y = ty, arrive = 40 })
+    self.mode = "towerback"
     return
+  end
+  -- last hits: land the killing blow on enemy creeps (full experience); better players never miss one
+  if self.level >= 3 and (c.reload or 0) <= 0.15 and self.rng:random() < 0.25 + 0.09 * (self.level - 3) then
+    local m = c.mods or {}
+    local shot = c.def.weapon.damage * (m.dmg or 1) * (w:bv(c, "dmg") or 1) * (1 + 0.15 * (c.level or 0))
+    local r = w:rangeOf(c) + 20
+    local best
+    w:query(c.x, c.y, r + 40, function(o)
+      if o.alive and o.creep and w:hostile(o.team, self.team) and U.dist(c.x, c.y, o.x, o.y) < r
+        and o.hp <= shot * 0.97 * ((o.mods and o.mods.armor) or 1) * (w:bv(o, "armor") or 1) and (not best or o.hp < best.hp) then best = o end
+    end)
+    if best then
+      w:issue(c, { type = "attack", target = best })
+      self.mode = "lasthit"
+      return
+    end
   end
   -- push: an unprotected enemy structure with our creeps under it (or nobody defending) gets hit
   local s, sd = self:nearestEnemyStructure(c)
@@ -577,6 +715,7 @@ function AI:update(dt)
       if not (c.orders[1] and c.orders[1].type == "attack" and c.orders[1].target == s) then
         w:issue(c, { type = "attack", target = s })
       end
+      self.mode = "push"
       return
     end
   end

@@ -356,8 +356,11 @@ function AI:thinkCommander()
   -- 3. retreat: hurt and under fire, or badly outgunned away from home
   -- he is slower than most attackers, so he has to leave early
   local retreatAt = style == "aggressive" and 0.5 or (style == "cautious" and 0.75 or 0.6)
+  -- better players guard their Commander more carefully: losing him loses the game
+  local lvl = self.diff.level or 5
+  if lvl >= 5 then retreatAt = math.min(0.8, retreatAt + 0.04 * (lvl - 4)) end
   local distHome = U.dist(c.x, c.y, self.baseX, self.baseY)
-  local outgunned = danger > (support + 600) * (style == "aggressive" and 1.5 or 1.0)
+  local outgunned = danger > (support + 600) * (style == "aggressive" and 1.5 or 1.0) * (lvl >= 6 and 0.85 or 1)
   local tmS = world.teams[self.team]
   local spawnDist = U.dist(c.x, c.y, tmS.startX, tmS.startY)
   local homeHot = self:strengthNear(tmS.startX, tmS.startY, 550, true) > 0 or (spawnDist < 450 and danger > 0)
@@ -439,6 +442,14 @@ function AI:thinkCommander()
   -- 4b. hunt for experience: once the base runs without him, go pick fights he can win on
   -- our side of the map (raiders, scouts, enemy extractors and outposts). Levels make him
   -- far stronger, so every personality but the cautious ones does this.
+  -- an XP hunt that runs into real opposition is called off (better players read it sooner)
+  if self.cmdMode == "xp" and self.xpTarget and self.xpTarget.alive
+    and danger > (support + 450 * hpf) * (lvl >= 5 and 0.7 or 1.0) then
+    self.xpTarget = nil
+    self.cmdMode = nil
+    world:issue(c, { type = "move", x = homeX, y = homeY })
+    return
+  end
   if self.cmdMode == "xp" and self.xpTarget and (not self.xpTarget.alive or hpf < 0.55) then
     self.xpTarget = nil
     self.cmdMode = nil
@@ -459,6 +470,7 @@ function AI:thinkCommander()
     self.lastHunt = world.time
     local reach = style == "aggressive" and 2400 or 1800
     local fromBase = style == "aggressive" and 2200 or 1400
+    if lvl >= 5 then reach, fromBase = math.min(reach, 1800), math.min(fromBase, 1500) end
     local cands = {}
     for _, e in ipairs(world.entities) do
       if e.alive and self:isHostile(e.team) and e.key ~= "commander" and e.def.domain ~= "air"
@@ -482,7 +494,7 @@ function AI:thinkCommander()
       local e = cands[i].e
       local theirs = self:strengthNear(e.x, e.y, 420, true)
       local ours = self:strengthNear(e.x, e.y, 500, false) + 500 * hpf
-      if ours >= theirs * (style == "aggressive" and 1.2 or 1.6) then
+      if ours >= theirs * (style == "aggressive" and 1.2 or 1.6) * (lvl >= 5 and 1.4 or 1) then
         self.cmdMode = "xp"
         self.xpTarget = e
         if os.getenv("PA_DEBUG_AI") then print(string.format("XPHUNT t=%d team=%d L%d -> %s d=%d ours=%d theirs=%d", world.time, self.team, c.clevel or 0, e.key, cands[i].d, ours, theirs)) end

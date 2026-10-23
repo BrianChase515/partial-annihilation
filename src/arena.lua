@@ -173,7 +173,7 @@ local function summon(w, owner, key, n, dur, level, opts)
     if dur then u.doom = w.time + dur end
     if level and level > 0 then A.setLevel(u, math.min(5, level)) end
     local mm = owner.mods and owner.mods.minionMul
-    if mm and (key == "drone" or key == "wolf") then u.maxhp = math.floor(u.maxhp * mm); u.hp = u.maxhp; u.dmgMul = mm end
+    if mm and (key == "drone" or key == "wolf" or key == "ghoul" or key == "gargantuan") then u.maxhp = math.floor(u.maxhp * mm); u.hp = u.maxhp; u.dmgMul = mm end
     out[#out + 1] = u
   end
   return out
@@ -212,6 +212,53 @@ end
 -- Skills. aim: "point" (at the cursor, within range), "self" (around the Commander).
 -- tags tell the computer players when a skill is worth using.
 
+-- damage over time (poison, plague): stacks per source, ticked by A.update
+function A.dot(w, src, o, total, dur)
+  if not o or not o.alive or o.def.building then return end
+  local mul = (src and src.mods and src.mods.dotMul) or 1
+  if src and src.owner and src.owner.mods and src.owner.mods.dotMul then mul = src.owner.mods.dotMul end
+  o.dots = o.dots or {}
+  o.dots[#o.dots + 1] = { dps = total * mul / dur, untilT = w.time + dur, src = src }
+end
+
+-- the Spiritcaller's stances: one at a time, each reshapes his basic attack
+local STANCES = {
+  jaguar    = { mul = { rof = 1.4, speed = 1.15 } },
+  gorilla   = { mul = { armor = 0.65 }, regen = 0.01 },
+  eagle     = { mul = { range = 1.25, speed = 1.2 }, chill = true },
+  centipede = { mul = {}, poison = 70, lifesteal = 0.1 },
+}
+A.STANCES = STANCES
+function A.setStance(w, c, key)
+  c.stance = key
+  c.stanceMul, c.stanceChill, c.stancePoison, c.stanceLifesteal, c.stanceRegen = {}, nil, nil, nil, nil
+  local list = key == "avatar" and { "jaguar", "gorilla", "eagle", "centipede" } or { key }
+  for _, k in ipairs(list) do
+    local sd = STANCES[k]
+    for mk, v in pairs(sd.mul) do c.stanceMul[mk] = (c.stanceMul[mk] or 1) * v end
+    if sd.chill then c.stanceChill = true end
+    if sd.poison then c.stancePoison = sd.poison * (1 + 0.08 * (c.clevel or 0)) end
+    if sd.lifesteal then c.stanceLifesteal = sd.lifesteal end
+    if sd.regen then c.stanceRegen = sd.regen end
+  end
+  local col = ({ jaguar = { 1, 0.75, 0.3 }, gorilla = { 0.7, 0.55, 0.4 }, eagle = { 0.6, 0.85, 1 }, centipede = { 0.5, 1, 0.4 }, avatar = { 1, 0.95, 0.6 } })[key]
+  fx(w, "ring", c.x, c.y, 70, 0.6, { color = col })
+end
+
+-- Hexer's Sacrifice: enemy creeps fight for you, then burst
+local function charm(w, c, o, dur)
+  o.charm = { team = o.team, untilT = w.time + dur, src = c }
+  o.team = c.team
+  o.orders, o.path, o.chase, o.retaliate = {}, nil, nil, nil
+  local st = w.arena
+  local core = st.cores[st.teamSide[o.charm.team]]
+  local tx, ty = o.x, o.y
+  if core and core.alive then tx, ty = core.x, core.y end
+  w:issue(o, { type = "amove", x = tx, y = ty })
+  fx(w, "curse", o.x, o.y, 30, 0.6)
+end
+
+local SKILLLOG = os.getenv("PA_SKILLLOG")
 A.SKILLS = {
   -- Ranger
   multishot = { name = "Volley", aim = "self", range = 0, cd = 14, tags = { "buff" },
@@ -457,10 +504,16 @@ A.SKILLS = {
   clone = { name = "Shadow Clone", aim = "self", range = 0, cd = 24, tags = { "summon" },
     desc = "A shadow copy of you fights for 15 seconds.",
     use = function(w, c) summon(w, c, "shadow", 1, 15, math.floor((c.clevel or 1) / 2)) end },
-  talon = { name = "Dragon Talon", aim = "point", range = 220, cd = 7, tags = { "dmg" },
-    desc = "Three lightning-fast kicks on the nearest enemy to the target.",
+  talon = { name = "Dragon Talon", aim = "point", range = 300, cd = 7, tags = { "dmg", "move" },
+    desc = "Lunge at the enemy nearest the target and land three lightning-fast kicks.",
     use = function(w, c, tx, ty)
       local list = hostiles(w, c, tx, ty, 120)
+      if #list == 0 then return false end
+      local fx0, fy0 = tx, ty
+      do local b, bd2; for _, o in ipairs(list) do local d = U.dist(tx, ty, o.x, o.y); if not bd2 or d < bd2 then b, bd2 = o, d end end; fx0, fy0 = b.x, b.y end
+      local dx, dy, len = U.norm(fx0 - c.x, fy0 - c.y)
+      if len > 60 then dash(w, c, c.x + dx * (len - 45), c.y + dy * (len - 45), 300) end
+      list = hostiles(w, c, tx, ty, 160)
       local best, bd
       for _, o in ipairs(list) do local d = U.dist(tx, ty, o.x, o.y); if not bd or d < bd then best, bd = o, d end end
       if not best then return false end
@@ -473,6 +526,139 @@ A.SKILLS = {
         local a = i / 5 * math.pi * 2
         deploy(w, c, tx + math.cos(a) * 90, ty + math.sin(a) * 90, 20)
       end
+    end },
+
+  -- Ascetic (a martial monk: fast strikes, mantras, healing)
+  flurry = { name = "Flurry of Blows", aim = "point", range = 280, cd = 8, tags = { "dmg", "move" },
+    desc = "Dash to the target and strike the nearest enemy four times.",
+    use = function(w, c, tx, ty)
+      dash(w, c, tx, ty, 280)
+      local list = hostiles(w, c, c.x, c.y, 130)
+      local best, bd
+      for _, o in ipairs(list) do local d = U.dist(c.x, c.y, o.x, o.y); if not bd or d < bd then best, bd = o, d end end
+      if not best then return end
+      for i = 0, 3 do later(w, i * 0.15, function() if best.alive then hit(w, c, best, skillDmg(c, 75)); fx(w, "hit", best.x, best.y, 14, 0.2) end end) end
+    end },
+  dashstrike = { name = "Dashing Strike", aim = "point", range = 380, cd = 10, tags = { "dmg", "line", "move", "escape" },
+    desc = "Streak forward, cutting through everything in the way.",
+    use = function(w, c, tx, ty)
+      lineHit(w, c, tx, ty, U.dist(c.x, c.y, tx, ty), 26, skillDmg(c, 170), { 0.95, 0.9, 0.6 })
+      dash(w, c, tx, ty, 380)
+    end },
+  mantra = { name = "Mantra of Conviction", aim = "self", range = 450, cd = 22, tags = { "buff" },
+    desc = "For 8 seconds you and allies nearby deal +20% damage and move 10% faster.",
+    use = function(w, c)
+      for _, u in ipairs(friends(w, c, c.x, c.y, 450)) do A.buff(u, "dmg", 1.2, 8, w); A.buff(u, "speed", 1.1, 8, w) end
+      fx(w, "ring", c.x, c.y, 450, 0.7, { color = { 1, 0.85, 0.4 } })
+    end },
+  breath = { name = "Breath of Heaven", aim = "self", range = 400, cd = 18, tags = { "heal" },
+    desc = "Heal yourself and allies nearby by 20%, and quicken them for 3 seconds.",
+    use = function(w, c)
+      for _, u in ipairs(friends(w, c, c.x, c.y, 400)) do u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.2); u.healing = 1; A.buff(u, "speed", 1.25, 3, w) end
+      fx(w, "ring", c.x, c.y, 400, 0.7, { color = { 0.7, 1, 0.8 } })
+    end },
+  pull = { name = "Whirling Pull", aim = "self", range = 260, cd = 14, tags = { "cc", "aoe", "dmg" },
+    desc = "Pull every enemy within reach to you, damaging and slowing them.",
+    use = function(w, c)
+      local list = hostiles(w, c, c.x, c.y, 260)
+      if #list == 0 then return false end
+      for _, o in ipairs(list) do
+        if not o.def.building and o.key ~= "colossus" then
+          local dx, dy, len = U.norm(c.x - o.x, c.y - o.y)
+          local move = math.max(0, len - 60)
+          o.x, o.y = o.x + dx * move, o.y + dy * move
+          o.path = nil
+        end
+      end
+      area(w, c, c.x, c.y, 140, skillDmg(c, 120), { slow = 1.5 })
+      fx(w, "cyclone", c.x, c.y, 260, 0.5)
+    end },
+  sanctuary = { name = "Inner Sanctuary", aim = "self", range = 240, cd = 60, ult = true, tags = { "defend", "ult" },
+    desc = "ULTIMATE: a holy ground for 7 seconds - allies inside take half damage, enemies inside are slowed.",
+    use = function(w, c)
+      local st = w.arena
+      st.zones = st.zones or {}
+      st.zones[#st.zones + 1] = { x = c.x, y = c.y, r = 240, untilT = w.time + 7, team = c.team, kind = "sanctuary" }
+      fx(w, "ring", c.x, c.y, 240, 0.8, { color = { 1, 0.95, 0.6 } })
+    end },
+
+  -- Hexer (a witch doctor: poison, ghouls, hexes)
+  plague = { name = "Plague Dart", aim = "point", range = 560, cd = 7, tags = { "dmg" },
+    desc = "Poison the enemy nearest the target: heavy damage over 6 seconds.",
+    use = function(w, c, tx, ty)
+      local list = hostiles(w, c, tx, ty, 160)
+      local best, bd
+      for _, o in ipairs(list) do local d = U.dist(tx, ty, o.x, o.y); if not bd or d < bd then best, bd = o, d end end
+      if not best then return false end
+      A.dot(w, c, best, skillDmg(c, 330), 6)
+      fx(w, "beam", c.x, c.y, 3, 0.3, { x2 = best.x, y2 = best.y, color = { 0.55, 1, 0.35 } })
+    end },
+  ghouls = { name = "Raise Ghouls", aim = "self", range = 0, cd = 18, tags = { "summon" },
+    desc = "Three ghouls join you for good (max 3, more with Fetish Army).",
+    use = function(w, c)
+      local maxN = 3 + ((c.mods and c.mods.extraGhouls) or 0)
+      local have = countOwned(w, c, "ghoul")
+      if have >= maxN then return false end
+      summon(w, c, "ghoul", math.min(3, maxN - have), nil, math.floor((c.clevel or 1) / 3))
+    end },
+  grasp = { name = "Grasp of the Dead", aim = "point", range = 500, cd = 12, tags = { "cc", "aoe", "dmg" },
+    desc = "Hands claw out of the ground: enemies there are slowed and poisoned for 4 seconds.",
+    use = function(w, c, tx, ty)
+      for _, o in ipairs(hostiles(w, c, tx, ty, 170)) do
+        o.slowUntil = math.max(o.slowUntil or 0, w.time + 4)
+        A.dot(w, c, o, skillDmg(c, 210), 4)
+      end
+      fx(w, "curse", tx, ty, 170, 1.0)
+    end },
+  sacrifice = { name = "Hex: Sacrifice", aim = "point", range = 480, cd = 20, tags = { "summon", "cc" },
+    desc = "Up to 4 enemy creeps near the target fight for you for 7 seconds, then burst apart.",
+    use = function(w, c, tx, ty)
+      local n = 0
+      for _, o in ipairs(hostiles(w, c, tx, ty, 170)) do
+        if n < 4 and o.creep and not o.charm then charm(w, c, o, 7); n = n + 1 end
+      end
+      if n == 0 then return false end
+    end },
+  soulharvest = { name = "Soul Harvest", aim = "self", range = 260, cd = 16, tags = { "buff" },
+    desc = "Drain the enemies around you: +7% damage per enemy (up to 5) for 12 seconds, and heal 3% each.",
+    use = function(w, c)
+      local list = hostiles(w, c, c.x, c.y, 260)
+      local n = math.min(5, #list)
+      if n == 0 then return false end
+      A.buff(c, "dmg", 1 + 0.07 * n, 12, w)
+      c.hp = math.min(c.maxhp, c.hp + c.maxhp * 0.03 * n); c.healing = 1
+      for i = 1, n do fx(w, "beam", list[i].x, list[i].y, 3, 0.4, { x2 = c.x, y2 = c.y, color = { 0.6, 1, 0.5 } }) end
+    end },
+  gargantuan = { name = "Gargantuan", aim = "self", range = 0, cd = 60, ult = true, tags = { "summon", "ult", "siege" },
+    desc = "ULTIMATE: raise a Gargantuan brute that fights for you for 30 seconds.",
+    use = function(w, c) summon(w, c, "gargantuan", 1, 30, math.floor((c.clevel or 1) / 2)) end },
+
+  -- Spiritcaller (spirit stances: one at a time, each reshapes your attack)
+  jaguar = { name = "Jaguar Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
+    desc = "Stance: attack 40% faster and move 15% faster.",
+    use = function(w, c) if c.stance == "jaguar" then return false end; A.setStance(w, c, "jaguar") end },
+  gorilla = { name = "Gorilla Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
+    desc = "Stance: take 35% less damage and regenerate 1% health per second.",
+    use = function(w, c) if c.stance == "gorilla" then return false end; A.setStance(w, c, "gorilla") end },
+  eaglestance = { name = "Eagle Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
+    desc = "Stance: +25% range, +20% speed, and your shots slow.",
+    use = function(w, c) if c.stance == "eagle" then return false end; A.setStance(w, c, "eagle") end },
+  centipede = { name = "Centipede Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
+    desc = "Stance: your shots poison, and you heal for 10% of the damage you deal.",
+    use = function(w, c) if c.stance == "centipede" then return false end; A.setStance(w, c, "centipede") end },
+  rushclaw = { name = "Rushing Claw", aim = "point", range = 340, cd = 9, tags = { "dmg", "move" },
+    desc = "Lunge to the target and rake everything around you.",
+    use = function(w, c, tx, ty)
+      dash(w, c, tx, ty, 340)
+      area(w, c, c.x, c.y, 110, skillDmg(c, 210))
+      fx(w, "splash", c.x, c.y, 110, 0.35)
+    end },
+  avatar = { name = "Spirit Avatar", aim = "self", range = 0, cd = 60, ult = true, tags = { "buff", "ult" },
+    desc = "ULTIMATE: all four stances at once for 10 seconds.",
+    use = function(w, c)
+      local prev = c.stance
+      A.setStance(w, c, "avatar")
+      later(w, 10, function() if c.stance == "avatar" then if prev then A.setStance(w, c, prev) else c.stance, c.stanceMul, c.stanceChill, c.stancePoison, c.stanceLifesteal, c.stanceRegen = nil, nil, nil, nil, nil, nil end end end)
     end },
 }
 for k, s in pairs(A.SKILLS) do s.key = k end
@@ -509,6 +695,12 @@ A.PASSIVES = {
   lycan    = { name = "Wild Heart", desc = "+20% health and +10% speed.", apply = function(w, e) hpUp(e, 1.2); mulMod(e, "speed", 1.1) end },
   venom    = { name = "Venom", desc = "+25% weapon damage.", apply = function(w, e) mulMod(e, "dmg", 1.25) end },
   shadowstep = { name = "Shadow Step", desc = "+20% movement speed.", apply = function(w, e) mulMod(e, "speed", 1.2) end },
+  fleetfoot = { name = "Fleet Foot", desc = "15% chance to avoid a hit, and +10% speed.", apply = function(w, e) e.mods.dodge = (e.mods.dodge or 0) + 0.15; mulMod(e, "speed", 1.1) end },
+  harmony  = { name = "Harmony", desc = "Every skill you use heals you 5%.", apply = function(w, e) e.mods.harmony = true end },
+  toxin    = { name = "Toxin", desc = "Your poisons deal 35% more damage.", apply = function(w, e) mulMod(e, "dotMul", 1.35) end },
+  fetish   = { name = "Fetish Army", desc = "+2 ghouls allowed; ghouls and your Gargantuan +40% health and damage.", apply = function(w, e) e.mods.extraGhouls = (e.mods.extraGhouls or 0) + 2; mulMod(e, "minionMul", 1.4) end },
+  primal   = { name = "Primal Spirit", desc = "+15% health and +10% speed.", apply = function(w, e) hpUp(e, 1.15); mulMod(e, "speed", 1.1) end },
+  ferocity = { name = "Ferocity", desc = "+15% damage and attack 10% faster.", apply = function(w, e) mulMod(e, "dmg", 1.15); mulMod(e, "rof", 1.1) end },
 }
 for k, p in pairs(A.PASSIVES) do p.key = k end
 A.SHARED = { "hull", "regen", "cannon", "loader", "treads", "bounty", "breaker", "lifesteal", "secondwind", "focus", "power" }
@@ -526,9 +718,9 @@ A.CLASSES = {
   { key = "reclaimer", name = "Reclaimer", tag = "Raises wrecked creeps as drones; curses.",
     skills = { "raise", "amplify", "corpseburst", "bonespear", "decrepify" }, ult = "rise", passives = { "legion", "lifesteal" },
     base = function(w, e) end },
-  { key = "juggernaut", name = "Juggernaut", tag = "Huge health, short range; leaps and shouts.",
+  { key = "juggernaut", name = "Juggernaut", tag = "Melee brawler: huge health, leaps and shouts.",
     skills = { "leap", "warcry", "whirlwind", "battleorders", "shout" }, ult = "berserk", passives = { "ironskin", "regen" },
-    base = function(w, e) hpUp(e, 1.5); mulMod(e, "range", 0.8); mulMod(e, "dmg", 1.2); mulMod(e, "armor", 0.9) end },
+    base = function(w, e) hpUp(e, 1.5); e.mods.melee = true; mulMod(e, "range", 0.45); mulMod(e, "dmg", 1.6); mulMod(e, "armor", 0.85); mulMod(e, "speed", 1.08) end },
   { key = "warden", name = "Warden", tag = "Auras for allies and creeps; charge and smite.",
     skills = { "charge", "holyshield", "hammers", "smite", "prayer" }, ult = "judgment", passives = { "might", "prayeraura", "freezeaura" },
     base = function(w, e) hpUp(e, 1.2); mulMod(e, "armor", 0.92) end },
@@ -538,6 +730,15 @@ A.CLASSES = {
   { key = "infiltrator", name = "Infiltrator", tag = "Trap turrets, stealth and a shadow clone.",
     skills = { "sentry", "mindblast", "fade", "clone", "talon" }, ult = "swarm", passives = { "crit", "venom", "shadowstep" },
     base = function(w, e) mulMod(e, "speed", 1.15); hpUp(e, 1.05); mulMod(e, "dmg", 1.1) end },
+  { key = "ascetic", name = "Ascetic", tag = "Melee monk: flurries, dashes, mantras and healing; every blow heals him a little.",
+    skills = { "flurry", "dashstrike", "mantra", "breath", "pull" }, ult = "sanctuary", passives = { "fleetfoot", "harmony" },
+    base = function(w, e) hpUp(e, 1.3); e.mods.melee = true; e.mods.lifesteal = (e.mods.lifesteal or 0) + 0.05; mulMod(e, "range", 0.42); mulMod(e, "dmg", 1.6); mulMod(e, "speed", 1.15); mulMod(e, "armor", 0.86) end },
+  { key = "hexer", name = "Hexer", tag = "Poisons, ghouls and hexes that turn creeps against their own side.",
+    skills = { "plague", "ghouls", "grasp", "sacrifice", "soulharvest" }, ult = "gargantuan", passives = { "toxin", "fetish" },
+    base = function(w, e) hpUp(e, 0.95); mulMod(e, "skillDmg", 1.1) end },
+  { key = "spiritcaller", name = "Spiritcaller", tag = "Switches between four spirit stances that reshape every attack.",
+    skills = { "jaguar", "gorilla", "eaglestance", "centipede", "rushclaw" }, ult = "avatar", passives = { "primal", "ferocity" },
+    base = function(w, e) hpUp(e, 1.05); mulMod(e, "dmg", 1.05) end },
 }
 A.byClass = {}
 for _, c in ipairs(A.CLASSES) do A.byClass[c.key] = c end
@@ -573,7 +774,7 @@ function A.setup(w, opts)
   -- three Commanders a side hit much harder: their towers and Core get tougher to match
   local biggest = 1
   for side = 1, n do biggest = math.max(biggest, #st.sideTeams[side]) end
-  local hpMul = biggest >= 3 and 1.4 or 1
+  local hpMul = biggest >= 5 and 1.75 or biggest >= 4 and 1.6 or biggest >= 3 and 1.4 or 1
   if hpMul > 1 then
     for side = 1, n do local core = st.cores[side]; core.maxhp = math.floor(core.maxhp * hpMul); core.hp = core.maxhp end
   end
@@ -687,7 +888,7 @@ function A.commanderXP(w, e, amount)
   local teamMul = 1
   if st and st.teamSide and e.team and st.sideTeams then
     local n = #(st.sideTeams[st.teamSide[e.team]] or {})
-    teamMul = n >= 3 and 0.72 or (n == 2 and 0.85 or 1)
+    teamMul = n >= 5 and 0.62 or n == 4 and 0.67 or n == 3 and 0.72 or (n == 2 and 0.85 or 1)
   end
   -- catch-up: Commanders below the match's average level learn faster (+15% per level, max +60%)
   local sum, n = 0, 0
@@ -697,7 +898,9 @@ function A.commanderXP(w, e, amount)
   end
   local behind = n > 0 and (sum / n - (e.clevel or 0)) or 0
   local catchUp = behind >= 1 and (1 + math.min(0.6, 0.15 * behind)) or 1
-  e.cxp = (e.cxp or 0) + amount * ((e.mods and e.mods.xpMul) or 1) * teamMul * catchUp
+  -- the top difficulties (8-10) also learn faster: +10% experience per level above 7 (said so in the menu)
+  local aiBonus = (e.aiLevel and e.aiLevel >= 8) and (1 + 0.1 * (e.aiLevel - 7)) or 1
+  e.cxp = (e.cxp or 0) + amount * ((e.mods and e.mods.xpMul) or 1) * teamMul * catchUp * aiBonus
   while (e.clevel or 0) < A.MAX_LEVEL and e.cxp >= A.THRESHOLDS[(e.clevel or 0) + 1] do
     e.clevel = (e.clevel or 0) + 1
     local L = e.clevel
@@ -729,6 +932,7 @@ end
 -- called from World:kill
 function A.onKill(w, o, attacker)
   local st = w.arena
+  if o.noXP then return end
   local killerC = attacker and (attacker.key == "commander" and attacker or attacker.owner)
   -- wrecks for the Reclaimer
   if not o.def.building and o.key ~= "commander" and not o.summon then
@@ -865,6 +1069,8 @@ function A.useSkill(w, c, slot, tx, ty)
   if r == false then return false, def.name .. ": nothing to use it on" end
   s.readyAt = w.time + def.cd * ((c.mods and c.mods.cdr) or 1)
   c.fadeUntil = (s.key == "fade" or s.key == "evade") and c.fadeUntil or nil -- acting breaks stealth
+  if SKILLLOG then print(string.format("SKILL %d %s %s %.0f", c.team, c.class, def.key, w.time)) end
+  if c.mods and c.mods.harmony then c.hp = math.min(c.maxhp, c.hp + c.maxhp * 0.05); c.healing = 0.6 end
   if w.onSkill then w.onSkill(c, def) end
   return true
 end
@@ -964,13 +1170,55 @@ function A.update(w, dt)
         if t > e.hot.untilT then e.hot = nil
         else e.hp = math.min(e.maxhp, e.hp + e.maxhp * e.hot.rate * dt); e.healing = 0.3 end
       end
-      if e.absorbUntil and t > e.absorbUntil then e.absorb, e.absorbUntil = nil, nil end
+      -- poisons
+      if e.dots and tick then
+        local total = 0
+        for i = #e.dots, 1, -1 do
+          local d = e.dots[i]
+          if t > d.untilT then table.remove(e.dots, i) else total = total + d.dps * 0.25 end
+        end
+        if #e.dots == 0 then e.dots = nil end
+        if total > 0 then
+          local src = e.dots and e.dots[#e.dots].src
+          w:damage(e, total, (src and src.alive) and src or nil)
+          if e.alive and math.random() < 0.35 then fx(w, "hit", e.x, e.y, 8, 0.25, { color = { 0.5, 1, 0.3 } }) end
+        end
+      end
+      -- gorilla stance regeneration
+      if e.stanceRegen and e.alive then e.hp = math.min(e.maxhp, e.hp + e.maxhp * e.stanceRegen * dt) end
+      -- Sacrifice: the hexed creep bursts when the hex ends
+      if e.charm and t > e.charm.untilT and e.alive then
+        local src = e.charm.src
+        e.team = e.charm.team
+        area(w, src, e.x, e.y, 100, skillDmg(src, 160))
+        fx(w, "splash", e.x, e.y, 100, 0.4, { color = { 0.5, 1, 0.3 } })
+        e.noXP = true
+        e.charm = nil
+        w:kill(e, nil)
+      end
+      if e.alive and e.absorbUntil and t > e.absorbUntil then e.absorb, e.absorbUntil = nil, nil end
       if e.boUntil and t > e.boUntil then e.maxhp = e.boBase or e.maxhp; e.hp = math.min(e.hp, e.maxhp); e.boUntil = nil end
       if e.bearUntil and t > e.bearUntil then e.maxhp = e.bearBase or e.maxhp; e.hp = math.min(e.hp, e.maxhp); e.bearUntil = nil end
     end
   end
 
   if tick and st.jungle then require("src.jungle").update(w, dt) end
+  -- ground zones (Inner Sanctuary)
+  if tick and st.zones then
+    for i = #st.zones, 1, -1 do
+      local z = st.zones[i]
+      if t > z.untilT then table.remove(st.zones, i)
+      else
+        for _, e in ipairs(w.entities) do
+          if e.alive and not e.def.building and U.dist(e.x, e.y, z.x, z.y) < z.r then
+            if w:hostile(z.team, e.team) then e.slowUntil = math.max(e.slowUntil or 0, t + 0.5)
+            else e.sanctuaryUntil = t + 0.4 end
+          end
+        end
+        if math.random() < 0.5 then fx(w, "ring", z.x, z.y, z.r, 0.3, { color = { 1, 0.95, 0.6 } }) end
+      end
+    end
+  end
   if tick then
     -- fountain: heal friendly Commanders at their Core
     for side = 1, st.nSides do

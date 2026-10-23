@@ -14,18 +14,21 @@ Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of 
 
 ### Commander Arena: a single-player lane battler
 Switch the title screen to **COMMANDER ARENA** for a different game. There's no base and no army: just your Commander, three lanes, towers, a Core to protect, and endless waves of creeps marching at the enemy.
-- **Seven classes inspired by classic action-RPG archetypes, each with five skills and an ultimate:**
+- **Ten classes inspired by classic action-RPG archetypes, each with five skills and an ultimate:**
   - **Ranger:** volleys, lances, decoys.
   - **Elementalist:** fireballs, frost, teleport. Ultimate: Meteor.
   - **Reclaimer:** rebuilds wrecked enemy creeps as its own drones.
-  - **Juggernaut:** leaps, war cries, Berserk.
+  - **Juggernaut:** a melee brawler; leaps, war cries, Berserk.
   - **Warden:** auras for your creeps, charges and smites.
   - **Shifter:** a wolf pack, bear form, cyclones.
   - **Infiltrator:** trap turrets, stealth, a shadow clone.
+  - **Ascetic:** a melee monk; flurries, dashing strikes, mantras, healing breath, a sanctuary that halves damage.
+  - **Hexer:** plague darts, a ghoul retinue, hexes that turn enemy creeps into walking bombs, a Gargantuan.
+  - **Spiritcaller:** four spirit stances (Jaguar, Gorilla, Eagle, Centipede), one at a time, each reshaping every attack.
 - **Roguelike levels to 10.** Levels 2, 4 and 8 offer 1 of 2 class skills (cast with Q/W/E at the mouse), level 6 unlocks your ultimate (R), and the other levels offer upgrade cards.
 - **Death isn't the end.** Your Commander respawns at your Core. Towers must fall in order (outer, inner, then the Core), and a lane whose towers are down sends super creeps.
-- **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal, dive a weakened Commander, gang up with allies and use their skills.
-- **1v1 up to 3v3, 1v2, 2v1, or a 3- or 4-way free-for-all** (bases on a triangle or in every corner, with a lane between each pair of bases), with its own scoring, high scores and online leaderboard.
+- **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal, dive a weakened Commander, gang up with allies and use their skills. Higher difficulties last-hit and deny, back off from a stronger Commander, and lead their skill shots; 8-10 also learn 10-30% faster (the menu says so when you hover a difficulty).
+- **1v1 up to 5v5, 1v2, 2v1, or a 3- or 4-way free-for-all** (5v5 starts on a Huge map: two Commanders top, one mid, one bot and a jungler on Battlefield) (bases on a triangle or in every corner, with a lane between each pair of bases), with its own scoring, high scores and online leaderboard.
 - **Six map templates:**
   - **Classic:** three lanes, two towers each.
   - **Long Road:** winding lanes walled in by rock, with three towers each, for longer games.
@@ -39,7 +42,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **Two capture shrines:** stand on one to take it. Each shrine you hold gives your side's Commanders +8% speed and damage.
   - **The Colossus** wakes in its pit at 7:00. Bring it down and your whole side gets the **Colossus Crest**: stronger Commanders and stronger creeps for 2 minutes. On Battlefield it alternates between two pits.
   - **Healing relics** respawn every 70 seconds.
-  - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler.
+  - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler; on Battlefield the fourth.
 - **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy.
 - **Creep veterancy:** creeps that land killing blows rank up (gold pips, up to 3), getting +12% health and damage each rank and becoming worth more experience. Denying your dying creep doesn't just starve the enemy Commander; it stops the enemy creep that was about to rank up off it. Computer players from difficulty 4 deny too, more often the better they are.
 

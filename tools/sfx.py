@@ -188,13 +188,22 @@ def skill(rng):
     return room(rise * 0.35 + shimmer + hit * 0.8, rng, 0.6, 0.3, 4000)
 
 
+def punch(rng):
+    """melee blow: a meaty low thump with a short slap on top"""
+    t = t_axis(0.3)
+    thump = sweep(t, rng.uniform(150, 190), 55, 30) * env_exp(t, 22, 0.001)
+    slap = bp(noise(len(t), rng), 900, 3500) * env_exp(t, 70, 0.0005)
+    swish = hp(noise(len(t), rng), 3000) * np.exp(-((t - 0.0) / 0.02) ** 2) * 0.2
+    return room(thump * 1.0 + slap * 0.55 + swish, rng, 0.25, 0.12)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     rng = np.random.default_rng(515)
     plan = [("rifle", rifle, 3, 0.8), ("blaster", blaster, 3, 0.8), ("heavy", heavy, 2, 0.95),
             ("artillery", artillery_fire, 2, 0.95), ("impact", impact, 3, 0.9), ("flak", flak, 2, 0.75),
             ("torpedo", torpedo, 1, 0.8), ("boom", boom_small, 3, 0.95), ("bigboom", boom_big, 2, 1.0),
-            ("skill", skill, 2, 0.8)]
+            ("skill", skill, 2, 0.8), ("punch", punch, 3, 0.7)]
     for name, fn, n, peak in plan:
         for i in range(1, n + 1):
             save(f"{name}{i}", fn(rng), peak)

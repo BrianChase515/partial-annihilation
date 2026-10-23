@@ -395,7 +395,11 @@ function UI.drawCommanderCard(game)
   elseif world:isFleeing(c) then status, sc = "fleeing", { 1, 0.75, 0.3 }
   elseif c.disarmed then status, sc = "powered down", { 1, 0.75, 0.3 }
   elseif c.healing and c.healing > 0 and c.hp < c.maxhp then status, sc = "repairing", { 0.5, 1, 0.6 }
-  elseif hitRecently then status, sc = "UNDER FIRE", { 1, 0.4, 0.35 } end
+  elseif hitRecently then status, sc = "UNDER FIRE", { 1, 0.4, 0.35 }
+  elseif c.stance then
+    status = (c.stance == "avatar" and "AVATAR" or c.stance:upper()) .. " stance"
+    sc = { 0.95, 0.8, 0.45 }
+  end
   if status then
     lg.setFont(font(11))
     lg.setColor(sc[1], sc[2], sc[3])
@@ -799,7 +803,13 @@ function UI.drawInfo(game, L)
       local tg = {}
       for k in pairs(d.weapon.targets) do tg[#tg + 1] = k end
       table.sort(tg)
-      info[#info + 1] = string.format("Weapon: %d dmg, range %d, hits %s", d.weapon.damage, d.weapon.range, table.concat(tg, "/"))
+      if arenaCmd then
+        local m = e.mods or {}
+        local dmg = d.weapon.damage * (m.dmg or 1)
+        info[#info + 1] = string.format("%s: %d dmg, range %d", m.melee and "Melee" or "Ranged", dmg, game.world:rangeOf(e))
+      else
+        info[#info + 1] = string.format("Weapon: %d dmg, range %d, hits %s", d.weapon.damage, d.weapon.range, table.concat(tg, "/"))
+      end
     end
     if d.income and not arenaCmd then
       info[#info + 1] = string.format("Produces %s%s", d.income.metal and string.format("%.1f metal/s ", d.income.metal) or "",
@@ -1224,7 +1234,7 @@ COMMANDER ARENA - CONTROLS
 Goal: destroy the enemy Core (in free-for-all: be the last Core standing). Each lane has towers per side:
   outer first, then middle (Long Road / Gauntlet), then inner, then the Core (shielded ones glow blue).
   Towers shoot creeps first - and you, if you attack an enemy Commander under them.
-  A lane whose enemy towers are down sends super creeps.
+  A lane whose enemy towers are down sends super creeps. Cores are fortified: half damage until 8:00, -25% until 12:00.
 Jungle (Treeline / Battlefield maps): neutral camps give XP (they only fight back); stand on a shrine to
   capture it (+8% speed and damage per shrine); the Colossus wakes at 7:00 - kill it for the Crest (2 min of
   stronger Commanders and creeps); green relics heal 35%.
@@ -1233,7 +1243,8 @@ Your Commander
   Right-click ............... move / attack        A then click ... attack-move
   S ......................... stop                 F .............. flee home (+50% speed, can't be cancelled)
   Hold D .................... hold fire, to time last hits.  Right-click your own creep under 35% health: DENY it
-  Creeps rank up from killing blows (gold pips, max 3: +12% health/damage each). Denying also stops enemy creeps ranking up
+  Creeps rank up from killing blows (gold pips, max 3: +12% health/damage each).
+  Denying also stops enemy creeps ranking up.
   Q W E ..................... your skills, cast at the mouse (or click the button, then the map)
   R ......................... your ultimate (unlocks at level 6)
   Z / X ..................... choose a level-up card
@@ -1250,10 +1261,13 @@ Classes
   Ranger ....... longest range: Volley, Piercing Lance, Evade, Decoy, Frost Arrow. Ult: Chain Storm
   Elementalist . fragile caster: Teleport, Frost Nova, Fireball, Chain Lightning, Energy Shield. Ult: Meteor
   Reclaimer .... raises wrecked creeps as drones: Raise, Amplify, Corpse Burst, Bone Spear, Decrepify. Ult: Rise
-  Juggernaut ... tanky brawler: Leap Slam, War Cry, Whirlwind, Battle Orders, Iron Shout. Ult: Berserk
+  Juggernaut ... melee brawler: Leap Slam, War Cry, Whirlwind, Battle Orders, Iron Shout. Ult: Berserk
   Warden ....... auras and holy strikes: Charge, Holy Shield, Spinning Hammers, Smite, Prayer. Ult: Judgment
   Shifter ...... wolves and storms: Summon Wolves, Bear Form, Cyclone, Firestorm, Spirit of the Oak. Ult: Cataclysm
   Infiltrator .. traps and stealth: Lightning Sentry, Mind Blast, Fade, Shadow Clone, Dragon Talon. Ult: Sentry Swarm
+  Ascetic ...... melee monk: Flurry, Dashing Strike, Mantra, Breath of Heaven, Whirling Pull. Ult: Sanctuary
+  Hexer ........ poison and ghouls: Plague Dart, Raise Ghouls, Grasp, Sacrifice, Soul Harvest. Ult: Gargantuan
+  Spiritcaller . one stance at a time: Jaguar, Gorilla, Eagle, Centipede, Rushing Claw. Ult: Spirit Avatar
 
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
 ]]

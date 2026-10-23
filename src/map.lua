@@ -587,7 +587,7 @@ function M.generateArena(opts)
     local c = self.cores[sd]
     local dx = c.x < w / 2 and 1 or -1
     local dy = c.y < h / 2 and 1 or -1
-    for k, off in ipairs({ { 4, 4 }, { 6, 1 }, { 1, 6 } }) do
+    for k, off in ipairs({ { 4, 4 }, { 6, 1 }, { 1, 6 }, { 7, 4 }, { 4, 7 } }) do
       spots[sd][k] = { x = c.x + off[1] * dx, y = c.y + off[2] * dy }
     end
   end
@@ -596,7 +596,8 @@ function M.generateArena(opts)
   for t = 1, #players do
     local sd = self.teamSide[t]
     used[sd] = (used[sd] or 0) + 1
-    self.starts[t] = spots[sd][math.min(3, used[sd])]
+    local sp = spots[sd][math.min(5, used[sd])]
+    self.starts[t] = { x = sp.x, y = sp.y }
     self.starts[t].side = sd
   end
   self:labelComponents()
