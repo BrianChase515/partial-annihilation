@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.10.0"  -- the first two numbers are the high-score season
+D.VERSION = "0.10.1"  -- the first two numbers are the high-score season
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 
 D.units = {
@@ -313,8 +313,8 @@ D.profiles = {
   { key = "Aggressive", desc = "Rushes early and keeps the pressure on.",
     firstWaveMul = 0.55, waveMul = 0.7, turretMul = 0.3, expandMul = 0.8, hunters = 3, huntersFrom = 150,
     weights = { tank = 1.4, scout = 1.6, artillery = 0.5 } },
-  { key = "Turtle",     desc = "Fortifies heavily, attacks late with big waves.", commander = "cautious",
-    firstWaveMul = 1.7, waveMul = 1.6, turretMul = 3, turretBonus = 2, aaBonus = 2, expandMul = 0.7,
+  { key = "Turtle",     desc = "Rings its base and outposts with towers, parks battleships in its harbor, attacks late with big waves.", commander = "cautious",
+    firstWaveMul = 1.7, waveMul = 1.6, turretMul = 3, turretBonus = 2, aaBonus = 2, expandMul = 0.7, fortify = true, fortifyFrom = 140, harbor = true,
     weights = { artillery = 2.2, flak = 1.5, destroyer = 1.5 } },
   { key = "Boomer",     desc = "Grabs the whole map's metal, then floods you.",
     firstWaveMul = 1.5, waveMul = 1.5, expandMul = 1.8, builderBonus = 2, factoryEcoMul = 0.75 },

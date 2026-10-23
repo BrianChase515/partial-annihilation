@@ -645,9 +645,19 @@ function AI:thinkEconomy()
       local needEnergy = eFuture < mFuture * 9 + 8 or (tm.energy < tm.eStore * 0.15 and eFuture < mFuture * 14)
       local p = self.profile
       local hasWater = self.waterTX and (self.waterSize or 0) > 120
+      -- Turtles fortify continuously: the target grows with the clock, and every other
+      -- builder (plus the Commander) works on it before claiming more metal
+      local fortCap = p.fortify and math.min(28, self.diff.turrets + math.floor(math.max(0, t - 240) / 70)) or 0
+      self.fortToggle = not self.fortToggle
+      local fortifyNow = p.fortify and t > (p.fortifyFrom or 90) and factories >= 1 and turrets + aas < fortCap
+        and (isCmd or self.fortToggle) and (tm.metal > 40 or mInc > 7) and not needEnergy
       if factories == 0 and mexes >= 2 and solars >= 1 then
         -- everyone opens with a vehicle plant: it's the only source of constructors
         task = "landfac"
+      elseif fortifyNow then
+        self.fortN = (self.fortN or 0) + 1
+        task = (self.fortN % 4 == 0) and "aaturret" or "turret"
+        self.fortWhere = (self.fortN % 3 == 0) and "outpost" or "ring"
       elseif needEnergy and solars < 60 then
         task = "solar"
       else
@@ -665,6 +675,7 @@ function AI:thinkEconomy()
         elseif landfacs == 0 and factories >= 1 and mFuture > 6 then task = "landfac"
         elseif airfacs == 0 and mFuture > 6.5 and t > 150 then task = "airfac"
         elseif yards == 0 and hasWater and mFuture > 7.5 and t > 200 then task = "shipyard"
+        elseif p.harbor and yards == 0 and hasWater and mFuture > 6 and t > 180 then task = "shipyard"
         elseif turrets < self.diff.turrets and t > 160 then task = "turret"
         elseif aas < wantAA then task = "aaturret"
         elseif storages == 0 and t > 300 then task = "storage"
@@ -685,6 +696,9 @@ function AI:thinkEconomy()
           key = task
           if key == "shipyard" then
             tx, ty = self:findSite(key, self.waterTX, self.waterTY, 0, 10)
+          elseif (key == "turret" or key == "aaturret") and p.fortify then
+            tx, ty = self:fortSite(key, bx, by)
+            self.fortWhere = nil
           elseif key == "turret" or key == "aaturret" then
             local cx = math.floor(bx + self.dirX * self.rng:random(5, 9) + self.rng:random(-4, 4))
             local cy = math.floor(by + self.dirY * self.rng:random(5, 9) + self.rng:random(-4, 4))
@@ -725,6 +739,35 @@ function AI:thinkEconomy()
       end
     end
   end
+end
+
+-- Turtle tower placement: a ring around the whole base (heavier toward the enemy), and
+-- every third one guarding an outlying extractor that has no tower near it yet
+function AI:fortSite(key, bx, by)
+  local world = self.world
+  local map = world.map
+  if self.fortWhere == "outpost" then
+    local towers = self:mine(function(e) return e.key == "turret" or e.key == "aaturret" end)
+    local best, bd
+    for _, m in ipairs(self:mine(function(e) return e.key == "mex" and e.built >= 1 end)) do
+      local d = U.dist(m.x, m.y, self.baseX, self.baseY)
+      if d > 500 then
+        local covered = false
+        for _, tw in ipairs(towers) do if U.dist2(tw.x, tw.y, m.x, m.y) < 260 * 260 then covered = true; break end end
+        if not covered and (not bd or d < bd) then best, bd = m, d end
+      end
+    end
+    if best then
+      local mtx, mty = map:tileAt(best.x, best.y)
+      -- on the side facing the enemy
+      local tx, ty = self:findSite(key, math.floor(mtx + self.dirX * 2), math.floor(mty + self.dirY * 2), 1, 5)
+      if tx then return tx, ty end
+    end
+  end
+  local base = math.atan2(self.dirY, self.dirX)
+  local a = self.rng:random() < 0.65 and base + (self.rng:random() - 0.5) * 3.0 or self.rng:random() * math.pi * 2
+  local r = self.rng:random(6, 12)
+  return self:findSite(key, math.floor(bx + math.cos(a) * r), math.floor(by + math.sin(a) * r), 0, 6)
 end
 
 -- Sea Constructor: claim rich offshore deposits, then add tidal power near home water
@@ -811,8 +854,12 @@ function AI:pickUnit(f)
       + self:queued("boat") + self:queued("destroyer") + self:queued("sub")
     local bships = self:countPlanned("battleship") + self:queued("battleship")
     local tm = world.teams[self.team]
-    local canBB = t > 420 and tm.mIncome > 24 and bships < (self.profile.navalFirst and 3 or 1)
+    local harbor = self.profile.harbor
+    local maxBB = harbor and math.min(4, 1 + math.floor(math.max(0, t - 360) / 240)) or (self.profile.navalFirst and 3 or 1)
+    local canBB = t > (harbor and 360 or 420) and tm.mIncome > (harbor and 18 or 24) and bships < maxBB
       and self.diff.level and self.diff.level >= 3
+    -- Turtles turn their home water into a fortress: battleships first, a few escorts against subs
+    if harbor and canBB then return "battleship" end
     if not self.navalReach and ships >= 5 + enemyShips then
       if canBB and bships == 0 then return "battleship" end -- a harbor guard
       return nil
@@ -946,9 +993,17 @@ function AI:thinkBattleships(army)
         tx, ty = world.map:center(self.waterTX, self.waterTY)
         world:issue(b, { type = "retreat", x = tx, y = ty })
       else
-        local siege = self.navalReach and (#esc >= 2 or self.profile.navalFirst)
+        local siege = self.navalReach and (#esc >= 2 or self.profile.navalFirst) and not self.profile.harbor
         if siege then
           tx, ty = self:waterNear(self.enemyX, self.enemyY, 30)
+        end
+        if not tx and self.profile.harbor then
+          -- harbor guard: park as close to the base as the water allows, spread out so the
+          -- 1300 range covers the base and every approach
+          local k = 0
+          for i, o in ipairs(bbs) do if o == b then k = i end end
+          local a = math.atan2(self.dirY, self.dirX) + (k - 1) * 1.3
+          tx, ty = self:waterNear(self.baseX + math.cos(a) * 250, self.baseY + math.sin(a) * 250, 25)
         end
         if not tx then
           tx, ty = self:waterNear(self.baseX + self.dirX * 500, self.baseY + self.dirY * 500, 20)
