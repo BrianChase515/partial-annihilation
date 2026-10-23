@@ -26,7 +26,9 @@ end
 -- five soundtracks: "" (D minor), "_b" Iron Tide (E minor), "_c" Ashfall (C minor),
 -- "_d" Overdrive (A minor), "_e" Last Light (G minor)
 M.SUITES = { "", "_b", "_c", "_d", "_e" }
-M.LOOPS_PER_SUITE = 2   -- during a match, move on to another suite after this many loops
+M.LOOPS_PER_SUITE = 2
+M.NAMES = { [""] = "Annihilation", _b = "Iron Tide", _c = "Ashfall", _d = "Overdrive", _e = "Last Light" }
+M.changedAt = nil   -- love.timer time of the last soundtrack change (for the "Music:" label)   -- during a match, move on to another suite after this many loops
 
 -- a shuffled order of all suites, starting with `first`
 function M.playlist(first)
@@ -69,8 +71,15 @@ function M.start(suite)
   if stinger then stinger:stop(); stinger = nil end
   if playing then return end
   playing = true
-  lastTell, loops = 0, 0
-  for _, s in pairs(stems) do s:seek(0); s:play() end
+  -- start somewhere random in the loop, so no two starts sound the same
+  local off = 0
+  if stems.ambient then
+    local ok, dur = pcall(function() return stems.ambient:getDuration() end)
+    if ok and dur and dur > 8 then off = love.math.random() * (dur - 4) end
+  end
+  lastTell, loops = off, 0
+  for _, s in pairs(stems) do s:seek(off); s:play() end
+  M.changedAt = love.timer.getTime()
 end
 
 function M.stop()
@@ -161,7 +170,16 @@ function M.menu()
   if stinger and stinger:isPlaying() then return end
   M.fadeOut = nil
   M.rotate = false
-  if not playing then M.reset(); M.start(M.suite or M.SUITES[love.math.random(#M.SUITES)]) end
+  if not playing then
+    M.reset()
+    -- a different soundtrack from the one that just played
+    local pick
+    for _ = 1, 8 do
+      pick = M.SUITES[love.math.random(#M.SUITES)]
+      if pick ~= M.suite then break end
+    end
+    M.start(pick)
+  end
   M.heat, M.floor = 0, 0
 end
 

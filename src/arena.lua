@@ -591,7 +591,20 @@ function A.setup(w, opts)
     local c = w.teams[t].commander
     local p = opts.players[t] or {}
     local ck = p.class
-    if not ck or not A.byClass[ck] then ck = A.CLASSES[w.rngCmd:random(#A.CLASSES)].key end
+    if not ck or not A.byClass[ck] then
+      -- random picks don't repeat until every class has been used
+      st.classPool = st.classPool or {}
+      if #st.classPool == 0 then
+        for _, cl in ipairs(A.CLASSES) do
+          local used = false
+          for t2 = 1, w.np do local o = w.teams[t2].commander; if o and o.class == cl.key then used = true end end
+          for _, pl in ipairs(opts.players or {}) do if pl.class == cl.key then used = true end end
+          if not used then st.classPool[#st.classPool + 1] = cl.key end
+        end
+        if #st.classPool == 0 then for _, cl in ipairs(A.CLASSES) do st.classPool[#st.classPool + 1] = cl.key end end
+      end
+      ck = table.remove(st.classPool, w.rngCmd:random(#st.classPool))
+    end
     c.class = ck
     c.skills = {}
     c.mods.dmg = 1.6           -- Commanders hit harder in the Arena
@@ -669,7 +682,14 @@ end
 
 function A.commanderXP(w, e, amount)
   if not e or not e.skills then return end
-  e.cxp = (e.cxp or 0) + amount * ((e.mods and e.mods.xpMul) or 1)
+  -- bigger teams share the map's experience: scale it so max level still arrives late
+  local st = w.arena
+  local teamMul = 1
+  if st and st.teamSide and e.team and st.sideTeams then
+    local n = #(st.sideTeams[st.teamSide[e.team]] or {})
+    teamMul = n >= 3 and 0.72 or (n == 2 and 0.85 or 1)
+  end
+  e.cxp = (e.cxp or 0) + amount * ((e.mods and e.mods.xpMul) or 1) * teamMul
   while (e.clevel or 0) < A.MAX_LEVEL and e.cxp >= A.THRESHOLDS[(e.clevel or 0) + 1] do
     e.clevel = (e.clevel or 0) + 1
     local L = e.clevel

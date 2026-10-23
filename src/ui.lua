@@ -1593,6 +1593,20 @@ function UI.drawCommanderHover(game)
   end
 end
 
+-- "Music: Ashfall" for a few seconds whenever the soundtrack changes
+function UI.drawMusicLabel(x, y, alignRight, always)
+  local MUSIC = require("src.music")
+  if MUSIC.muted or not MUSIC.suite then return end
+  local age = love.timer.getTime() - (MUSIC.changedAt or -99)
+  if not always and age > 5 then return end
+  local a = always and 1 or math.min(1, (5 - age) * 1.5)
+  local text = "Music: " .. (MUSIC.NAMES[MUSIC.suite] or "?")
+  lg.setFont(font(12))
+  local tx = alignRight and (x - font(12):getWidth(text)) or x
+  lg.setColor(0.55, 0.62, 0.72, 0.85 * a)
+  lg.print(text, tx, y)
+end
+
 function UI.draw(game)
   local w, h = lg.getDimensions()
   local L = layout(w, h)
@@ -1602,6 +1616,7 @@ function UI.draw(game)
   UI.drawCommanderCard(game)
   UI.drawJunglePanel(game)
   UI.drawCommanderHover(game)
+  UI.drawMusicLabel(w - 12, L.panelY - UI.ORDERS_H - 24, true)
   -- bottom panel
   lg.setColor(0.06, 0.08, 0.11, 0.95)
   lg.rectangle("fill", 0, L.panelY, w, UI.PANEL_H)

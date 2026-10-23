@@ -428,6 +428,7 @@ function Menu:draw()
   end
   lg.setColor(0.4, 0.45, 0.52)
   lg.print("v" .. D.VERSION, 12, h - 24)
+  UI.drawMusicLabel(80, h - 24, false, true)
   lg.setFont(R.font(13))
   lg.setColor(0.5, 0.56, 0.64)
   local tip = self.mode == "arena"

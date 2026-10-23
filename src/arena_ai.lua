@@ -317,6 +317,39 @@ function AI:jungleThink(c, hpf, enemyC, danger)
   return false
 end
 
+-- our tower being hit by an enemy Commander, nobody of ours near it, and we're the closest
+function AI:towerToDefend(c)
+  local w = self.world
+  local st = w.arena
+  -- already defending: stay until the attack is over
+  local cur = self.defendTower
+  if cur and cur.alive and cur.lastHit and w.time - cur.lastHit < 5 then return cur end
+  self.defendTower = nil
+  local best, bd
+  for _, s in ipairs(st.structures) do
+    if s.alive and s.side == self.side and s.key ~= "core" and s.lastHit and w.time - s.lastHit < 3 then
+      local attacker = false
+      for t = 1, w.np do
+        local o = w.teams[t].commander
+        if o and o.alive and w:hostile(t, self.team) and U.dist(o.x, o.y, s.x, s.y) < 500 then attacker = true end
+      end
+      if attacker then
+        local nearest, nd
+        for _, t in ipairs(st.sideTeams[self.side]) do
+          local a = w.teams[t].commander
+          if a and a.alive then
+            local d = U.dist(a.x, a.y, s.x, s.y)
+            if not nd or d < nd then nearest, nd = a, d end
+          end
+        end
+        if nearest == c and nd > 400 and nd < 2600 and (not bd or nd < bd) then best, bd = s, nd end
+      end
+    end
+  end
+  self.defendTower = best
+  return best
+end
+
 function AI:update(dt)
   local w = self.world
   if w.over then return end
@@ -398,6 +431,20 @@ function AI:update(dt)
     end)
     if best then
       w:issue(c, { type = "attack", target = best })
+      return
+    end
+  end
+
+  -- a tower of ours under attack with no Commander of ours near it: the closest one goes
+  if hpf > 0.45 and not danger then
+    local tw = self:towerToDefend(c)
+    if tw then
+      if U.dist(c.x, c.y, tw.x, tw.y) < 350 then
+        if #c.orders == 0 then w:issue(c, { type = "amove", x = tw.x, y = tw.y, arrive = 60 }) end
+      elseif not (c.orders[1] and c.orders[1].type == "amove" and U.dist(c.orders[1].x, c.orders[1].y, tw.x, tw.y) < 200) then
+        w:issue(c, { type = "amove", x = tw.x, y = tw.y, arrive = 120 })
+      end
+      self.mode = "defend"
       return
     end
   end
