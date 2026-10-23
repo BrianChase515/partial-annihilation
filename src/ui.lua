@@ -86,9 +86,14 @@ function UI.drawIcon(key, x, y, s, team)
     lg.setColor(0, 0, 0)
     lg.rectangle("line", x - k / 2, y - k / 2, k, k, 4)
   end
+  if d.building then lg.setColor(1, 1, 1) else lg.setColor(0, 0, 0, 0.9) end
+  local ICONS = require("src.icons")
+  if ICONS.has(key) then
+    ICONS.draw(key, x, y + (d.domain == "air" and 2 or 0), s * (d.building and 0.62 or (d.domain == "air" and 0.42 or 0.5)))
+    return
+  end
   local f = font(d.building and 13 or 12)
   lg.setFont(f)
-  if d.building then lg.setColor(1, 1, 1) else lg.setColor(0, 0, 0) end
   lg.print(d.short, x - f:getWidth(d.short) / 2, y - f:getHeight() / 2 + (d.domain == "air" and 3 or 0))
 end
 
@@ -1104,7 +1109,7 @@ Camera
   L = lock camera on selection,  Shift+L = cinematic follow (zooms to frame them)
   F9 = keep mouse inside window (on by default, for edge panning),  F8 = edge panning on/off
 
-Game
+Game  (icons: game-icons.net, CC BY 3.0)
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
   F11 = fullscreen,  F1 = this help
 

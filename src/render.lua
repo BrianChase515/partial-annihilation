@@ -3,6 +3,7 @@ local D = require("src.defs")
 local U = require("src.util")
 
 local R = {}
+local ICONS = require("src.icons")
 
 local fonts = {}
 local function font(size)
@@ -85,6 +86,15 @@ local function drawLabel(text, x, y, size, zoom)
   love.graphics.print(text, x - tw / 2, y - f:getHeight() / 2)
 end
 
+-- a unit's mark: its picture when it's big enough on screen, otherwise the short label
+local function unitMark(e, x, y, r, labelSize, zoom, scale)
+  if zoom * r >= 7 and ICONS.has(e.key) then
+    ICONS.draw(e.key, x, y, r * (scale or 1.55))
+  else
+    drawLabel(e.def.short, x, y, labelSize, zoom)
+  end
+end
+
 -- shape helpers
 local function rrect(mode, x, y, w, h, r)
   love.graphics.rectangle(mode, x - w / 2, y - h / 2, w, h, r, r)
@@ -128,6 +138,12 @@ function R.drawEntity(e, cam, selected)
           lg.rectangle("fill", x - w / 2 + 6, y - h / 2 + 5, (w - 12) * e.progress, 4)
         end
       end
+      -- the picture first, so a turret's barrel draws on top of it
+      local drewIcon = zoom >= 0.3 and ICONS.has(e.key)
+      if drewIcon then
+        lg.setColor(1, 1, 1, 0.9)
+        ICONS.draw(e.key, x, y, math.min(d.w, d.h) * D.TILE * (d.weapon and 0.6 or 0.7))
+      end
       if d.weapon then
         local a = e.angle or 0
         lg.setColor(0.08, 0.08, 0.1)
@@ -136,7 +152,9 @@ function R.drawEntity(e, cam, selected)
         lg.setColor(cr, cg, cb)
         lg.circle("fill", x, y, 7)
       end
-      if e.key == "mex" then
+      if drewIcon then
+        -- (the picture says what it is)
+      elseif e.key == "mex" then
         lg.setColor(0.95, 0.85, 0.3)
         lg.circle("line", x, y, 9)
       elseif e.key == "solar" then
@@ -144,8 +162,10 @@ function R.drawEntity(e, cam, selected)
         lg.setLineWidth(1)
         for i = -1, 1 do lg.line(x - 20, y + i * 9, x + 20, y + i * 9) end
       end
-      lg.setColor(1, 1, 1, 0.95)
-      drawLabel(d.short, x, y + (d.weapon and 0 or 0), d.w >= 3 and 18 or 12, zoom)
+      if not drewIcon then
+        lg.setColor(1, 1, 1, 0.95)
+        drawLabel(d.short, x, y + (d.weapon and 0 or 0), d.w >= 3 and 18 or 12, zoom)
+      end
     end
   elseif d.shape == "walker" then
     local r = d.radius
@@ -208,7 +228,7 @@ function R.drawEntity(e, cam, selected)
         x + math.cos(a + 2.5) * r, y + math.sin(a + 2.5) * r,
         x + math.cos(a - 2.5) * r, y + math.sin(a - 2.5) * r)
       lg.setColor(0, 0, 0, 0.9)
-      drawLabel(d.short, x, y, 10, zoom)
+      unitMark(e, x, y, d.radius, 10, zoom, 1.25)
     elseif e.key == "battleship" then
       -- a long rounded hull with two gun turrets: easy to spot, as it should be
       local a = e.angle
@@ -235,7 +255,7 @@ function R.drawEntity(e, cam, selected)
         lg.circle("fill", gx, gy, 6)
       end
       lg.setColor(0, 0, 0, 0.9)
-      drawLabel(d.short, x, y, 13, zoom)
+      unitMark(e, x, y, d.radius, 13, zoom, 1.45)
     elseif dom == "sea" or dom == "sub" then
       local alpha = dom == "sub" and 0.55 or 1
       lg.setColor(1, 1, 1, 0.12 * alpha)
@@ -254,7 +274,7 @@ function R.drawEntity(e, cam, selected)
       lg.setColor(1, 1, 1, 0.7 * alpha)
       lg.line(x + math.cos(a) * (r - 3), y + math.sin(a) * (r - 3), x + math.cos(a) * (r + 5), y + math.sin(a) * (r + 5))
       lg.setColor(0, 0, 0, 0.9)
-      drawLabel(d.short, x, y, r >= 14 and 13 or 11, zoom)
+      unitMark(e, x, y, r, r >= 14 and 13 or 11, zoom, 1.45)
     else
       -- land: rounded squares, commander bigger with double outline
       lg.setColor(0, 0, 0, 0.3)
@@ -281,7 +301,7 @@ function R.drawEntity(e, cam, selected)
         rrect("line", x, y, r * 2 + 8, r * 2 + 8, 6)
       end
       lg.setColor(0, 0, 0, 0.92)
-      drawLabel(d.short, x, y, e.key == "commander" and 11 or (r >= 12 and 13 or 11), zoom)
+      unitMark(e, x, y, r, e.key == "commander" and 11 or (r >= 12 and 13 or 11), zoom, e.key == "commander" and 1.5 or 1.55)
     end
     if e.flash and e.flash > 0 and e.turret then
       lg.setColor(1, 0.95, 0.6, 0.9)

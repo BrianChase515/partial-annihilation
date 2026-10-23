@@ -1,0 +1,35 @@
+Icons from game-icons.net, CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/).
+Recolored to white silhouettes on transparent backgrounds for tinting in game.
+
+commander    battle-mech by delapouite  https://game-icons.net/1x1/delapouite/battle-mech.html
+builder      bulldozer by delapouite  https://game-icons.net/1x1/delapouite/bulldozer.html
+scout        binoculars by delapouite  https://game-icons.net/1x1/delapouite/binoculars.html
+tank         tank by lorc  https://game-icons.net/1x1/lorc/tank.html
+artillery    mortar by delapouite  https://game-icons.net/1x1/delapouite/mortar.html
+flak         missile-launcher by delapouite  https://game-icons.net/1x1/delapouite/missile-launcher.html
+fighter      jet-fighter by delapouite  https://game-icons.net/1x1/delapouite/jet-fighter.html
+bomber       stealth-bomber by delapouite  https://game-icons.net/1x1/delapouite/stealth-bomber.html
+gunship      helicopter by delapouite  https://game-icons.net/1x1/delapouite/helicopter.html
+boat         speed-boat by delapouite  https://game-icons.net/1x1/delapouite/speed-boat.html
+destroyer    iron-hulled-warship by cathelineau  https://game-icons.net/1x1/cathelineau/iron-hulled-warship.html
+battleship   battleship by cathelineau  https://game-icons.net/1x1/cathelineau/battleship.html
+seabuilder   spanner by lorc  https://game-icons.net/1x1/lorc/spanner.html
+sub          submarine by delapouite  https://game-icons.net/1x1/delapouite/submarine.html
+walker       alien-stare by lorc  https://game-icons.net/1x1/lorc/alien-stare.html
+drone        delivery-drone by delapouite  https://game-icons.net/1x1/delapouite/delivery-drone.html
+wolf         wolf-head by lorc  https://game-icons.net/1x1/lorc/wolf-head.html
+shadow       shadow-follower by lorc  https://game-icons.net/1x1/lorc/shadow-follower.html
+decoy        target-dummy by lorc  https://game-icons.net/1x1/lorc/target-dummy.html
+sentry       tesla-turret by lorc  https://game-icons.net/1x1/lorc/tesla-turret.html
+atower       watchtower by delapouite  https://game-icons.net/1x1/delapouite/watchtower.html
+core         atom-core by delapouite  https://game-icons.net/1x1/delapouite/atom-core.html
+mex          gold-mine by delapouite  https://game-icons.net/1x1/delapouite/gold-mine.html
+solar        solar-power by skoll  https://game-icons.net/1x1/skoll/solar-power.html
+seabattery   cannon by lorc  https://game-icons.net/1x1/lorc/cannon.html
+tidal        water-mill by caro-asercion  https://game-icons.net/1x1/caro-asercion/water-mill.html
+storage      warehouse by delapouite  https://game-icons.net/1x1/delapouite/warehouse.html
+landfac      factory by delapouite  https://game-icons.net/1x1/delapouite/factory.html
+airfac       airplane-departure by delapouite  https://game-icons.net/1x1/delapouite/airplane-departure.html
+shipyard     harbor-dock by delapouite  https://game-icons.net/1x1/delapouite/harbor-dock.html
+turret       turret by sbed  https://game-icons.net/1x1/sbed/turret.html
+aaturret     anti-aircraft-gun by pierre-leducq  https://game-icons.net/1x1/pierre-leducq/anti-aircraft-gun.html

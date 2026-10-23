@@ -241,4 +241,6 @@ Bump `VERSION` and `D.VERSION` in `src/defs.lua` together, then run `tools/build
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+The game's code, music, sound effects and voices are MIT. See [LICENSE](LICENSE).
+
+Unit and building icons are from [game-icons.net](https://game-icons.net) by Lorc, Delapouite, Cathelineau, Skoll, sbed, Caro Asercion and Pierre Leducq, used under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). They were recolored to white silhouettes. `assets/icons/CREDITS.txt` lists which icon is which.
