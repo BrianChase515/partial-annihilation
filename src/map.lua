@@ -49,7 +49,9 @@ function M.generate(opts)
   end
 
   -- Symmetry: 2 players = 180-degree rotation; 3-4 players = 4-way rotation (a base per corner)
-  local np = opts.mapPlayers or (type(opts.players) == "table" and #opts.players or (opts.players or 2))
+  -- RTS maps always have four base sites (one per corner, 4-way symmetric) so you can't
+  -- know where the enemy starts; saved two-player maps from older versions keep their layout
+  local np = opts.mapPlayers or 4
   local four = np > 2
   self.four = four
   local syms

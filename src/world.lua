@@ -62,14 +62,54 @@ function W.new(opts)
   self.nukes = {}
   self.rngCmd = love.math.newRandomGenerator((opts.seed or 1) + 777)
   MODS.init(self, opts.mods)
-  -- random starting corner: rotate everyone's start by one of the map's symmetries
+  -- random starting corners. On four-corner maps every player gets a random corner, so
+  -- the enemy may be next to you or across the map; teammates get neighbouring corners.
   if not opts.arena and not opts.fixedStarts then
     if love.math.random() < 0.5 then self.map:flipX() end
-    local syms = self.map.syms
-    local f = syms[love.math.random(#syms)]
-    for t, st in ipairs(self.map.starts) do
-      local x, y = f(st.x, st.y)
-      self.map.starts[t] = { x = x, y = y }
+    local sites = self.map.starts
+    if #sites >= 4 and self.np <= #sites then
+      local perms = {}
+      local function permute(cur, used)
+        if #cur == self.np then perms[#perms + 1] = { unpack(cur) }; return end
+        for i = 1, #sites do
+          if not used[i] then used[i] = true; cur[#cur + 1] = i; permute(cur, used); cur[#cur] = nil; used[i] = nil end
+        end
+      end
+      permute({}, {})
+      -- keep the layouts where teammates sit closest together
+      local best, pool = math.huge, {}
+      for _, pm in ipairs(perms) do
+        local cost = 0
+        for a = 1, self.np do
+          for b = a + 1, self.np do
+            if self.ally[a] == self.ally[b] then
+              local sa, sb = sites[pm[a]], sites[pm[b]]
+              cost = cost + math.floor(U.dist(sa.x, sa.y, sb.x, sb.y))
+            end
+          end
+        end
+        if cost < best then best, pool = cost, { pm } elseif cost == best then pool[#pool + 1] = pm end
+      end
+      local pick = pool[love.math.random(#pool)]
+      local chosen = {}
+      for t = 1, self.np do chosen[t] = { x = sites[pick[t]].x, y = sites[pick[t]].y } end
+      -- the remaining corners stay listed after the players (empty bases to expand into)
+      local taken = {}
+      for t = 1, self.np do taken[pick[t]] = true end
+      for i = 1, #sites do if not taken[i] then chosen[#chosen + 1] = { x = sites[i].x, y = sites[i].y } end end
+      self.map.starts = chosen
+      if os.getenv("PA_DEBUG_AI") then
+        local t = {}
+        for i = 1, self.np do t[#t + 1] = string.format("P%d(ally%d)@%d,%d", i, self.ally[i], chosen[i].x, chosen[i].y) end
+        print("STARTS " .. table.concat(t, " "))
+      end
+    else
+      local syms = self.map.syms
+      local f = syms[love.math.random(#syms)]
+      for t, st in ipairs(self.map.starts) do
+        local x, y = f(st.x, st.y)
+        self.map.starts[t] = { x = x, y = y }
+      end
     end
   end
   -- commanders

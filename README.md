@@ -81,6 +81,9 @@ The **Battleship** brings the sea to the land. It shells anything within 40 tile
 
 Your Commander can flee too, at +50% speed, but he only repairs at his starting spot. There he powers down until he's whole again, which turns your start into a real base: hit-and-run with him is fine, and the way to kill an enemy Commander is to catch him off guard or assault his home.
 
+### Where's the enemy?
+Every RTS map has four corner bases. You and each opponent get a random corner, so in a 1v1 the enemy might be right next door or across the map: scout before you commit. Teammates always start side by side, and empty corners are free real estate.
+
 ### Opponents with personalities, and Commanders they actually use
 Difficulty (1–10) and personality are set separately for each computer player. The personalities are *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord*, a Commander who leads every assault from the front. Computer players pick upgrades that fit their style. They send their Commander out to hunt for experience when the odds are good and pull him back to their strongest position when hurt. Raiders, Aggressive and Warlord players (and sometimes Balanced ones) run packs of fast scouts that hunt down exposed constructors and extractors and scatter when anything bigger shows up, so guard your expansions. They also aim nukes at your most valuable targets while keeping clear of their own buildings.
 
