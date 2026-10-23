@@ -387,6 +387,21 @@ function AI:update(dt)
     end
   end
 
+  -- deny: finish off our own dying creep before an enemy lands the last hit. Better
+  -- computer players do it more often (it starves enemy creeps of veterancy too)
+  if self.level >= 4 and hpf > 0.3 and self.rng:random() < 0.3 + 0.1 * (self.level - 4) then
+    local best
+    local r = w:rangeOf(c) + 30
+    w:query(c.x, c.y, r + 40, function(o)
+      if o.alive and o.creep and w:canDeny(c, o) and o.lastHit and w.time - o.lastHit < 1.5
+        and U.dist(c.x, c.y, o.x, o.y) < r and (not best or o.hp < best.hp) then best = o end
+    end)
+    if best then
+      w:issue(c, { type = "attack", target = best })
+      return
+    end
+  end
+
   if w.arena.jungle and self:jungleThink(c, hpf, enemyC, danger) then return end
 
   -- lane: stand a little behind our frontmost creep, fight what's in range

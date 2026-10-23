@@ -41,6 +41,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **Healing relics** respawn every 70 seconds.
   - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler.
 - **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy.
+- **Creep veterancy:** creeps that land killing blows rank up (gold pips, up to 3), getting +12% health and damage each rank and becoming worth more experience. Denying your dying creep doesn't just starve the enemy Commander; it stops the enemy creep that was about to rank up off it. Computer players from difficulty 4 deny too, more often the better they are.
 
 ![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)
 

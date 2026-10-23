@@ -786,6 +786,24 @@ function W:generalBoost(e)
   return 1
 end
 
+-- Arena creep veterancy: a creep that lands killing blows ranks up (max 3): +12% health
+-- and damage per rank, shown as gold pips. Veterans are worth more experience.
+W.CREEP_VET_MAX = 3
+function W:creepVeterancy(e, victim)
+  if not e.alive or (e.vet or 0) >= W.CREEP_VET_MAX then return end
+  e.vetXP = (e.vetXP or 0) + victim.maxhp * 0.5 * (1 + 0.3 * (victim.vet or 0)) + (victim.key == "commander" and 2000 or 0)
+  local need = { 0.7, 2.1, 4.2 }
+  while (e.vet or 0) < W.CREEP_VET_MAX and e.vetXP >= e.def.hp * need[(e.vet or 0) + 1] do
+    e.vet = (e.vet or 0) + 1
+    local old = e.maxhp
+    e.maxhp = math.floor(e.maxhp * 1.12)
+    e.hp = math.min(e.maxhp, e.hp + (e.maxhp - old) + e.maxhp * 0.2)
+    e.dmgMul = (e.dmgMul or 1) * 1.12
+    if os.getenv("PA_DEBUG_AI") then print(string.format("VET t=%d team%d %s -> %d", self.time, e.team, e.key, e.vet)) end
+    self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 0.8, size = e.def.radius + 12 }
+  end
+end
+
 -- Arena denial: a Commander (or his summons) may finish off his own side's badly hurt creep
 function W:canDeny(e, o)
   return self.arena and o.alive and o.creep and self.ally[o.team] == self.ally[e.team]
@@ -922,10 +940,15 @@ function W:damage(o, amount, attacker)
     o.cmdHit = o.cmdHit or {}
     o.cmdHit[attacker] = self.time
   elseif attacker and self:hostile(attacker.team, o.team) then
-    local dealt = math.min(amount, math.max(0, o.hp))
-    local xp = dealt * (o.def.building and 0.5 or 1)
-    if o.hp - amount <= 0 then xp = xp + o.maxhp * 0.3 end -- kill bonus
-    self:gainXP(attacker, xp)
+    if self.arena and attacker.creep then
+      -- Arena creeps earn veterancy from last hits only (which is what denying takes away)
+      if o.hp - amount <= 0 and not o.def.building then self:creepVeterancy(attacker, o) end
+    else
+      local dealt = math.min(amount, math.max(0, o.hp))
+      local xp = dealt * (o.def.building and 0.5 or 1)
+      if o.hp - amount <= 0 then xp = xp + o.maxhp * 0.3 end -- kill bonus
+      self:gainXP(attacker, xp)
+    end
   end
   o.hp = o.hp - amount
   o.hitTimer = 0.15

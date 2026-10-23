@@ -1157,6 +1157,7 @@ Your Commander
   Right-click ............... move / attack        A then click ... attack-move
   S ......................... stop                 F .............. flee home (+50% speed, can't be cancelled)
   Hold D .................... hold fire, to time last hits.  Right-click your own creep under 35% health: DENY it
+  Creeps rank up from killing blows (gold pips, max 3: +12% health/damage each). Denying also stops enemy creeps ranking up
   Q W E ..................... your skills, cast at the mouse (or click the button, then the map)
   R ......................... your ultimate (unlocks at level 6)
   Z / X ..................... choose a level-up card

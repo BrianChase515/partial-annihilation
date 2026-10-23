@@ -738,8 +738,10 @@ function AI:thinkEconomy()
         self.fortWhere = (self.fortN % 3 == 0) and "outpost" or "ring"
       elseif needEnergy and solars < 60 then
         task = "solar"
-      elseif tm.metal > tm.mStore * 0.45 and t > 150 and factories < self.diff.maxFactories + 2
-        and (self.lastFacOrder or -99) < t - 25 then
+      elseif t > 150 and factories < self.diff.maxFactories + 2 and (self.lastFacOrder or -99) < t - 25
+        and (tm.metal > tm.mStore * 0.45 or factories < 1 + math.floor(mInc / 12)) then
+        -- production keeps pace with income (about one factory per 12 metal/s), and
+        -- metal piling up always means another factory
         -- metal is piling up: more production beats another extractor
         self.lastFacOrder = t
         local airShare = p.factoryAirShare or 0.3

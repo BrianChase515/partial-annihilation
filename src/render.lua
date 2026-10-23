@@ -365,6 +365,17 @@ function R.drawEntity(e, cam, selected)
     lg.line(e.x - r - 6, e.y - r, e.x - r, e.y - r)
     lg.line(e.x - r - 3, e.y - r - 3, e.x - r - 3, e.y - r + 3)
   end
+  -- Arena creep veterancy: gold pips above the creep
+  if e.vet and e.vet > 0 and zoom > 0.35 then
+    local r = d.radius
+    for i = 1, e.vet do
+      local px = e.x - (e.vet - 1) * 4 + (i - 1) * 8
+      lg.setColor(0, 0, 0, 0.8)
+      lg.circle("fill", px, e.y - r - 6, 3.4)
+      lg.setColor(1, 0.82, 0.25)
+      lg.circle("fill", px, e.y - r - 6, 2.4)
+    end
+  end
   -- veterancy chevrons (the Commander shows his own level)
   local L = e.key == "commander" and (e.clevel or 0) or (e.level or 0)
   if L > 0 and zoom > 0.35 then

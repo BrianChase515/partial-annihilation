@@ -695,7 +695,7 @@ function A.xpValue(o)
   if o.def.xp then return o.def.xp * (1 + 0.15 * (o.level or 0)) end
   if o.def.building then return 0 end
   if o.summon then return 30 end
-  return ((o.def.cost and o.def.cost.metal) or 50) * 0.35
+  return ((o.def.cost and o.def.cost.metal) or 50) * 0.35 * (1 + 0.3 * (o.vet or 0))
 end
 
 -- called from World:kill
@@ -742,6 +742,7 @@ function A.onKill(w, o, attacker)
   if attacker and attacker.team and w.ally[attacker.team] == w.ally[o.team] then
     fx(w, "ring", o.x, o.y, 30, 0.6, { color = { 1, 1, 1 } })
     if w.onDeny then w.onDeny(o, attacker) end
+    if os.getenv("PA_DEBUG_AI") then print(string.format("DENY t=%d by team%d %s (vet %d)", w.time, attacker.team, attacker.key, o.vet or 0)) end
     return
   end
   -- the killer's Commander gets it all; other enemy Commanders nearby get a share
@@ -995,7 +996,7 @@ end
 -- Score par for the Arena: about what a clean, decisive win takes (computer-vs-computer
 -- games run ~12 minutes; a player who is winning pushes faster). +2 per extra enemy.
 
-A.TEMPLATE_PAR = { classic = 10, longroad = 12.5, gauntlet = 8.5, open = 9.5, treeline = 10.5, battlefield = 13 }
+A.TEMPLATE_PAR = { classic = 10, longroad = 12.5, gauntlet = 10, open = 9.5, treeline = 10.5, battlefield = 13 }
 
 function A.par(w)
   local base = A.TEMPLATE_PAR[w.map.template or "classic"] or 10

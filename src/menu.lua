@@ -18,7 +18,7 @@ local THEMES = {
 local ATEMPLATES = {
   { "classic", "Classic", "Classic: three lanes, two towers each. The standard match." },
   { "longroad", "Long Road", "Long Road: winding lanes and three towers per lane. Longer, more strategic games (par +3 min)." },
-  { "gauntlet", "Gauntlet", "Gauntlet: one wide lane, three towers deep. A brutal brawl down the middle (par 12 min). Free-for-all keeps its lanes." },
+  { "gauntlet", "Gauntlet", "Gauntlet: one wide lane, three towers deep. A brutal brawl down the middle (par 10 min). Free-for-all keeps its lanes." },
   { "open", "Open Field", "Open Field: three lanes with almost no rock between them, so roaming and ganks rule." },
   { "treeline", "Treeline", "Treeline: two lanes with a jungle between them - neutral camps for XP, two capture shrines (+8% speed and damage each) and the Colossus in the middle. Built for 3v3. Randomized every match." },
   { "battlefield", "Battlefield", "Battlefield (DOTA style): three lanes, a river, jungle camps in every quarter, two shrines and a Colossus that alternates between two pits. Randomized every match." },
