@@ -313,10 +313,15 @@ function M.onKill(world, o, attacker)
   if not world.score or not attacker or not attacker.team or attacker.team < 1 then return end
   if o.team == 0 or not world:hostile(attacker.team, o.team) then return end
   if world.arena and not (attacker.key == "commander" or attacker.owner or o.arenaTower) then return end -- creeps' own fights don't score
-  local v = (o.def.cost and o.def.cost.metal) or (o.key == "commander" and 1000) or 50
+  -- worth = metal + a tenth of the energy (towers and plants are mostly energy)
+  local c = o.def.cost
+  local v = c and ((c.metal or 0) + (c.energy or 0) / 10) or 50
   if o.key == "commander" then v = world.arena and 800 or 3000 end
   v = v * (1 + 0.1 * ((o.key == "commander" and o.clevel) or o.level or 0))
-  if o.def.building then v = v * 0.75 end
+  if o.def.building then
+    -- siege bonus: cracking towers, AA and sea batteries is real work
+    if o.def.weapon and not world.arena then v = v * 1.5 else v = v * 0.75 end
+  end
   local sc = world.score[attacker.team]
   if o.key == "commander" then sc.cmdKills = sc.cmdKills + 1
   elseif o.def.building then sc.bldKills = sc.bldKills + 1

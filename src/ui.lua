@@ -1248,7 +1248,7 @@ function UI.drawOver(game)
     local function line(label, value, col)
       row(rx, y, label, value, rw, col); y = y + 24
     end
-    line("Kills  (metal value of what you destroyed)", U.fmt(sc.killPts))
+    line("Kills  (value of what you destroyed; towers x1.5)", U.fmt(sc.killPts))
     line(string.format("Kill-streak bonus  (best x%.1f)", sc.bestMult), "+" .. U.fmt(sc.streakPts), { 1, 0.7, 0.3 })
     if not world.arena then line("Construction  (10% of metal you built)", U.fmt(sc.buildPts)) end
     line(world.arena and "Level-ups" or "Commander promotions", U.fmt(sc.cmdPts))
