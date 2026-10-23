@@ -302,6 +302,30 @@ local function script()
   game:centerOn(sx, sy); game.cam.zoom = 0.8; game:centerOn(sx, sy)
   game:select({ bb })
   frame(); shot("sea.png")
+  -- Repair zone: P + drag with a constructor; a damaged building inside gets fixed
+  do
+    local c1 = w.teams[1].commander
+    local zx, zy = c1.x + 120, c1.y
+    local bld = w:spawn("builder", 1, zx - 60, zy + 40)
+    local tw = w:spawn("solar", 1, zx + 80, zy - 40, 1)
+    tw.hp = tw.maxhp * 0.3
+    game:centerOn(zx, zy); game.cam.zoom = 1
+    frame()
+    game:select({ bld })
+    key("p")
+    local sx1, sy1 = game:worldToScreen(zx, zy)
+    love.mouse.setPosition(sx1, sy1)
+    game:mousepressed(sx1, sy1, 1)
+    local sx2, sy2 = game:worldToScreen(zx + 260, zy)
+    love.mouse.setPosition(sx2, sy2)
+    frame(); shot("repairzone_drag.png")
+    game:mousereleased(sx2, sy2, 1)
+    local o = bld.orders[1]
+    log("repair zone order", o and o.type, o and math.floor(o.r))
+    for _ = 1, 30 * 20 do w:update(1 / 30) end
+    log("damaged building hp after 20s in zone:", math.floor(tw.hp / tw.maxhp * 100) .. "%", "builder still on duty", bld.orders[1] and bld.orders[1].type)
+    game:select({ bld }); frame(); shot("repairzone.png")
+  end
   -- Commander Arena
   game = startFn({ mode = "arena", size = 80, seed = 3, players = {
     { human = true, ally = 1, class = "elementalist" }, { ally = 2, level = 5, class = "juggernaut" } } })

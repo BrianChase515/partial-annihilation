@@ -99,6 +99,8 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 - **Total Annihilation-style economy:** overspending slows every project by the same amount.
 - **Veterancy for every unit, including towers.**
 - **Every order is a button**, with its shortcut and a tooltip.
+- **Repair zones:** select constructors, press Patrol and drag a circle. They stay there and fix anything of yours inside it, Commander first.
+- **Smart box-select:** dragging over an army skips the constructors (the Commander still comes along); a box of only constructors selects them.
 - **Drag-to-build:** fills an area with buildings, with each constructor taking the nearest jobs first.
 - **Factory output can join a control group** automatically.
 - **Camera and interface extras:** follow and cinematic cameras, a sidebar of factories and builders, and a clickable game speed.

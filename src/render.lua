@@ -392,7 +392,7 @@ function R.drawNameplate(e, zoom)
   local cls = A and e.class and A.byClass[e.class]
   local tag = rel == "me" and "YOU" or (rel == "ally" and "ALLY" or (rel == "enemy" and "ENEMY" or ""))
   local who = cls and cls.name or D.teamName[e.team]
-  local text = rel == "me" and (cls and ("YOU - " .. cls.name) or "YOU") or (tag .. " - " .. (who or "?"))
+  local text = rel == "me" and ((cls and ("YOU - " .. cls.name) or "YOU") .. "  Lv " .. (e.clevel or 0)) or (tag .. " - " .. (who or "?"))
   local f = font(11)
   local s = 1 / math.max(zoom, 0.6)
   local tw = f:getWidth(text) * s
@@ -409,12 +409,17 @@ function R.drawNameplate(e, zoom)
   lg.print(text, e.x - tw / 2, y, 0, s, s)
   -- your own Commander: an XP bar under the tag
   if rel == "me" then
+    -- XP to the next level: a clear bar with an outline, so even an empty one shows
     local frac, _, max = R.cmdXP(e)
     local bw = tw + 10 * s
-    lg.setColor(0, 0, 0, 0.65)
-    lg.rectangle("fill", e.x - bw / 2, y + 13 * s, bw, 3 * s)
-    if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.6, 0.5, 1) end
-    lg.rectangle("fill", e.x - bw / 2, y + 13 * s, bw * frac, 3 * s)
+    local by = y + 14 * s
+    lg.setColor(0.08, 0.06, 0.18, 0.9)
+    lg.rectangle("fill", e.x - bw / 2, by, bw, 5 * s)
+    if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.65, 0.55, 1) end
+    lg.rectangle("fill", e.x - bw / 2, by, bw * frac, 5 * s)
+    lg.setColor(0.75, 0.68, 1, 0.9)
+    lg.setLineWidth(1)
+    lg.rectangle("line", e.x - bw / 2, by, bw, 5 * s)
   end
 end
 
@@ -552,6 +557,28 @@ function R.drawWorld(cam, game)
   end
   for _, e in ipairs(list) do
     if e.key == "commander" then R.drawNameplate(e, cam.zoom) end
+  end
+
+  -- repair zones: the one being dragged, and those of selected constructors
+  if game then
+    local cx, cy, r = game:zoneDraft()
+    if cx and r >= 40 then
+      r = math.max(140, math.min(900, r))
+      lg.setColor(0.3, 1, 0.6, 0.12); lg.circle("fill", cx, cy, r)
+      lg.setColor(0.3, 1, 0.6, 0.8); lg.setLineWidth(2); lg.circle("line", cx, cy, r)
+    end
+    local shown = {}
+    for e in pairs(game.selected) do
+      local o = e.alive and e.orders and e.orders[1]
+      if o and o.type == "repairzone" then
+        local k = math.floor(o.x) .. ":" .. math.floor(o.y)
+        if not shown[k] then
+          shown[k] = true
+          lg.setColor(0.3, 1, 0.6, 0.06); lg.circle("fill", o.x, o.y, o.r)
+          lg.setColor(0.3, 1, 0.6, 0.45); lg.setLineWidth(1.5); lg.circle("line", o.x, o.y, o.r)
+        end
+      end
+    end
   end
 
   -- projectiles

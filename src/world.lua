@@ -1192,6 +1192,8 @@ function W:updateUnit(e, dt)
     return
   elseif o.type == "build" then
     self:updateBuildOrder(e, o, dt)
+  elseif o.type == "repairzone" then
+    self:updateRepairZone(e, o, dt)
   elseif o.type == "assist" then
     self:updateAssist(e, o, dt)
   else
@@ -1297,6 +1299,45 @@ function W:updateAssist(e, o, dt)
   elseif factoryHelp then
     b.assistPower = (b.assistPower or 0) + self:buildPowerOf(e)
     e.nanoTarget = b; e.nanoTimer = 0.1
+  end
+end
+
+-- Repair zone: a constructor stays inside a circle and fixes anything of ours in it
+-- (damaged units and buildings, unfinished buildings). The Commander comes first.
+function W:updateRepairZone(e, o, dt)
+  local r2 = (o.r + 24) * (o.r + 24)
+  local function needs(b)
+    return b.alive and b ~= e and b.team == e.team and (b.built < 1 or b.hp < b.maxhp - 0.5)
+      and U.dist2(b.x, b.y, o.x, o.y) <= r2
+  end
+  if not (o.target and needs(o.target)) then
+    o.target = nil
+    o.scanT = (o.scanT or 0) - dt
+    if o.scanT <= 0 then
+      o.scanT = 0.5
+      local best, bs
+      self:query(o.x, o.y, o.r + 24, function(b)
+        if needs(b) then
+          local sc = U.dist2(e.x, e.y, b.x, b.y)
+          if b.key == "commander" then sc = sc * 0.1 end
+          if not bs or sc < bs then best, bs = b, sc end
+        end
+      end)
+      o.target = best
+    end
+  end
+  if o.target then
+    o.sub = o.sub or { persist = true }
+    o.sub.target = o.target
+    self:updateAssist(e, o.sub, dt)
+    return
+  end
+  -- nothing to fix: wait near the middle
+  if U.dist(e.x, e.y, o.x, o.y) > o.r * 0.35 then
+    if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
+    self:followPath(e, dt, o.r * 0.25)
+  else
+    e.path = nil
   end
 end
 

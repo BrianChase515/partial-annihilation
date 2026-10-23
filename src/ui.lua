@@ -418,7 +418,7 @@ function UI.drawSidebar(game)
         UI.drawIcon(e.key, it.x + it.w / 2, it.y + 24, 34, 1)
         lg.setFont(font(10))
         local o = e.orders[1]
-        local txt = idle and "idle" or (o.type == "build" and D.units[o.key].short or o.type)
+        local txt = idle and "idle" or (o.type == "build" and D.units[o.key].short or (o.type == "repairzone" and "zone" or o.type))
         lg.setColor(idle and 1 or 0.7, idle and 0.65 or 0.8, idle and 0.2 or 0.86)
         lg.print(txt, it.x + it.w / 2 - font(10):getWidth(txt) / 2, it.y + it.h - 15)
         -- health sliver
@@ -690,7 +690,7 @@ function UI.drawInfo(game, L)
       end
     elseif e.orders and #e.orders > 0 then
       local o = e.orders[1]
-      local names = { move = "Moving", amove = "Attack-moving", attack = "Attacking", patrol = "Patrolling", build = "Building", assist = "Assisting", retreat = "Retreating (weapons off)" }
+      local names = { move = "Moving", amove = "Attack-moving", attack = "Attacking", patrol = "Patrolling", build = "Building", assist = "Assisting", retreat = "Retreating (weapons off)", repairzone = "On repair-zone duty" }
       lg.setColor(0.6, 0.85, 0.6)
       local s = names[o.type] or o.type
       if o.type == "build" then s = s .. " " .. D.units[o.key].name end
@@ -750,7 +750,7 @@ local ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
   { "hold", "Hold", "D", "Hold fire: selected units stop shooting while you hold D (or until you click again), so you can time the killing shot." },
-  { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet." },
+  { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet. Constructors: drag a circle to make a repair zone - they stay and fix everything of yours inside it." },
   { "flee", "Flee", "F", "Retreat to your flag at +25% speed. Weapons stay OFF until fully repaired." },
   { "fleecmd", "To Cmdr", "Shift+F", "Retreat to the Commander (+25% speed, weapons off until repaired)." },
   { "flag", "Flag", "Ctrl+F", "Plant the retreat flag: click where fleeing units should go." },
@@ -1015,6 +1015,7 @@ Building
   Shift-click places several; drag a box to fill an area (extractors: every deposit in the box)
   Select a factory: Q W E R T queue units (Shift = 5), right-click a button removes
   Right-click the ground with a factory selected = rally point,  G = repeat queue
+  Constructors: P then DRAG a circle = repair zone (they stay and fix everything of yours in it)
   Option+1..9 with a factory selected = its new units join that group (Option+0 clears)
 
 Camera
@@ -1340,7 +1341,7 @@ function UI.draw(game)
   local hint
   if game.mode == "build" then hint = "Placing " .. D.units[game.buildKey].name .. " - click to place, drag for an area, Shift for more, right-click/Esc cancels"
   elseif game.mode == "amove" then hint = "Attack-move: click a destination (Shift queues)"
-  elseif game.mode == "patrol" then hint = "Patrol: click a destination (Shift queues)"
+  elseif game.mode == "patrol" then hint = game:hasSelectedConstructor() and "Patrol: click a destination, or DRAG a circle to make a repair zone" or "Patrol: click a destination (Shift queues)"
   elseif game.mode == "flag" then hint = "Retreat flag: click where fleeing units should regroup"
   elseif game.mode == "skill" then hint = "Click where to use the skill (Esc cancels). Tip: Q W E R cast straight at the mouse."
   elseif game.mode == "nuke" then hint = "NUKE: click the target. Buildings in the circle are destroyed, units lose half their health. Esc cancels" end

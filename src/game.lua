@@ -1269,6 +1269,10 @@ function G:mousepressed(x, y, button)
       -- start a possible drag; single click is handled on release
       self.buildDrag = { wx, wy }
       return
+    elseif self.mode == "patrol" and self:hasSelectedConstructor() then
+      -- constructors: click = patrol, drag = repair zone (decided on release)
+      self.zoneStart = { wx, wy }
+      return
     elseif self.mode == "amove" or self.mode == "patrol" then
       self:commandMove(wx, wy, self.mode, shift)
       if not shift then self.mode = nil end
@@ -1303,7 +1307,51 @@ function G:mousepressed(x, y, button)
   end
 end
 
+function G:hasSelectedConstructor()
+  for _, e in ipairs(self:selectedMobile()) do
+    if e.def.builds and not e.def.factory then return true end
+  end
+  return false
+end
+
+-- the zone being dragged right now: center, radius
+function G:zoneDraft()
+  if not self.zoneStart then return nil end
+  local wx, wy = self:screenToWorld(love.mouse.getPosition())
+  local d = U.dist(self.zoneStart[1], self.zoneStart[2], wx, wy)
+  return self.zoneStart[1], self.zoneStart[2], d
+end
+
+function G:placeRepairZone(x, y, r)
+  r = math.max(140, math.min(900, r))
+  local others = {}
+  local n = 0
+  for _, e in ipairs(self:selectedMobile()) do
+    if e.def.builds and not e.def.factory then
+      self.world:issue(e, { type = "repairzone", x = x, y = y, r = r })
+      n = n + 1
+    else
+      others[#others + 1] = e
+    end
+  end
+  for _, e in ipairs(others) do self.world:issue(e, { type = "patrol", x = x, y = y, fromX = e.x, fromY = e.y }) end
+  self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.6, r = 0.3, g = 1, b = 0.6 }
+  self:notice(string.format("Repair zone: %d constructor%s on duty", n, n == 1 and "" or "s"), 1.5)
+end
+
 function G:mousereleased(x, y, button)
+  if button == 1 and self.zoneStart then
+    local cx, cy, d = self:zoneDraft()
+    self.zoneStart = nil
+    local shift = love.keyboard.isDown("lshift", "rshift")
+    if d < 40 then
+      self:commandMove(cx, cy, "patrol", shift)
+    else
+      self:placeRepairZone(cx, cy, d)
+    end
+    if not shift then self.mode = nil end
+    return
+  end
   if button == 3 then self.dragPan = nil end
   if button == 2 and self.rightDown then
     local wasPan = self.rightPan
@@ -1377,6 +1425,15 @@ function G:mousereleased(x, y, button)
       if e.def.building then buildings[#buildings + 1] = e else units[#units + 1] = e end
     end
   end
+  -- a box with combat units in it leaves the constructors out (the Commander always comes along)
+  local fighters = {}
+  local hasCombat = false
+  for _, e in ipairs(units) do
+    local constructor = e.def.builds and not e.def.factory and e.key ~= "commander"
+    if not constructor then fighters[#fighters + 1] = e end
+    if not constructor and e.key ~= "commander" then hasCombat = true end
+  end
+  if hasCombat then units = fighters end
   if #units > 0 then self:select(units, shift)
   elseif #buildings > 0 then self:select(buildings, shift)
   elseif not shift then self.selected = {} end
