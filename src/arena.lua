@@ -689,7 +689,15 @@ function A.commanderXP(w, e, amount)
     local n = #(st.sideTeams[st.teamSide[e.team]] or {})
     teamMul = n >= 3 and 0.72 or (n == 2 and 0.85 or 1)
   end
-  e.cxp = (e.cxp or 0) + amount * ((e.mods and e.mods.xpMul) or 1) * teamMul
+  -- catch-up: Commanders below the match's average level learn faster (+15% per level, max +60%)
+  local sum, n = 0, 0
+  for t = 1, w.np do
+    local o = w.teams[t].commander
+    if o and o.skills then sum = sum + (o.clevel or 0); n = n + 1 end
+  end
+  local behind = n > 0 and (sum / n - (e.clevel or 0)) or 0
+  local catchUp = behind >= 1 and (1 + math.min(0.6, 0.15 * behind)) or 1
+  e.cxp = (e.cxp or 0) + amount * ((e.mods and e.mods.xpMul) or 1) * teamMul * catchUp
   while (e.clevel or 0) < A.MAX_LEVEL and e.cxp >= A.THRESHOLDS[(e.clevel or 0) + 1] do
     e.clevel = (e.clevel or 0) + 1
     local L = e.clevel

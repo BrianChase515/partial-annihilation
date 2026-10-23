@@ -914,6 +914,10 @@ function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
   if self.arena then
     if o.protected then return end
+    -- early towers are fortified: half damage for 2:30, then 25% less until 5:00
+    if o.arenaTower and o.key ~= "core" then
+      if self.time < 150 then amount = amount * 0.5 elseif self.time < 300 then amount = amount * 0.75 end
+    end
     if o.ampUntil and self.time < o.ampUntil then amount = amount * 1.5 end
     amount = amount * (self:bv(o, "armor") or 1)
     if o.mods and o.mods.dodge and math.random() < o.mods.dodge then return end

@@ -110,7 +110,8 @@ function Menu:arenaRects()
     r[#r + 1] = { x = x0 + (i - 1) * 78, y = y + 44, w = 72, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
   end
   for i, o in ipairs(ATEMPLATES) do
-    r[#r + 1] = { x = x0 + (i - 1) * 92, y = y + 88, w = 88, h = 34, label = o[2], afield = "template", value = i,
+    -- two groups: simple lane maps, then the jungle maps (camps, shrines, the Colossus)
+    r[#r + 1] = { x = x0 + (i - 1) * 92 + (i >= 5 and 18 or 0), y = y + 88, w = 88, h = 34, jungle = i >= 5, label = o[2], afield = "template", value = i,
       active = (A.template or 1) == i, rowLabel = i == 1 and "Map" or nil, tmpl = i }
   end
   local ty = y + 160
@@ -359,6 +360,15 @@ function Menu:draw()
     end
   end
   if self.mode == "arena" then
+    -- captions under the two map groups
+    lg.setFont(R.font(11))
+    lg.setColor(0.62, 0.66, 0.74)
+    lg.print("simple: lanes, towers, creeps", x0 + 4, y + 124)
+    lg.setColor(0.78, 0.6, 1)
+    lg.print("jungle: camps, shrines, Colossus", x0 + 4 * 92 + 18 + 4, y + 124)
+    lg.setColor(0.72, 0.42, 1, 0.5)
+    lg.setLineWidth(1)
+    lg.line(x0 + 4 * 92 + 7, y + 90, x0 + 4 * 92 + 7, y + 136)
     self:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   else
   -- personality description

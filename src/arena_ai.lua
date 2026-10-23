@@ -317,6 +317,68 @@ function AI:jungleThink(c, hpf, enemyC, danger)
   return false
 end
 
+-- how far along our route our frontmost living tower stands (0..1)
+function AI:ownTowerFront()
+  local w = self.world
+  local best
+  for _, s in ipairs(w.arena.structures) do
+    if s.alive and s.side == self.side and s.lane == self.lane then
+      local f = self:laneProgress(s.x, s.y)
+      if not best or f > best then best = f end
+    end
+  end
+  return best
+end
+
+-- lane pressure: towers we've lost and enemy Commanders standing in each lane. A Commander
+-- whose own lane is calm moves to help the worst one for a while.
+function AI:checkPressure(c)
+  local w = self.world
+  local st = w.arena
+  if w.time < (self.pressureT or 0) then return end
+  self.pressureT = w.time + 8
+  local score = {}
+  for _, L in ipairs(w.map.lanes) do
+    local lost, enemies = 0, 0
+    for _, s in ipairs(st.structures) do
+      if s.lane == L.id and s.side == self.side and not s.alive then lost = lost + 1 end
+    end
+    for t = 1, w.np do
+      local o = w.teams[t].commander
+      if o and o.alive and w:hostile(t, self.team) then
+        local mx, my = Map.polyAt(L.pts, L.a == self.side and 0.35 or 0.65)
+        local wx, wy = w.map:center(mx, my)
+        if U.dist(o.x, o.y, wx, wy) < 1100 then enemies = enemies + 1 end
+      end
+    end
+    local defenders = 0
+    for _, t in ipairs(st.sideTeams[self.side]) do
+      local a = w.teams[t].commander
+      local ai = a and a.alive
+      if ai and t ~= self.team then
+        local mx, my = Map.polyAt(L.pts, L.a == self.side and 0.35 or 0.65)
+        local wx, wy = w.map:center(mx, my)
+        if U.dist(a.x, a.y, wx, wy) < 1300 then defenders = defenders + 1 end
+      end
+    end
+    score[L.id] = lost * 1.2 + enemies * 2 - defenders * 2
+  end
+  -- go back home once the reinforcement is done
+  if self.homeLane and w.time > (self.reinforceUntil or 0) then
+    self.laneObj, self.lane, self.homeLane = self.homeLane, self.homeLane.id, nil
+  end
+  local mine = score[self.lane] or 0
+  local worst, ws
+  for _, L in ipairs(w.map.lanes) do
+    if L.id ~= self.lane and (not ws or score[L.id] > ws) then worst, ws = L, score[L.id] end
+  end
+  if worst and ws >= 3 and mine <= 0.5 and not self.homeLane then
+    self.homeLane = self.laneObj
+    self.laneObj, self.lane = worst, worst.id
+    self.reinforceUntil = w.time + 60
+  end
+end
+
 -- our tower being hit by an enemy Commander, nobody of ours near it, and we're the closest
 function AI:towerToDefend(c)
   local w = self.world
@@ -342,7 +404,7 @@ function AI:towerToDefend(c)
             if not nd or d < nd then nearest, nd = a, d end
           end
         end
-        if nearest == c and nd > 400 and nd < 2600 and (not bd or nd < bd) then best, bd = s, nd end
+        if nearest == c and nd > 400 and nd < 4500 and (not bd or nd < bd) then best, bd = s, nd end
       end
     end
   end
@@ -435,6 +497,22 @@ function AI:update(dt)
     end
   end
 
+  -- our Core exposed with enemy Commanders at the gates: everyone who can make it goes home
+  local st = w.arena
+  local core = st.cores and st.cores[self.side]
+  if core and core.alive and not core.protected and hpf > 0.3 then
+    local raiders = self:enemyCommandersNear(core.x, core.y, 1300)
+    if raiders > 0 and U.dist(c.x, c.y, core.x, core.y) < 5000 then
+      if U.dist(c.x, c.y, core.x, core.y) > 300 or #c.orders == 0 then
+        w:issue(c, { type = "amove", x = core.x, y = core.y, arrive = 160 })
+      end
+      self.mode = "core"
+      return
+    end
+  end
+  -- rotate to the lane that's hurting (towers falling, more enemy Commanders), if ours is quiet
+  if not st.ffa and #w.map.lanes > 1 then self:checkPressure(c) end
+
   -- a tower of ours under attack with no Commander of ours near it: the closest one goes
   if hpf > 0.45 and not danger then
     local tw = self:towerToDefend(c)
@@ -460,6 +538,18 @@ function AI:update(dt)
     end
   end
   local wantF = front - 0.035
+  -- badly out-leveled by the enemies here: hang back near our own tower and farm safely
+  local behind = 0
+  for t = 1, w.np do
+    local o = w.teams[t].commander
+    if o and o.alive and w:hostile(t, self.team) and U.dist(o.x, o.y, c.x, c.y) < 1400 then
+      behind = math.max(behind, (o.clevel or 0) - (c.clevel or 0))
+    end
+  end
+  if behind >= 3 then
+    local safeF = self:ownTowerFront()
+    if safeF then wantF = math.min(wantF, safeF + 0.02) end
+  end
   -- don't stand in enemy tower range unless our creeps are there to soak it
   local tx, ty = self:lanePoint(wantF)
   local tw = self:towerThreat(tx, ty)
