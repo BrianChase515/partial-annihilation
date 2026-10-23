@@ -712,6 +712,8 @@ function W:repairZones()
   for _, u in ipairs(self.entities) do
     if u.alive and not u.def.building and u.hp < u.maxhp and self.time - (u.lastHit or -99) > 4
       and (u.key ~= "commander" or self.arena) then
+      -- Generals patch themselves up anywhere once out of the fight
+      if u.general then u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.012); u.healing = 0.6 end
       for _, h in ipairs(healers) do
         if h.team == u.team and U.dist2(u.x, u.y, h.x, h.y) < 380 * 380 then
           u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.04 * 0.5)
@@ -737,6 +739,51 @@ function W:gainXP(e, amount)
     self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 0.9, size = e.def.radius + 10 }
     if self.onLevel then self.onLevel(e) end
   end
+  if L >= W.MAX_LEVEL and not e.general and not self.arena and not e.summon then self:promoteGeneral(e) end
+end
+
+---------------------------------------------------------------------------
+-- Generals (RTS): a unit that reaches the top veterancy level is promoted to a named
+-- General - tougher, faster, and his presence makes units of his type hit 25% harder.
+W.MAX_GENERALS = 3
+W.GENERAL_AURA = 320
+local G_FIRST = { "Vasquez", "Okafor", "Lindqvist", "Tanaka", "Moreau", "Kowalski", "Adeyemi", "Reyes", "Novak",
+  "Haddad", "Brennan", "Ivanova", "Castillo", "Mbeki", "Sorensen", "Petrov", "Nakamura", "Duarte", "Kessler", "Abara",
+  "Whitlock", "Szabo", "Ferro", "Calloway", "Rask", "Oyelaran", "Marchetti", "Holt", "Varga", "Quinlan" }
+local G_NICK = { "Ironside", "the Anvil", "Longshot", "Rustbucket", "the Wall", "Hammerfall", "Steady", "Blackpowder",
+  "Old Treads", "the Fox", "Thunder", "Gravel", "the Bulwark", "Deadeye", "Scrapper", "Lucky", "Firebrand", "the Mule" }
+
+function W:promoteGeneral(e)
+  self.generals = self.generals or {}
+  local list = self.generals[e.team] or {}
+  self.generals[e.team] = list
+  local n = 0
+  for i = #list, 1, -1 do if list[i].alive then n = n + 1 else table.remove(list, i) end end
+  if n >= W.MAX_GENERALS then return end
+  local rng = self.rngCmd
+  e.general = true
+  e.genName = "Gen. " .. G_FIRST[rng:random(#G_FIRST)] .. (rng:random() < 0.6 and (' "' .. G_NICK[rng:random(#G_NICK)] .. '"') or "")
+  -- his own copy of the modifiers (unit mods tables can be shared)
+  local m = {}
+  for k, v in pairs(e.mods or {}) do m[k] = v end
+  m.dmg = (m.dmg or 1) * 1.25
+  m.speed = (m.speed or 1) * 1.1
+  e.mods = m
+  e.maxhp = math.floor(e.maxhp * 1.6)
+  e.hp = e.maxhp
+  list[#list + 1] = e
+  self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 1.6, size = e.def.radius + 40 }
+  if self.onGeneral then self.onGeneral(e, "promoted") end
+end
+
+-- a General nearby: same-type units hit 25% harder
+function W:generalBoost(e)
+  local list = self.generals and self.generals[e.team]
+  if not list then return 1 end
+  for _, g in ipairs(list) do
+    if g.alive and g ~= e and g.key == e.key and U.dist2(g.x, g.y, e.x, e.y) < W.GENERAL_AURA * W.GENERAL_AURA then return 1.25 end
+  end
+  return 1
 end
 
 -- Arena denial: a Commander (or his summons) may finish off his own side's badly hurt creep
@@ -796,6 +843,7 @@ function W:fire(e, o)
   if c and c ~= e and c.alive and c.mods and c.mods.dmgAura and U.dist2(c.x, c.y, e.x, e.y) < 350 * 350 then
     dmg = dmg * 1.25
   end
+  if self.generals and not self.arena then dmg = dmg * self:generalBoost(e) end
   if self.arena then
     dmg = dmg * (self:bv(e, "dmg") or 1) * (e.dmgMul or 1)
     if o.def.building and m.breaker then dmg = dmg * m.breaker end

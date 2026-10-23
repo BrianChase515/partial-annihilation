@@ -326,6 +326,22 @@ local function script()
     log("damaged building hp after 20s in zone:", math.floor(tw.hp / tw.maxhp * 100) .. "%", "builder still on duty", bld.orders[1] and bld.orders[1].type)
     game:select({ bld }); frame(); shot("repairzone.png")
   end
+  -- Generals: a tank pushed to level 5 is promoted; tanks near him hit harder
+  do
+    local c1 = w.teams[1].commander
+    local t1 = w:spawn("tank", 1, c1.x + 60, c1.y)
+    local t2 = w:spawn("tank", 1, c1.x + 100, c1.y + 30)
+    w:gainXP(t1, w:xpForLevel(t1, 5) + 1)
+    log("general promoted:", t1.general, t1.genName, "hp", t1.maxhp, "aura on neighbour", w:generalBoost(t2), "on self", w:generalBoost(t1))
+    key("c")
+    game:keypressed("c")
+    local shiftDown = love.keyboard.isDown
+    love.keyboard.isDown = function(...) for _, k in ipairs({ ... }) do if k == "lshift" then return true end end return shiftDown(...) end
+    game:keypressed("c")
+    love.keyboard.isDown = shiftDown
+    log("Shift+C selects the General:", game.selected[t1] == true)
+    frame(); shot("general.png")
+  end
   -- Commander Arena
   game = startFn({ mode = "arena", size = 80, seed = 3, players = {
     { human = true, ally = 1, class = "elementalist" }, { ally = 2, level = 5, class = "juggernaut" } } })

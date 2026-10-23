@@ -33,6 +33,12 @@ local function script(mode, secs)
     game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
   end
   for _ = 1, 6 do game:update(1 / 30); frame() end
+  if mode == "arena" then
+    local sx, sy = game:worldToScreen(c.x, c.y)
+    love.mouse.setPosition(sx, sy)
+    -- a skill call-out for the camera
+    w.effects[#w.effects + 1] = { kind = "label", text = "Frost Nova", x = c.x + 120, y = c.y - 60, t = 0.3, life = 1.6, color = { 1, 0.5, 0.42 }, size = 13 }
+  end
   pending = "uishot_" .. mode .. ".png"
   frame(); frame()
   print("UISHOT", love.filesystem.getSaveDirectory() .. "/" .. "uishot_" .. mode .. ".png")

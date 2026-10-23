@@ -318,6 +318,7 @@ function M.onKill(world, o, attacker)
   local v = c and ((c.metal or 0) + (c.energy or 0) / 10) or 50
   if o.key == "commander" then v = world.arena and 800 or 3000 end
   v = v * (1 + 0.1 * ((o.key == "commander" and o.clevel) or o.level or 0))
+  if o.general then v = v * 3 end
   if o.def.building then
     -- siege bonus: cracking towers, AA and sea batteries is real work
     if o.def.weapon and not world.arena then v = v * 1.5 else v = v * 0.75 end

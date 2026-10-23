@@ -108,6 +108,8 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 - **Total Annihilation-style economy:** overspending slows every project by the same amount.
 - **Veterancy for every unit, including towers.**
 - **Every order is a button**, with its shortcut and a tooltip.
+- **Generals:** a unit that fights its way to level 5 is promoted to a named General (up to 3 per side): +60% health, +25% damage, faster, and he repairs himself between fights. Units of his type near him hit 25% harder. Shift+C jumps to your Generals, and killing an enemy General pays triple.
+- **Read the fight at a glance:** the scoreboard shows every Commander's level, colored by how far ahead of you an enemy is; every Commander carries small health and XP bars; in the Arena every skill cast is called out by name, and hovering a Commander lists the skills he has learned.
 - **Repair zones:** select constructors, press Patrol and drag a circle. They stay there and fix anything of yours inside it, Commander first.
 - **Smart box-select:** dragging over an army skips the constructors (the Commander still comes along); a box of only constructors selects them.
 - **Drag-to-build:** fills an area with buildings, with each constructor taking the nearest jobs first.

@@ -225,6 +225,11 @@ function G.new(opts)
   end
   world.onKill = function(o, attacker)
     if self.log then self.log:onKill(o, attacker) end
+    if o.general then
+      if o.team == 1 then self:notice(o.genName .. " has fallen", 3)
+      elseif world:hostile(o.team, 1) then self:notice("Enemy " .. o.genName .. " destroyed!", 3) end
+      if self.log then self.log:event(string.format("%s %s killed", D.teamName[o.team], o.genName)) end
+    end
     if attacker and attacker.team and (world:allied(o.team, 1) or world:allied(attacker.team, 1)) then
       MUSIC.bump(o.def.building and 0.15 or (o.key == "commander" and 0.6 or 0.07))
     end
@@ -235,6 +240,17 @@ function G.new(opts)
     end
     if o.team == 1 then self.stats.lost = self.stats.lost + 1
     elseif attacker and attacker.team == 1 then self.stats.killed = self.stats.killed + 1 end
+  end
+  world.onGeneral = function(g, what)
+    if g.team == 1 then
+      self:notice(string.format("%s promoted! (%s, Shift+C)", g.genName, g.def.name), 3.5)
+      SFX.play("ready", 0.8, 0)
+    elseif world:allied(g.team, 1) then
+      self:notice(string.format("Allied %s takes the field", g.genName), 2.5)
+    else
+      self:notice(string.format("Enemy %s takes the field (%s)", g.genName, g.def.name), 3)
+    end
+    if self.log then self.log:event(string.format("%s %s promoted: %s", D.teamName[g.team], g.def.name, g.genName)) end
   end
   world.onBuilt = function(b)
     if b.team == 1 and b.def.building then VOICE.say("construction") end
@@ -286,7 +302,14 @@ function G.new(opts)
       if self.log then self.log:event(who and string.format(text, who) or text) end
     end
     world.onSkill = function(c, def)
-      if c.team == 1 or world:isVisible(c) then SFX.at("skill", c.x, c.y, self:soundView(), c.team == 1 and 1 or 0.7) end
+      if c.team == 1 or world:isVisible(c) then
+        SFX.at("skill", c.x, c.y, self:soundView(), c.team == 1 and 1 or 0.7)
+        -- call out every visible cast by name, so you learn what the enemy just did
+        local col = c.team == 1 and { 1, 1, 1 } or (world:hostile(c.team, 1) and { 1, 0.5, 0.42 } or { 0.5, 1, 0.6 })
+        if def.ult then col = { 1, 0.85, 0.35 } end
+        world.effects[#world.effects + 1] = { kind = "label", text = def.name .. (def.ult and "!" or ""), x = c.x, y = c.y - c.def.radius - 52,
+          t = 0, life = 1.6, color = col, size = def.ult and 16 or 13 }
+      end
       if self.log and def.ult then self.log:event(string.format("%s used %s", D.teamName[c.team], def.name)) end
     end
   end
@@ -1647,6 +1670,16 @@ function G:keypressed(key)
     else
       local c = self.world.teams[1].commander
       if c and c.alive then self:centerOn(c.x, c.y) end
+    end
+  elseif key == "c" and shift then
+    -- cycle through your Generals
+    local list = {}
+    for _, g in ipairs((self.world.generals or {})[1] or {}) do if g.alive then list[#list + 1] = g end end
+    if #list == 0 then self:notice("No Generals yet - a unit that reaches level 5 is promoted", 2)
+    else
+      self.genIdx = (self.genIdx or 0) % #list + 1
+      local g = list[self.genIdx]
+      self:centerOn(g.x, g.y); self:select({ g })
     end
   elseif key == "home" or key == "c" then
     local c = self.world.teams[1].commander

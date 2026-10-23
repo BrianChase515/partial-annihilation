@@ -419,7 +419,7 @@ function R.drawNameplate(e, zoom)
   local f = font(11)
   local s = 1 / math.max(zoom, 0.6)
   local tw = f:getWidth(text) * s
-  local y = e.y - e.def.radius - 24 * s
+  local y = e.y - e.def.radius - 28 * s
   local c = R.REL_COLOR[rel]
   local tr, tg, tb = R.teamColor(e.team)
   local lg = love.graphics
@@ -430,19 +430,31 @@ function R.drawNameplate(e, zoom)
   lg.setColor(c[1], c[2], c[3])
   lg.setFont(f)
   lg.print(text, e.x - tw / 2, y, 0, s, s)
-  -- your own Commander: an XP bar under the tag
-  if rel == "me" then
-    -- XP to the next level: a clear bar with an outline, so even an empty one shows
-    local frac, _, max = R.cmdXP(e)
-    local bw = tw + 10 * s
-    local by = y + 14 * s
-    lg.setColor(0.08, 0.06, 0.18, 0.9)
-    lg.rectangle("fill", e.x - bw / 2, by, bw, 5 * s)
-    if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.65, 0.55, 1) end
-    lg.rectangle("fill", e.x - bw / 2, by, bw * frac, 5 * s)
-    lg.setColor(0.75, 0.68, 1, 0.9)
+end
+
+-- a General's name tag: a gold star, his name, colored by side
+function R.drawGeneralTag(e, zoom)
+  if zoom < 0.3 then return end
+  local lg = love.graphics
+  local rel = R.relation(e.team)
+  local f = font(10)
+  local sc = 1 / math.max(zoom, 0.6)
+  local text = "* " .. (e.genName or "General")
+  local tw = f:getWidth(text) * sc
+  local y = e.y - e.def.radius - 24 * sc
+  local c = R.REL_COLOR[rel]
+  lg.setColor(0, 0, 0, 0.6)
+  lg.rectangle("fill", e.x - tw / 2 - 4 * sc, y - 1 * sc, tw + 8 * sc, 13 * sc, 3 * sc)
+  lg.setColor(1, 0.82, 0.25)
+  lg.setFont(f)
+  lg.print("*", e.x - tw / 2, y, 0, sc, sc)
+  lg.setColor(c[1], c[2], c[3])
+  lg.print(text:sub(2), e.x - tw / 2 + f:getWidth("*") * sc, y, 0, sc, sc)
+  -- aura ring when zoomed in
+  if zoom > 0.7 then
+    lg.setColor(1, 0.82, 0.25, 0.12)
     lg.setLineWidth(1)
-    lg.rectangle("line", e.x - bw / 2, by, bw, 5 * s)
+    lg.circle("line", e.x, e.y, 320)
   end
 end
 
@@ -466,6 +478,14 @@ function R.drawHealth(e, show)
   local r, g = 1 - frac, frac
   lg.setColor(0.2 + r * 0.8, 0.3 + g * 0.6, 0.15)
   lg.rectangle("fill", e.x - w / 2, y, w * frac, 3)
+  if e.key == "commander" then
+    -- experience toward the next level, 0-100%
+    local xf, _, max = R.cmdXP(e)
+    lg.setColor(0, 0, 0, 0.75)
+    lg.rectangle("fill", e.x - w / 2 - 1, y + 4, w + 2, 4)
+    if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.68, 0.55, 1) end
+    lg.rectangle("fill", e.x - w / 2, y + 5, w * xf, 2)
+  end
 end
 
 function R.drawWorld(cam, game)
@@ -577,10 +597,11 @@ function R.drawWorld(cam, game)
   end
 
   for _, e in ipairs(list) do
-    R.drawHealth(e, sel[e] or e.built < 1 or (e.key == "commander"))
+    R.drawHealth(e, sel[e] or e.built < 1 or (e.key == "commander") or e.general)
   end
   for _, e in ipairs(list) do
-    if e.key == "commander" then R.drawNameplate(e, cam.zoom) end
+    if e.key == "commander" then R.drawNameplate(e, cam.zoom)
+    elseif e.general then R.drawGeneralTag(e, cam.zoom) end
   end
 
   -- repair zones: the one being dragged, and those of selected constructors
@@ -639,7 +660,19 @@ function R.drawWorld(cam, game)
   -- effects
   for _, fx in ipairs(world.effects) do
     local k = fx.t / fx.life
-    if groovy() and (fx.kind == "boom" or fx.kind == "splash" or fx.kind == "hit" or fx.kind == "nuke") then
+    if fx.kind == "label" then
+      -- floating text (skill call-outs): rises and fades, constant size on screen
+      local zs = 1 / math.max(0.5, cam.zoom)
+      local f = font(fx.size or 14)
+      local tw = f:getWidth(fx.text) * zs
+      local yy = fx.y - k * 30
+      local a = 1 - k * k
+      lg.setFont(f)
+      lg.setColor(0, 0, 0, 0.6 * a)
+      lg.rectangle("fill", fx.x - tw / 2 - 4 * zs, yy - 2 * zs, tw + 8 * zs, (f:getHeight() + 4) * zs, 3 * zs)
+      lg.setColor(fx.color[1], fx.color[2], fx.color[3], a)
+      lg.print(fx.text, fx.x - tw / 2, yy, 0, zs, zs)
+    elseif groovy() and (fx.kind == "boom" or fx.kind == "splash" or fx.kind == "hit" or fx.kind == "nuke") then
       -- flower power
       local size = fx.kind == "hit" and 7 or fx.size
       local grow = fx.kind == "nuke" and (0.3 + k * 1.3) or (0.4 + k * 0.8)

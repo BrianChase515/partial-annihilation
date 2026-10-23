@@ -292,6 +292,8 @@ end
 ---------------------------------------------------------------------------
 -- Score mode leaderboard
 
+UI.SCORE_W = 268
+
 function UI.drawLeaderboard(game)
   local world = game.world
   if not world.score then return end
@@ -306,7 +308,7 @@ function UI.drawLeaderboard(game)
     if a.ally ~= b.ally then return a.ally < b.ally end
     return a.team < b.team
   end)
-  local bw, rh = 236, 24
+  local bw, rh = UI.SCORE_W, 24
   local x, y = w - bw - 10, UI.TOP_H + 8
   local seps = 0
   for i = 2, #rows do if rows[i].ally ~= rows[i - 1].ally then seps = seps + 1 end end
@@ -337,11 +339,25 @@ function UI.drawLeaderboard(game)
     local name = r.team == 1 and "You" or D.teamName[r.team]
     if r.team ~= 1 then name = name .. (friend and " (ally)" or "") end
     lg.print(name, x + 30, yy + 2)
-    lg.print(U.fmt(r.pts), x + 128, yy + 2)
+    -- Commander level: colored by how far ahead (red) or behind (dim) of yours an enemy is
+    local c = world.teams[r.team].commander
+    local me = world.teams[1].commander
+    if c then
+      local L, myL = c.clevel or 0, me and me.clevel or 0
+      local d = L - myL
+      if friend then lg.setColor(0.75, 0.85, 1, r.dead and 0.4 or 0.95)
+      elseif d >= 2 then lg.setColor(1, 0.35, 0.3)
+      elseif d == 1 then lg.setColor(1, 0.7, 0.3)
+      elseif d == 0 then lg.setColor(1, 1, 1, 0.9)
+      else lg.setColor(0.6, 0.65, 0.7) end
+      lg.print("L" .. L, x + 128, yy + 2)
+    end
+    lg.setColor(1, 1, 1, r.dead and 0.4 or 1)
+    lg.print(U.fmt(r.pts), x + 160, yy + 2)
     if r.mult > 1 then
       local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 8)
       lg.setColor(1, 0.6, 0.2, pulse)
-      lg.print(string.format("x%.2f", r.mult), x + 180, yy + 2)
+      lg.print(string.format("x%.2f", r.mult), x + 214, yy + 2)
     end
     yy = yy + rh
   end
@@ -356,7 +372,7 @@ function UI.drawCommanderCard(game)
   local c = world.teams[1].commander
   if not c then return end
   local w = lg.getWidth()
-  local bw, bh = 236, 58
+  local bw, bh = UI.SCORE_W, 58
   local x, y = w - bw - 10, (world.score and game.scoreBottom or UI.TOP_H) + 6
   game.cmdCard = { x = x, y = y, w = bw, h = bh }
   local hitRecently = c.alive and world.time - (c.lastHit or -99) < 1.2
@@ -1070,6 +1086,7 @@ Selecting
   Left sidebar .............. all factories & builders (orange = idle). Click selects,
                               double/right-click jumps there.  B toggles the sidebar
   C / Home .................. select & jump to your Commander
+  Shift+C ................... cycle your Generals (units promoted at level 5)
 
 Control groups
   Ctrl+1..9 ................. save selection as a group
@@ -1432,6 +1449,47 @@ end
 
 ---------------------------------------------------------------------------
 
+-- Arena: hover any Commander to read his class, level and the skills he has learned
+function UI.drawCommanderHover(game)
+  local world = game.world
+  if not world.arena then return end
+  local mx, my = love.mouse.getPosition()
+  local w, h = lg.getDimensions()
+  if my < UI.TOP_H or my > h - UI.PANEL_H - UI.ORDERS_H then return end
+  local wx, wy = game:screenToWorld(mx, my)
+  local c = world:entityAt(wx, wy, function(o) return o.key == "commander" and (o.team == 1 or world:isVisible(o)) end)
+  if not c then return end
+  local A = require("src.arena")
+  local cls = A.byClass[c.class]
+  local lines = { string.format("%s  -  %s  Lv %d", c.team == 1 and "You" or D.teamName[c.team], cls and cls.name or "Commander", c.clevel or 0) }
+  for slot = 1, 4 do
+    local sk = c.skills and c.skills[slot]
+    if sk then
+      local def = A.SKILLS[sk.key]
+      if def then lines[#lines + 1] = (def.ult and "ULT  " or "") .. def.name .. ": " .. def.desc:gsub("^ULTIMATE: ", "") end
+    end
+  end
+  if #lines == 1 then lines[#lines + 1] = "No skills yet" end
+  local f = font(12)
+  local bw = 0
+  for _, l in ipairs(lines) do bw = math.max(bw, f:getWidth(l)) end
+  bw = math.min(bw + 20, 560)
+  local lh = f:getHeight() + 3
+  local bh = 0
+  for _, l in ipairs(lines) do local _, wr = f:getWrap(l, bw - 20); bh = bh + #wr * lh end
+  bh = bh + 14
+  local x, y = math.min(mx + 18, w - bw - 8), math.max(UI.TOP_H + 4, my - bh - 12)
+  panelBox(x, y, bw, bh, 0.92)
+  lg.setFont(f)
+  local yy = y + 7
+  for i, l in ipairs(lines) do
+    if i == 1 then lg.setColor(1, 0.85, 0.45) else lg.setColor(0.88, 0.92, 0.97) end
+    lg.printf(l, x + 10, yy, bw - 20)
+    local _, wr = f:getWrap(l, bw - 20)
+    yy = yy + #wr * lh
+  end
+end
+
 function UI.draw(game)
   local w, h = lg.getDimensions()
   local L = layout(w, h)
@@ -1439,6 +1497,7 @@ function UI.draw(game)
   UI.drawTop(game)
   UI.drawLeaderboard(game)
   UI.drawCommanderCard(game)
+  UI.drawCommanderHover(game)
   -- bottom panel
   lg.setColor(0.06, 0.08, 0.11, 0.95)
   lg.rectangle("fill", 0, L.panelY, w, UI.PANEL_H)
