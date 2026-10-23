@@ -309,12 +309,12 @@ end
 
 -- AI personalities, independent of strength. Multipliers adjust the level's values.
 D.profiles = {
-  { key = "Balanced",   desc = "Plays a bit of everything." },
+  { key = "Balanced",   desc = "Plays a bit of everything.", hunters = 2, huntersFrom = 300, huntersChance = 0.5 },
   { key = "Aggressive", desc = "Rushes early and keeps the pressure on.",
-    firstWaveMul = 0.55, waveMul = 0.7, turretMul = 0.3, expandMul = 0.8,
+    firstWaveMul = 0.55, waveMul = 0.7, turretMul = 0.3, expandMul = 0.8, hunters = 3, huntersFrom = 150,
     weights = { tank = 1.4, scout = 1.6, artillery = 0.5 } },
   { key = "Turtle",     desc = "Fortifies heavily, attacks late with big waves.", commander = "cautious",
-    firstWaveMul = 1.7, waveMul = 1.6, turretMul = 3, turretBonus = 2, aaBonus = 2,
+    firstWaveMul = 1.7, waveMul = 1.6, turretMul = 3, turretBonus = 2, aaBonus = 2, expandMul = 0.7,
     weights = { artillery = 2.2, flak = 1.5, destroyer = 1.5 } },
   { key = "Boomer",     desc = "Grabs the whole map's metal, then floods you.",
     firstWaveMul = 1.5, waveMul = 1.5, expandMul = 1.8, builderBonus = 2, factoryEcoMul = 0.75 },
@@ -322,10 +322,10 @@ D.profiles = {
     weights = { fighter = 1.3, bomber = 1.5, gunship = 1.5, flak = 0.5 } },
   { key = "Naval",      desc = "Builds a navy wherever there is water.", navalFirst = true,
     weights = { destroyer = 1.5, sub = 1.3, boat = 1.3 } },
-  { key = "Raider",     desc = "Constant hit-and-run attacks on your extractors.", raidEvery = 50,
+  { key = "Raider",     desc = "Constant hit-and-run attacks on your extractors.", raidEvery = 50, hunters = 4, huntersFrom = 120,
     weights = { scout = 2.5, gunship = 1.6, boat = 1.4 } },
   { key = "Warlord",    desc = "Its Commander leads from the front, hunts for kills and nukes early.", commander = "aggressive",
-    firstWaveMul = 0.8, builderBonus = 1, weights = { tank = 1.3, artillery = 1.2 } },
+    firstWaveMul = 0.8, builderBonus = 1, hunters = 3, huntersFrom = 210, weights = { tank = 1.3, artillery = 1.2 } },
   { key = "Random",     desc = "One of the above, chosen secretly." },
 }
 function D.profile(key)

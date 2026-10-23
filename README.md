@@ -55,6 +55,8 @@ The score is three tempo-locked orchestral layers that crossfade with the action
 - **enemies in sight:** cellos, tremolo strings and timpani
 - **a real battle:** full brass and war drums
 
+There are five soundtracks, and a match rotates through them every couple of loops so a long game never sits on one tune. Battles have their own sound too: rifle cracks, energy guns, heavy cannons, artillery that booms across the map, shell impacts, flak and explosions. All of it is synthesized from scratch, panned to where it happens on screen and quieter the further away it is.
+
 Victory and defeat get their own fanfares. A robotic voice calls out "Warning. Nuke en route.", "Commander under fire", "Dropship approaching", "Alien tech secured", stalled economies and more.
 
 ### Modifiers that change how a match plays
@@ -80,7 +82,7 @@ The **Battleship** brings the sea to the land. It shells anything within 40 tile
 Your Commander can flee too, at +50% speed, but he only repairs at his starting spot. There he powers down until he's whole again, which turns your start into a real base: hit-and-run with him is fine, and the way to kill an enemy Commander is to catch him off guard or assault his home.
 
 ### Opponents with personalities, and Commanders they actually use
-Difficulty (1–10) and personality are set separately for each computer player. The personalities are *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord*, a Commander who leads every assault from the front. Computer players pick upgrades that fit their style. They level their Commander when the odds are good and pull him back to their strongest position when hurt. They also aim nukes at your most valuable targets while keeping clear of their own buildings.
+Difficulty (1–10) and personality are set separately for each computer player. The personalities are *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord*, a Commander who leads every assault from the front. Computer players pick upgrades that fit their style. They send their Commander out to hunt for experience when the odds are good and pull him back to their strongest position when hurt. Raiders, Aggressive and Warlord players (and sometimes Balanced ones) run packs of fast scouts that hunt down exposed constructors and extractors and scatter when anything bigger shows up, so guard your expansions. They also aim nukes at your most valuable targets while keeping clear of their own buildings.
 
 ### Small, and it updates itself
 The whole game is a 3 MB file. The title screen checks GitHub and updates to the newest build in one click, and every match writes a readable log (minute-by-minute economy, armies, key moments and the score breakdown) for anyone who wants to dig into balance.
@@ -89,7 +91,8 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 - **Up to 4 players and any teams:** free-for-all, 2v2, 1v3, or you with a computer ally, sharing vision.
 - **Procedural, symmetric maps:** an ocean ring with bays, rivers and inlets on most of them. You start in a random corner. Save the seeds you like by name.
 - **Guard and follow:** right-click a friendly unit to have your army guard it, or right-click one with a factory selected so every new unit joins it and follows it around, your Commander included.
-- **Three soundtracks:** besides the original D-minor score there's **Iron Tide** (driving strings and war drums) and **Ashfall** (dark choir and low brass). Each match picks one.
+- **Five soundtracks:** the original D-minor score, **Iron Tide** (driving strings and war drums), **Ashfall** (dark choir and low brass), **Overdrive** (marimba, racing strings and taiko) and **Last Light** (piano, solo horn and a snare-driven march). A match rotates through them.
+- **Always know who's on your side:** every Commander wears a YOU / ALLY / ENEMY tag, health bars are framed green for allies and red for enemies, and the scoreboard and player chips group your team together.
 - **Total Annihilation-style economy:** overspending slows every project by the same amount.
 - **Veterancy for every unit, including towers.**
 - **Every order is a button**, with its shortcut and a tooltip.
@@ -184,7 +187,7 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Control groups | `Ctrl+1-9` save, `Shift+1-9` add, `1-9` recall (tap twice to jump there) |
 | Build / produce | `Q W E R T Y U I` with a constructor or factory selected; drag for an area |
 | Factory output to group | `Option+1-9` (`Option+0` clears) |
-| Camera | Scroll to zoom; right- or middle-drag, arrow keys or screen edge to pan; `Option`+scroll pans |
+| Camera | Scroll to zoom; middle-drag, arrow keys or screen edge to pan; `Option`+scroll pans |
 | Follow / cinematic camera | `L` / `Shift+L` |
 | Jump to Commander / last attack | `C` / `Space` |
 | Idle constructor | `Tab` |
@@ -207,11 +210,12 @@ Plain Lua on LÖVE 11.5, with no other dependencies.
 | `src/scores.lua`, `src/online.lua` | Local high scores; update check, one-click update and online leaderboard (via `curl` and GitHub) |
 | `src/matchlog.lua` | Per-game logs for balance review |
 | `src/arena.lua`, `src/arena_ai.lua` | Commander Arena: lane map, towers, creep waves, the seven classes and their skills, and the computer Commanders |
-| `tools/compose_suites.py` | The two extra soundtracks |
+| `tools/compose_suites.py` | The four extra soundtracks |
+| `tools/sfx.py` | Synthesizes the combat sound effects |
 | `tools/leaderboard.py`, `.github/workflows/leaderboard.yml` | The leaderboard bot: checks a submitted score issue, updates `LEADERBOARD.md`, then replies and closes the issue |
 | `src/game.lua`, `src/ui.lua`, `src/render.lua` | Input, the HUD and drawing |
 | `src/menu.lua`, `src/maps.lua` | Lobby and saved maps |
-| `src/sfx.lua` | Procedurally generated sound effects |
+| `src/sfx.lua` | Positional combat sounds and UI blips |
 | `src/music.lua`, `src/voice.lua` | Intensity-driven music crossfading and the announcer queue |
 | `tools/compose.py`, `tools/voices.py` | Compose the score as MIDI and render it with FluidSynth (FluidR3 GM soundfont, MIT); render the announcer with espeak-ng plus a ring-modulator robot filter |
 

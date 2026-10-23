@@ -29,6 +29,12 @@ function AI.new(world, team, level, profileKey)
   d.raidEvery = p.raidEvery or (d.raids and 150 or nil)
   self.diff = d
   self.weights = p.weights or {}
+  -- scout hunter packs: fast, fragile squads that pick off exposed constructors and extractors
+  if (p.hunters or 0) > 0 and (d.level or 5) >= 3 and self.rng:random() < (p.huntersChance or 1) then
+    self.huntersWanted = p.hunters + ((d.level or 5) >= 8 and 1 or 0)
+    self.huntersFrom = p.huntersFrom or 180
+  end
+  self.hunters, self.isHunter = {}, {}
   self.lastRaid = 0
   self.raiders = {}
   self.timer = 1
@@ -281,15 +287,54 @@ function AI:thinkCommander()
   local distHome = U.dist(c.x, c.y, self.baseX, self.baseY)
   local outgunned = danger > (support + 600) * (style == "aggressive" and 1.5 or 1.0)
   local tmS = world.teams[self.team]
+  local spawnDist = U.dist(c.x, c.y, tmS.startX, tmS.startY)
+  local homeHot = self:strengthNear(tmS.startX, tmS.startY, 550, true) > 0 or (spawnDist < 450 and danger > 0)
+  -- the fight is AT home: running "home" would just power him down where he stands.
+  -- Winnable (turrets, factories, army around)? Power up and fight. Otherwise slip out
+  -- the far side of the base and wait for it to clear.
+  local function homeFight()
+    if (support + 450 * hpf) >= danger * 0.85 and hpf > 0.25 then
+      c.disarmed = nil
+      self.cmdMode = "defend"
+      self.evading = false
+      local tgt = self:enemyNearBase()
+      if tgt then world:issue(c, { type = "amove", x = tgt.x, y = tgt.y }) end
+      return true
+    end
+    if self.evading then return false end
+    local ex, ey, n = 0, 0, 0
+    world:query(c.x, c.y, 600, function(e)
+      if e.alive and self:isHostile(e.team) and e.def.weapon then ex, ey, n = ex + e.x, ey + e.y, n + 1 end
+    end)
+    local ax, ay = -self.dirX, -self.dirY
+    if n > 0 then ax, ay = U.norm(c.x - ex / n, c.y - ey / n) end
+    local map = world.map
+    local tx, ty = map:tileAt(c.x + ax * 700, c.y + ay * 700)
+    tx = math.max(1, math.min(map.w - 2, tx)); ty = math.max(1, math.min(map.h - 2, ty))
+    local nx, ny = map:nearestTile(tx, ty, function(x, y) return map:passable("land", x, y) end, 12)
+    if not nx then return false end
+    local fx, fy = map:center(nx, ny)
+    self.cmdMode = "retreat"
+    self.evading = true
+    world:issue(c, { type = "retreat", x = fx, y = fy })
+    return true
+  end
   if self.cmdMode ~= "retreat" and ((hpf < retreatAt and danger > 0) or outgunned or (hpf < 0.4 and distHome > 500)) then
+    if homeHot and spawnDist < 650 and homeFight() then return end
     -- flee home at +50% speed; he only repairs at his spawn point, powered down until full
     self.cmdMode = "retreat"
+    self.evading = false
     world:issue(c, { type = "retreat", x = tmS.startX, y = tmS.startY })
     return
   end
   if self.cmdMode == "retreat" then
     if hpf < 0.95 then
-      if #c.orders == 0 and U.dist(c.x, c.y, tmS.startX, tmS.startY) > 200 then
+      -- made it home, but the fight followed him there
+      if not world:isFleeing(c) and spawnDist < 450 and danger > 0 and homeFight() then return end
+      if #c.orders == 0 and spawnDist > 200 then
+        -- don't walk back into the fight that chased him out; wait until home is clear
+        if homeHot then return end
+        self.evading = false
         world:issue(c, { type = "retreat", x = tmS.startX, y = tmS.startY })
       end
       return
@@ -313,6 +358,62 @@ function AI:thinkCommander()
     self.cmdMode = nil
     world:issue(c, { type = "move", x = homeX, y = homeY })
     return
+  end
+
+  -- 4b. hunt for experience: once the base runs without him, go pick fights he can win on
+  -- our side of the map (raiders, scouts, enemy extractors and outposts). Levels make him
+  -- far stronger, so every personality but the cautious ones does this.
+  if self.cmdMode == "xp" and self.xpTarget and (not self.xpTarget.alive or hpf < 0.55) then
+    self.xpTarget = nil
+    self.cmdMode = nil
+    if hpf < 0.55 then world:issue(c, { type = "move", x = homeX, y = homeY }); return end
+  end
+  if self.cmdMode == "xp" and self.xpTarget then
+    if #c.orders == 0 then world:issue(c, { type = "amove", x = self.xpTarget.x, y = self.xpTarget.y }) end
+    return
+  end
+  local helpers = 0
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == self.team and e.def.builds and not e.def.factory and e.key ~= "commander" and e.built >= 1 then helpers = helpers + 1 end
+  end
+  local huntLevel = (c.clevel or 0) < 5
+  local wantsXP = style ~= "cautious" and huntLevel and hpf > 0.75 and world.time > 150 and helpers >= 2
+    and (self.diff.level or 5) >= 3 and world.time - (self.lastHunt or -999) > 20
+  if wantsXP then
+    self.lastHunt = world.time
+    local reach = style == "aggressive" and 2400 or 1800
+    local fromBase = style == "aggressive" and 2200 or 1400
+    local cands = {}
+    for _, e in ipairs(world.entities) do
+      if e.alive and self:isHostile(e.team) and e.key ~= "commander" and e.def.domain ~= "air"
+        and not (e.def.building and e.def.weapon) and e.built >= 1 then
+        local d = U.dist(c.x, c.y, e.x, e.y)
+        local de = math.huge
+        for t2 = 1, world.np do
+          local tt = world.teams[t2]
+          if self:isHostile(t2) and not tt.dead and tt.startX then de = math.min(de, U.dist(e.x, e.y, tt.startX, tt.startY)) end
+        end
+        -- anywhere short of an enemy base: our side, the middle, their outlying extractors
+        local db = U.dist(e.x, e.y, self.baseX, self.baseY)
+        if d < reach and de > 900 and db < fromBase and db < de * 1.6
+          and world.map:canReach("land", c.x, c.y, e.x, e.y, 90) then
+          cands[#cands + 1] = { e = e, d = d }
+        end
+      end
+    end
+    table.sort(cands, function(a, b) return a.d < b.d end)
+    for i = 1, math.min(5, #cands) do
+      local e = cands[i].e
+      local theirs = self:strengthNear(e.x, e.y, 420, true)
+      local ours = self:strengthNear(e.x, e.y, 500, false) + 500 * hpf
+      if ours >= theirs * (style == "aggressive" and 1.2 or 1.6) then
+        self.cmdMode = "xp"
+        self.xpTarget = e
+        if os.getenv("PA_DEBUG_AI") then print(string.format("XPHUNT t=%d team=%d L%d -> %s d=%d ours=%d theirs=%d", world.time, self.team, c.clevel or 0, e.key, cands[i].d, ours, theirs)) end
+        world:issue(c, { type = "amove", x = e.x, y = e.y })
+        return
+      end
+    end
   end
 
   -- 5. escort a strong attack wave from the back
@@ -551,7 +652,7 @@ function AI:thinkEconomy()
         task = "solar"
       else
         local em = self.diff.expandMul
-        local range = isCmd and 520 or math.min(2600 * em, 700 + t * 3 * em)
+        local range = isCmd and 520 or math.min(2800 * em, 900 + t * 4.5 * em)
         local dp = self:nearestFreeDeposit(b.x, b.y, range)
         if dp and (isCmd or mexes < 30 * em) then
           task = { key = "mex", tx = dp.x, ty = dp.y }
@@ -671,13 +772,21 @@ function AI:pickUnit(f)
   local t = world.time
   local rng = self.rng
   local builders = self:countPlanned("builder") + self:queued("builder")
-  local wantBuilders = 2 + math.floor(t / 240) + self.diff.builderBonus
-  wantBuilders = math.min(wantBuilders, 6 + self.diff.builderBonus)
+  -- expand early: a third constructor right away, then one more every 2.5 minutes
+  -- (Turtles get extra builders for their walls through builderBonus but expand slowly)
+  local wantBuilders = 3 + math.floor(t / 150) + self.diff.builderBonus
+  wantBuilders = math.min(wantBuilders, 7 + self.diff.builderBonus)
   local enemyAir = self:enemyAirCount()
   local enemySubs = self:enemyCount("sub")
   local enemyShips = self:enemyCount("sea") + enemySubs
   if f.key == "landfac" then
     if builders < wantBuilders and f == self:firstFactory("landfac") then return "builder" end
+    -- keep the hunter pack topped up
+    if self.huntersWanted and t >= self.huntersFrom - 60 then
+      local have = 0
+      for _, u in ipairs(self.hunters) do if u.alive then have = have + 1 end end
+      if have + self:queued("scout") < self.huntersWanted and self:countPlanned("scout") < self.huntersWanted + 3 then return "scout" end
+    end
     local myFlak = self:countPlanned("flak") + self:queued("flak")
     local w = {
       tank = 50,
@@ -985,6 +1094,116 @@ function AI:launchRaid(army, inWave)
   end
 end
 
+-- Hunter pack: 2-4 scouts that roam for exposed constructors, extractors and power,
+-- dodge anything that can fight back, and regroup at home when chased off.
+function AI:thinkHunters(army, inWave)
+  local want = self.huntersWanted
+  local world = self.world
+  if not want or world.time < self.huntersFrom then return end
+  -- keep the pack: survivors plus fresh scouts
+  local pack = {}
+  for _, u in ipairs(self.hunters) do if u.alive then pack[#pack + 1] = u else self.isHunter[u] = nil end end
+  for _, u in ipairs(army) do
+    if #pack >= want then break end
+    if u.key == "scout" and not self.isHunter[u] then
+      pack[#pack + 1] = u
+      self.isHunter[u] = true
+      self.wave[u] = nil
+    end
+  end
+  self.hunters = pack
+  for _, u in ipairs(pack) do inWave[u] = true end
+  if #pack < math.min(2, want) then return end
+  local cx, cy, str = 0, 0, 0
+  for _, u in ipairs(pack) do cx, cy, str = cx + u.x, cy + u.y, str + 35 * (u.hp / u.maxhp) end
+  cx, cy = cx / #pack, cy / #pack
+  local t = world.time
+  -- chased? run home and regroup
+  local danger = self:strengthNear(cx, cy, 380, true)
+  if danger > str * 1.3 then
+    if not self.huntFlee or t > self.huntFlee then
+      self.huntFlee = t + 12
+      self.prey = nil
+      for _, u in ipairs(pack) do world:issue(u, { type = "move", x = self.stageX + self.rng:random(-60, 60), y = self.stageY + self.rng:random(-60, 60) }) end
+    end
+    return
+  end
+  if self.huntFlee and t < self.huntFlee then return end
+  -- still a good target?
+  local prey = self.prey
+  if prey and (not prey.alive or self:strengthNear(prey.x, prey.y, 380, true) > str * 0.8) then prey = nil end
+  if not prey and t > (self.nextPreyLook or 0) then
+    self.nextPreyLook = t + 2
+    local best, bs
+    for _, e in ipairs(world.entities) do
+      if e.alive and self:isHostile(e.team) and e.key ~= "commander" and e.built >= 1 then
+        local v = (e.def.builds and not e.def.factory and not e.def.building and e.def.domain == "land") and 3
+          or (e.key == "mex" and 2) or (e.key == "solar" and 1) or nil
+        if v and world:layerOf(pack[1]) and world.map:canReach("land", cx, cy, e.x, e.y, 120) then
+          local tt = world.teams[e.team]
+          local dBase = tt.startX and U.dist(e.x, e.y, tt.startX, tt.startY) or 9999
+          if dBase > 650 then
+            local score = v * 700 - U.dist(cx, cy, e.x, e.y) * 0.5 + math.min(dBase, 1500) * 0.3
+            if (not bs or score > bs) and self:strengthNear(e.x, e.y, 380, true) <= str * 0.6 then best, bs = e, score end
+          end
+        end
+      end
+    end
+    prey = best
+  end
+  self.prey = prey
+  if prey then
+    -- chase: refresh orders as the prey moves
+    if t > (self.preyOrderT or 0) then
+      self.preyOrderT = t + 1.5
+      for _, u in ipairs(pack) do world:issue(u, { type = "amove", x = prey.x + self.rng:random(-20, 20), y = prey.y + self.rng:random(-20, 20) }) end
+    end
+  else
+    for _, u in ipairs(pack) do
+      if #u.orders == 0 and U.dist(u.x, u.y, self.stageX, self.stageY) > 300 then
+        world:issue(u, { type = "move", x = self.stageX, y = self.stageY })
+      end
+    end
+  end
+end
+
+-- Raiders on our constructors or extractors away from home: send a few idle units to chase them off
+function AI:defendOutposts(army, inWave)
+  local world = self.world
+  if (self.diff.level or 5) < 4 then return end
+  local t = world.time
+  if t < (self.nextOutpostCheck or 0) then return end
+  self.nextOutpostCheck = t + 2
+  self.outpostResp = self.outpostResp or {}
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == self.team and (e.key == "mex" or e.key == "solar" or (e.def.builds and not e.def.factory and e.key ~= "commander"))
+      and U.dist(e.x, e.y, self.baseX, self.baseY) > 450 then
+      local key = math.floor(e.x / 400) * 1000 + math.floor(e.y / 400)
+      if t > (self.outpostResp[key] or 0) then
+        local threat = self:strengthNear(e.x, e.y, 330, true)
+        if threat > 0 and threat < 600 then
+          -- pick the closest idle ground units, enough to outgun the raiders
+          local cands = {}
+          for _, u in ipairs(army) do
+            if not inWave[u] and not self.isHunter[u] and u.def.domain == "land" and #u.orders <= 1 then
+              cands[#cands + 1] = { u = u, d = U.dist(u.x, u.y, e.x, e.y) }
+            end
+          end
+          table.sort(cands, function(a, b) return a.d < b.d end)
+          local sent, power = 0, 0
+          for _, cnd in ipairs(cands) do
+            if power >= threat * 1.5 or sent >= 4 or cnd.d > 1600 then break end
+            world:issue(cnd.u, { type = "amove", x = e.x, y = e.y })
+            inWave[cnd.u] = true
+            sent, power = sent + 1, power + (cnd.u.def.cost and cnd.u.def.cost.metal or 50)
+          end
+          if sent > 0 then self.outpostResp[key] = t + 15 end
+        end
+      end
+    end
+  end
+end
+
 function AI:thinkArmy()
   local world = self.world
   self.retarget = (self.retarget or 0) - 1
@@ -1011,9 +1230,12 @@ function AI:thinkArmy()
   end
   self.wave = inWave
 
+  self:thinkHunters(army, inWave)
+  self:defendOutposts(army, inWave)
+
   -- scouts wander to find things
   for _, u in ipairs(army) do
-    if u.key == "scout" and #u.orders == 0 and not inWave[u] then
+    if u.key == "scout" and #u.orders == 0 and not inWave[u] and not self.isHunter[u] then
       local map = world.map
       local dp = map.deposits[self.rng:random(#map.deposits)]
       local x, y = map:center(dp.x, dp.y)

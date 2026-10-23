@@ -364,6 +364,60 @@ function R.drawEntity(e, cam, selected)
   end
 end
 
+-- "me", "ally", "enemy" or "neutral", seen from the human player (team 1)
+function R.relation(team)
+  if team == 1 then return "me" end
+  local w = R.world
+  if not w or not w.ally or not w.ally[team] then return "neutral" end
+  if w.ally[team] == w.ally[1] then return "ally" end
+  return w:hostile(team, 1) and "enemy" or "neutral"
+end
+R.REL_COLOR = { me = { 1, 1, 1 }, ally = { 0.35, 1, 0.45 }, enemy = { 1, 0.35, 0.3 }, neutral = { 0.8, 0.8, 0.8 } }
+
+-- progress to the next Commander level: frac (0..1), level, isMax
+function R.cmdXP(e)
+  local T = R.world and R.world.arena and require("src.arena").THRESHOLDS or require("src.commander").THRESHOLDS
+  local L = e.clevel or 0
+  local lo = L > 0 and T[L] or 0
+  local hi = T[L + 1]
+  if not hi then return 1, L, true end
+  return math.max(0, math.min(1, ((e.cxp or 0) - lo) / (hi - lo))), L, false
+end
+
+-- a name tag over every Commander: YOU / ALLY / ENEMY, plus the class in the Arena
+function R.drawNameplate(e, zoom)
+  if e.key ~= "commander" or not e.alive or zoom < 0.3 then return end
+  local rel = R.relation(e.team)
+  local A = R.world.arena and require("src.arena")
+  local cls = A and e.class and A.byClass[e.class]
+  local tag = rel == "me" and "YOU" or (rel == "ally" and "ALLY" or (rel == "enemy" and "ENEMY" or ""))
+  local who = cls and cls.name or D.teamName[e.team]
+  local text = rel == "me" and (cls and ("YOU - " .. cls.name) or "YOU") or (tag .. " - " .. (who or "?"))
+  local f = font(11)
+  local s = 1 / math.max(zoom, 0.6)
+  local tw = f:getWidth(text) * s
+  local y = e.y - e.def.radius - 24 * s
+  local c = R.REL_COLOR[rel]
+  local tr, tg, tb = R.teamColor(e.team)
+  local lg = love.graphics
+  lg.setColor(0, 0, 0, 0.65)
+  lg.rectangle("fill", e.x - tw / 2 - 5 * s, y - 1 * s, tw + 10 * s, 14 * s, 3 * s)
+  lg.setColor(tr, tg, tb, 0.95)
+  lg.rectangle("fill", e.x - tw / 2 - 5 * s, y - 1 * s, 3 * s, 14 * s)
+  lg.setColor(c[1], c[2], c[3])
+  lg.setFont(f)
+  lg.print(text, e.x - tw / 2, y, 0, s, s)
+  -- your own Commander: an XP bar under the tag
+  if rel == "me" then
+    local frac, _, max = R.cmdXP(e)
+    local bw = tw + 10 * s
+    lg.setColor(0, 0, 0, 0.65)
+    lg.rectangle("fill", e.x - bw / 2, y + 13 * s, bw, 3 * s)
+    if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.6, 0.5, 1) end
+    lg.rectangle("fill", e.x - bw / 2, y + 13 * s, bw * frac, 3 * s)
+  end
+end
+
 function R.drawHealth(e, show)
   local d = e.def
   local frac = e.hp / e.maxhp
@@ -371,8 +425,16 @@ function R.drawHealth(e, show)
   local w = d.building and d.w * D.TILE * 0.8 or math.max(22, d.radius * 2.4)
   local y = e.y - (d.building and d.h * D.TILE / 2 + 7 or d.radius + 9)
   local lg = love.graphics
-  lg.setColor(0, 0, 0, 0.7)
+  -- the frame tells friend from foe: dark for yours, green for allies, red for enemies
+  local rel = R.relation(e.team)
+  if rel == "ally" then lg.setColor(0.25, 0.95, 0.4, 0.9)
+  elseif rel == "enemy" then lg.setColor(1, 0.25, 0.2, 0.85)
+  else lg.setColor(0, 0, 0, 0.7) end
   lg.rectangle("fill", e.x - w / 2 - 1, y - 1, w + 2, 5)
+  if rel ~= "me" then
+    lg.setColor(0, 0, 0, 0.7)
+    lg.rectangle("fill", e.x - w / 2, y, w, 3)
+  end
   local r, g = 1 - frac, frac
   lg.setColor(0.2 + r * 0.8, 0.3 + g * 0.6, 0.15)
   lg.rectangle("fill", e.x - w / 2, y, w * frac, 3)
@@ -486,7 +548,10 @@ function R.drawWorld(cam, game)
   end
 
   for _, e in ipairs(list) do
-    R.drawHealth(e, sel[e] or e.built < 1)
+    R.drawHealth(e, sel[e] or e.built < 1 or (e.key == "commander"))
+  end
+  for _, e in ipairs(list) do
+    if e.key == "commander" then R.drawNameplate(e, cam.zoom) end
   end
 
   -- projectiles

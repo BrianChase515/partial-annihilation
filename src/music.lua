@@ -9,6 +9,9 @@ local stems, gains = {}, { ambient = 0, tension = 0, combat = 0 }
 local stinger
 local playing = false
 local resyncT = 0
+local lastTell, loops = 0, 0
+local swap = 1          -- gain multiplier while crossing from one suite to the next
+local swapping = false
 
 local function load(name, mode)
   local ok, s = pcall(love.audio.newSource, "assets/music/" .. name .. ".ogg", mode or "stream")
@@ -20,8 +23,27 @@ local function smooth(e0, e1, x)
   return t * t * (3 - 2 * t)
 end
 
--- three soundtracks: "" (D minor), "_b" Iron Tide (E minor), "_c" Ashfall (C minor)
-M.SUITES = { "", "_b", "_c" }
+-- five soundtracks: "" (D minor), "_b" Iron Tide (E minor), "_c" Ashfall (C minor),
+-- "_d" Overdrive (A minor), "_e" Last Light (G minor)
+M.SUITES = { "", "_b", "_c", "_d", "_e" }
+M.LOOPS_PER_SUITE = 2   -- during a match, move on to another suite after this many loops
+
+-- a shuffled order of all suites, starting with `first`
+function M.playlist(first)
+  local rest = {}
+  for _, s in ipairs(M.SUITES) do if s ~= first then rest[#rest + 1] = s end end
+  for i = #rest, 2, -1 do local j = love.math.random(i); rest[i], rest[j] = rest[j], rest[i] end
+  table.insert(rest, 1, first)
+  return rest
+end
+
+-- start a match: random first suite, then rotate through the rest
+function M.match()
+  M.queue = M.playlist(M.SUITES[love.math.random(#M.SUITES)])
+  M.qi = 1
+  M.rotate = true
+  M.start(M.queue[1])
+end
 
 function M.start(suite)
   if not love.audio then return end
@@ -41,6 +63,7 @@ function M.start(suite)
   if stinger then stinger:stop(); stinger = nil end
   if playing then return end
   playing = true
+  lastTell, loops = 0, 0
   for _, s in pairs(stems) do s:seek(0); s:play() end
 end
 
@@ -75,6 +98,25 @@ function M.update(dt, level)
     master = master * M.fadeOut
     if M.fadeOut <= 0 then M.stop() end
   end
+  -- count loops; after a few, fade out and come back in with the next suite
+  if stems.ambient and level ~= "menu" and M.rotate and not M.fadeOut then
+    local t = stems.ambient:tell()
+    if t < lastTell - 1 then loops = loops + 1 end
+    lastTell = t
+    if loops >= M.LOOPS_PER_SUITE and not swapping then swapping = true end
+  end
+  if swapping then
+    swap = swap - dt / 2.5
+    if swap <= 0 then
+      swapping = false
+      M.qi = (M.qi or 1) % #(M.queue or M.SUITES) + 1
+      M.start((M.queue or M.SUITES)[M.qi])
+      swap = 0
+    end
+  elseif swap < 1 then
+    swap = math.min(1, swap + dt / 3)
+  end
+  master = master * math.max(0, swap)
   for k, s in pairs(stems) do
     gains[k] = gains[k] + (want[k] - gains[k]) * math.min(1, dt * 1.5)
     s:setVolume(gains[k] * master)
@@ -104,12 +146,15 @@ end
 
 function M.reset()
   M.heat, M.intensity, M.fadeOut, M.floor = 0, 0, nil, 0
+  loops, swap, swapping = 0, 1, false
+  lastTell = stems.ambient and stems.ambient:tell() or 0
 end
 
 -- title screen: make sure the calm layer is playing
 function M.menu()
   if stinger and stinger:isPlaying() then return end
   M.fadeOut = nil
+  M.rotate = false
   if not playing then M.reset(); M.start() end
   M.heat, M.floor = 0, 0
 end

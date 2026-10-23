@@ -178,31 +178,61 @@ function UI.drawTop(game)
   if tm.stalled and not game.arena then
     lg.setFont(font(13))
     lg.setColor(1, 0.4, 0.3, 0.6 + 0.4 * math.sin(love.timer.getTime() * 6))
-    lg.print("LOW RESOURCES - building slowed", 732 + game.world.np * 22, 11)
+    lg.print("LOW RESOURCES - building slowed", (game.chipsRight or (732 + game.world.np * 22)) + 8, 11)
   end
-  -- player chips: color, alliance, and a cross if eliminated
+  -- player chips grouped by side: YOUR TEAM [you][allies]  VS  [enemy team] [enemy team]...
   do
+    local world = game.world
     local cx = 726
-    lg.setFont(font(12))
-    for i = 1, game.world.np do
+    local function chip(i)
       local cr, cg, cb = R.teamColor(i)
-      local dead = game.world.teams[i].dead
+      local dead = world.teams[i].dead
       lg.setColor(cr, cg, cb, dead and 0.3 or 1)
       lg.rectangle("fill", cx, 11, 16, 16, 3)
-      lg.setColor(0, 0, 0)
-      local lab = tostring(game.world.ally[i])
-      lg.print(lab, cx + 8 - font(12):getWidth(lab) / 2, 12)
       if dead then
         lg.setColor(1, 1, 1)
         lg.setLineWidth(2)
         lg.line(cx, 11, cx + 16, 27); lg.line(cx + 16, 11, cx, 27)
       end
       if i == 1 then
-        lg.setColor(1, 1, 1, 0.8)
+        lg.setColor(1, 1, 1, 0.9)
+        lg.setLineWidth(1.5)
         lg.rectangle("line", cx - 1.5, 9.5, 19, 19, 3)
       end
-      cx = cx + 22
+      cx = cx + 20
     end
+    local groups, order = {}, {}
+    for i = 1, world.np do
+      local a = world.ally[i]
+      if not groups[a] then groups[a] = {}; order[#order + 1] = a end
+      table.insert(groups[a], i)
+    end
+    table.sort(order, function(a, b)
+      if a == world.ally[1] then return true elseif b == world.ally[1] then return false end
+      return a < b end)
+    lg.setFont(font(10))
+    for gi, a in ipairs(order) do
+      local mine = a == world.ally[1]
+      local g = groups[a]
+      local x0 = cx
+      if gi == 2 then
+        lg.setFont(font(12))
+        lg.setColor(1, 0.45, 0.35)
+        lg.print("vs", cx, 12)
+        cx = cx + font(12):getWidth("vs") + 6
+        x0 = cx
+      elseif gi > 2 then
+        cx = cx + 6
+        x0 = cx
+      end
+      for _, i in ipairs(g) do chip(i) end
+      -- underline each side: green for yours, red for each enemy side
+      if mine then lg.setColor(0.35, 1, 0.45, 0.9) else lg.setColor(1, 0.35, 0.3, 0.9) end
+      lg.setLineWidth(2)
+      lg.line(x0 - 1, 31, cx - 3, 31)
+      cx = cx + 4
+    end
+    game.chipsRight = cx
   end
   -- right side: clickable controls (speed, pause, help, menu), then time and unit count
   local t = game.world.time
@@ -249,10 +279,20 @@ function UI.drawLeaderboard(game)
   if not world.score then return end
   local MOD = require("src.mods")
   local w = lg.getWidth()
+  -- grouped by side (yours first), so rows don't jump around and teammates sit together
   local rows = MOD.ranking(world)
+  local mine = world.ally[1]
+  table.sort(rows, function(a, b)
+    local am, bm = a.ally == mine, b.ally == mine
+    if am ~= bm then return am end
+    if a.ally ~= b.ally then return a.ally < b.ally end
+    return a.team < b.team
+  end)
   local bw, rh = 236, 24
   local x, y = w - bw - 10, UI.TOP_H + 8
-  local bh = 34 + #rows * rh
+  local seps = 0
+  for i = 2, #rows do if rows[i].ally ~= rows[i - 1].ally then seps = seps + 1 end end
+  local bh = 34 + #rows * rh + seps * 8
   panelBox(x, y, bw, bh, 0.86)
   lg.setFont(font(13))
   lg.setColor(1, 0.85, 0.35)
@@ -260,20 +300,31 @@ function UI.drawLeaderboard(game)
   lg.print(world.official and "SCORE" or "SCORE*", x + 10, y + 8)
   if t <= par then lg.setColor(0.5, 1, 0.55) else lg.setColor(1, 0.55, 0.35) end
   lg.print(string.format("%d:%02d / par %d:%02d", math.floor(t / 60), math.floor(t % 60), math.floor(par / 60), math.floor(par % 60)), x + 92, y + 8)
+  local yy = y + 30
   for i, r in ipairs(rows) do
-    local yy = y + 30 + (i - 1) * rh
+    if i > 1 and r.ally ~= rows[i - 1].ally then
+      lg.setColor(0.4, 0.45, 0.5, 0.6)
+      lg.line(x + 10, yy + 3, x + bw - 10, yy + 3)
+      yy = yy + 8
+    end
+    local friend = r.ally == mine
+    -- side stripe: green = your team, red = enemy
+    if friend then lg.setColor(0.35, 1, 0.45, r.dead and 0.35 or 0.9) else lg.setColor(1, 0.35, 0.3, r.dead and 0.35 or 0.9) end
+    lg.rectangle("fill", x + 4, yy + 2, 3, 16)
     local cr, cg, cb = R.teamColor(r.team)
     lg.setColor(cr, cg, cb, r.dead and 0.35 or 1)
     lg.rectangle("fill", x + 10, yy + 3, 14, 14, 3)
     lg.setColor(1, 1, 1, r.dead and 0.4 or 1)
     local name = r.team == 1 and "You" or D.teamName[r.team]
-    lg.print(string.format("%d. %s", i, name), x + 30, yy + 2)
+    if r.team ~= 1 then name = name .. (friend and " (ally)" or "") end
+    lg.print(name, x + 30, yy + 2)
     lg.print(U.fmt(r.pts), x + 128, yy + 2)
     if r.mult > 1 then
       local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 8)
       lg.setColor(1, 0.6, 0.2, pulse)
       lg.print(string.format("x%.2f", r.mult), x + 180, yy + 2)
     end
+    yy = yy + rh
   end
 end
 
@@ -373,6 +424,17 @@ function UI.drawSidebar(game)
         -- health sliver
         lg.setColor(0.3, 0.9, 0.4)
         lg.rectangle("fill", it.x + 4, it.y + it.h - 4, (it.w - 8) * e.hp / e.maxhp, 2)
+        if e.key == "commander" then
+          -- level and XP toward the next upgrade
+          local frac, L, max = R.cmdXP(e)
+          lg.setColor(0.15, 0.15, 0.25)
+          lg.rectangle("fill", it.x + 4, it.y + it.h - 1, it.w - 8, 2)
+          if max then lg.setColor(1, 0.85, 0.3) else lg.setColor(0.6, 0.5, 1) end
+          lg.rectangle("fill", it.x + 4, it.y + it.h - 1, (it.w - 8) * frac, 2)
+          lg.setFont(font(10))
+          lg.setColor(1, 0.85, 0.4)
+          lg.print("Lv" .. L, it.x + 4, it.y + 2)
+        end
       end
     end
   end
@@ -441,6 +503,12 @@ function UI.drawMinimap(game, L)
         else
           local r = e.key == "commander" and 3 or 1.6
           lg.rectangle("fill", px - r, py - r, r * 2, r * 2)
+          if e.key == "commander" then
+            local c = R.REL_COLOR[R.relation(e.team)]
+            lg.setColor(c[1], c[2], c[3], 0.95)
+            lg.setLineWidth(1.5)
+            lg.circle("line", px, py, 5.5)
+          end
         end
       end
     end
@@ -950,7 +1018,7 @@ Building
   Option+1..9 with a factory selected = its new units join that group (Option+0 clears)
 
 Camera
-  Scroll = zoom,  right-drag or middle-drag = pan,  arrow keys / screen edge = pan
+  Scroll = zoom,  middle-drag = pan,  arrow keys / screen edge = pan
   Option+scroll = pan (trackpad),  minimap click = jump,  Space = jump to last attack
   L = lock camera on selection,  Shift+L = cinematic follow (zooms to frame them)
   F9 = keep mouse inside window (on by default, for edge panning),  F8 = edge panning on/off
@@ -995,7 +1063,7 @@ Leveling
   When your Commander dies he respawns at your Core after a timer that grows with level and time.
 
 Classes
-  Ranger ....... longest range: Multishot, Piercing Lance, Evade, Decoy, Frost Arrow. Ult: Chain Storm
+  Ranger ....... longest range: Volley, Piercing Lance, Evade, Decoy, Frost Arrow. Ult: Chain Storm
   Elementalist . fragile caster: Teleport, Frost Nova, Fireball, Chain Lightning, Energy Shield. Ult: Meteor
   Reclaimer .... raises wrecked creeps as drones: Raise, Amplify, Corpse Burst, Bone Spear, Decrepify. Ult: Rise
   Juggernaut ... tanky brawler: Leap Slam, War Cry, Whirlwind, Battle Orders, Iron Shout. Ult: Berserk

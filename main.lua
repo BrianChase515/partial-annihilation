@@ -103,7 +103,14 @@ function love.load(args)
       level = autotest.level2, profile = autotest.profile2, level1 = autotest.level1, profile1 = autotest.profile1 })
     return
   end
-  for _, a in ipairs(args or {}) do
+  for i, a in ipairs(args or {}) do
+    if a == "--uishot" then
+      smoke = require("tools.uishot")
+      menu = Menu.new()
+      state = "menu"
+      smoke.start(function(opts) startGame(opts) return game end, args[i + 1] or "rts", tonumber(args[i + 2]) or 300)
+      return
+    end
     if a == "--showcase" then
       smoke = require("showcase")
       menu = Menu.new()

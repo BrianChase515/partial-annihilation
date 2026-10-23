@@ -214,17 +214,9 @@ end
 
 A.SKILLS = {
   -- Ranger
-  multishot = { name = "Multishot", aim = "point", range = 520, cd = 7, tags = { "dmg", "aoe" },
-    desc = "A fan of 5 shots toward the target.",
-    use = function(w, c, tx, ty)
-      local base = math.atan2(ty - c.y, tx - c.x)
-      for i = -2, 2 do
-        local a = base + i * 0.16
-        local d = 480
-        w.projectiles[#w.projectiles + 1] = { x = c.x, y = c.y, sx = c.x, sy = c.y, tx = c.x + math.cos(a) * d, ty = c.y + math.sin(a) * d,
-          speed = 700, damage = skillDmg(c, 80), splash = 34, team = c.team, weapon = c.def.weapon, source = c }
-      end
-    end },
+  multishot = { name = "Volley", aim = "self", range = 0, cd = 14, tags = { "buff" },
+    desc = "For 6 seconds every shot looses 2 extra arrows at other enemies in range (or the same one if it's alone).",
+    use = function(w, c) c.volleyUntil = w.time + 6; fx(w, "ring", c.x, c.y, 60, 0.5, { color = { 1, 0.9, 0.5 } }) end },
   lance = { name = "Piercing Lance", aim = "point", range = 560, cd = 10, tags = { "dmg", "line" },
     desc = "Hurls a lance that hits everything in a line.",
     use = function(w, c, tx, ty) lineHit(w, c, tx, ty, 560, 22, skillDmg(c, 230), { 1, 0.9, 0.5 }) end },
@@ -290,10 +282,10 @@ A.SKILLS = {
 
   -- Reclaimer
   raise = { name = "Raise Wrecks", aim = "point", range = 450, cd = 10, tags = { "summon" },
-    desc = "Rebuilds up to 3 recent wrecks near the target as your drones (max 6, more with Legion).",
+    desc = "Rebuilds up to 3 recent wrecks near the target as your drones (max 5, more with Legion).",
     use = function(w, c, tx, ty)
       local st = w.arena
-      local maxN = 6 + ((c.mods and c.mods.extraMinions) or 0)
+      local maxN = 5 + ((c.mods and c.mods.extraMinions) or 0)
       local have = countOwned(w, c, "drone")
       local raised = 0
       for i = #st.wrecks, 1, -1 do
@@ -317,7 +309,7 @@ A.SKILLS = {
       for i = #st.wrecks, 1, -1 do
         local wr = st.wrecks[i]
         if n < 5 and U.dist(wr.x, wr.y, tx, ty) < 230 then
-          area(w, c, wr.x, wr.y, 110, skillDmg(c, 170))
+          area(w, c, wr.x, wr.y, 110, skillDmg(c, 150))
           fx(w, "boom", wr.x, wr.y, 60, 0.5)
           table.remove(st.wrecks, i)
           n = n + 1
@@ -332,8 +324,8 @@ A.SKILLS = {
     desc = "Enemies near the target are slowed and take 50% more damage for 5 seconds.",
     use = function(w, c, tx, ty) area(w, c, tx, ty, 140, 1, { slow = 5, amp = 5 }); fx(w, "curse", tx, ty, 140, 0.8) end },
   rise = { name = "Rise", aim = "self", range = 0, cd = 65, ult = true, tags = { "summon", "ult" },
-    desc = "ULTIMATE: 6 veteran drones claw out of the ground around you for 25 seconds.",
-    use = function(w, c) summon(w, c, "drone", 6, 25, 3) end },
+    desc = "ULTIMATE: 5 veteran drones claw out of the ground around you for 22 seconds.",
+    use = function(w, c) summon(w, c, "drone", 5, 22, 3) end },
 
   -- Juggernaut
   leap = { name = "Leap Slam", aim = "point", range = 320, cd = 10, tags = { "dmg", "aoe", "cc", "move" },
@@ -370,33 +362,32 @@ A.SKILLS = {
 
   -- Warden
   charge = { name = "Charge", aim = "point", range = 320, cd = 9, tags = { "dmg", "cc", "move" },
-    desc = "Charge forward and smash the first enemy you reach (stun 1s).",
+    desc = "Charge forward and smash everything where you land (stun 1s).",
     use = function(w, c, tx, ty)
       dash(w, c, tx, ty, 320)
-      local list = hostiles(w, c, c.x, c.y, 90)
-      if list[1] then hit(w, c, list[1], skillDmg(c, 220)); list[1].stunUntil = w.time + 1 end
-      fx(w, "splash", c.x, c.y, 70, 0.3)
+      area(w, c, c.x, c.y, 110, skillDmg(c, 180), { stun = 0.8 })
+      fx(w, "splash", c.x, c.y, 120, 0.3)
     end },
-  holyshield = { name = "Holy Shield", aim = "self", range = 0, cd = 18, tags = { "defend" },
+  holyshield = { name = "Holy Shield", aim = "self", range = 0, cd = 15, tags = { "defend" },
     desc = "Take half damage for 10 seconds.",
     use = function(w, c) A.buff(c, "armor", 0.5, 10, w) end },
   hammers = { name = "Spinning Hammers", aim = "self", range = 170, cd = 12, tags = { "dmg", "aoe" },
     desc = "Hammers circle you for 5 seconds, battering everything close.",
-    use = function(w, c) c.pulse = { untilT = w.time + 5, r = 170, dmg = skillDmg(c, 30), kind = "hammer" } end },
-  smite = { name = "Smite", aim = "point", range = 260, cd = 8, tags = { "dmg", "cc" },
+    use = function(w, c) c.pulse = { untilT = w.time + 5, r = 175, dmg = skillDmg(c, 36), kind = "hammer" } end },
+  smite = { name = "Smite", aim = "point", range = 340, cd = 8, tags = { "dmg", "cc" },
     desc = "Strike the nearest enemy to the target hard and stun it for 1.5 seconds.",
     use = function(w, c, tx, ty)
       local list = hostiles(w, c, tx, ty, 120)
       local best, bd
       for _, o in ipairs(list) do local d = U.dist(tx, ty, o.x, o.y); if not bd or d < bd then best, bd = o, d end end
       if not best then return false end
-      hit(w, c, best, skillDmg(c, 260)); best.stunUntil = w.time + 1.5
+      hit(w, c, best, skillDmg(c, 270)); best.stunUntil = w.time + 1.2
       fx(w, "bolt", c.x, c.y, 5, 0.3, { x2 = best.x, y2 = best.y, color = { 1, 0.95, 0.6 } })
     end },
   prayer = { name = "Prayer", aim = "self", range = 450, cd = 20, tags = { "heal" },
-    desc = "Heal yourself and allies nearby by 25%.",
+    desc = "Heal yourself and allies nearby by 30%.",
     use = function(w, c)
-      for _, u in ipairs(friends(w, c, c.x, c.y, 450)) do u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.25); u.healing = 1 end
+      for _, u in ipairs(friends(w, c, c.x, c.y, 450)) do u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.30); u.healing = 1 end
       fx(w, "ring", c.x, c.y, 450, 0.7, { color = { 0.6, 1, 0.6 } })
     end },
   judgment = { name = "Judgment", aim = "point", range = 650, cd = 55, ult = true, tags = { "dmg", "aoe", "ult" },
@@ -429,10 +420,10 @@ A.SKILLS = {
     end },
   cyclone = { name = "Cyclone", aim = "self", range = 200, cd = 14, tags = { "dmg", "aoe", "cc" },
     desc = "A storm whirls around you for 4 seconds, damaging and slowing enemies.",
-    use = function(w, c) c.pulse = { untilT = w.time + 4, r = 200, dmg = skillDmg(c, 26), slow = true, kind = "cyclone" } end },
+    use = function(w, c) c.pulse = { untilT = w.time + 4, r = 200, dmg = skillDmg(c, 34), slow = true, kind = "cyclone" } end },
   firestorm = { name = "Firestorm", aim = "point", range = 460, cd = 8, tags = { "dmg", "line" },
     desc = "A wall of fire rolls toward the target.",
-    use = function(w, c, tx, ty) lineHit(w, c, tx, ty, 460, 30, skillDmg(c, 190), { 1, 0.5, 0.2 }) end },
+    use = function(w, c, tx, ty) lineHit(w, c, tx, ty, 460, 30, skillDmg(c, 215), { 1, 0.5, 0.2 }) end },
   oaksage = { name = "Spirit of the Oak", aim = "self", range = 500, cd = 30, tags = { "heal", "buff" },
     desc = "You and nearby allies regenerate 3% health per second for 15 seconds.",
     use = function(w, c) for _, u in ipairs(friends(w, c, c.x, c.y, 500)) do u.hot = { untilT = w.time + 15, rate = 0.03 } end; fx(w, "ring", c.x, c.y, 500, 0.7, { color = { 0.5, 1, 0.5 } }) end },
@@ -459,7 +450,7 @@ A.SKILLS = {
     end },
   mindblast = { name = "Mind Blast", aim = "point", range = 480, cd = 12, tags = { "cc", "aoe" },
     desc = "Stun everything near the target for 1.8 seconds.",
-    use = function(w, c, tx, ty) area(w, c, tx, ty, 160, skillDmg(c, 90), { stun = 1.8 }); fx(w, "ring", tx, ty, 160, 0.5, { color = { 0.9, 0.6, 1 } }) end },
+    use = function(w, c, tx, ty) area(w, c, tx, ty, 170, skillDmg(c, 130), { stun = 1.8 }); fx(w, "ring", tx, ty, 160, 0.5, { color = { 0.9, 0.6, 1 } }) end },
   fade = { name = "Fade", aim = "self", range = 0, cd = 18, tags = { "escape" },
     desc = "Vanish for 4 seconds: nothing can target you, and you move 40% faster.",
     use = function(w, c) c.fadeUntil = w.time + 4; A.buff(c, "speed", 1.4, 4, w) end },
@@ -473,7 +464,7 @@ A.SKILLS = {
       local best, bd
       for _, o in ipairs(list) do local d = U.dist(tx, ty, o.x, o.y); if not bd or d < bd then best, bd = o, d end end
       if not best then return false end
-      for i = 0, 2 do later(w, i * 0.15, function() if best.alive then hit(w, c, best, skillDmg(c, 110)); fx(w, "hit", best.x, best.y, 14, 0.2) end end) end
+      for i = 0, 2 do later(w, i * 0.15, function() if best.alive then hit(w, c, best, skillDmg(c, 135)); fx(w, "hit", best.x, best.y, 14, 0.2) end end) end
     end },
   swarm = { name = "Sentry Swarm", aim = "point", range = 500, cd = 55, ult = true, tags = { "summon", "ult", "siege" },
     desc = "ULTIMATE: deploy 5 sentries around the target for 20 seconds.",
@@ -528,25 +519,25 @@ A.SHARED = { "hull", "regen", "cannon", "loader", "treads", "bounty", "breaker",
 A.CLASSES = {
   { key = "ranger", name = "Ranger", tag = "Longest range; volleys and lances.",
     skills = { "multishot", "lance", "evade", "decoy", "frostarrow" }, ult = "chainstorm", passives = { "crit", "eagle", "dodge" },
-    base = function(w, e) mulMod(e, "range", 1.35); hpUp(e, 0.9) end },
+    base = function(w, e) mulMod(e, "range", 1.3); hpUp(e, 0.88) end },
   { key = "elementalist", name = "Elementalist", tag = "Fragile; fire, frost and lightning.",
     skills = { "teleport", "frostnova", "fireball", "chainlightning", "energyshield" }, ult = "meteor", passives = { "coldmastery", "power", "focus" },
-    base = function(w, e) hpUp(e, 0.85); mulMod(e, "skillDmg", 1.1) end },
+    base = function(w, e) hpUp(e, 0.9); mulMod(e, "skillDmg", 1.15) end },
   { key = "reclaimer", name = "Reclaimer", tag = "Raises wrecked creeps as drones; curses.",
     skills = { "raise", "amplify", "corpseburst", "bonespear", "decrepify" }, ult = "rise", passives = { "legion", "lifesteal" },
     base = function(w, e) end },
   { key = "juggernaut", name = "Juggernaut", tag = "Huge health, short range; leaps and shouts.",
     skills = { "leap", "warcry", "whirlwind", "battleorders", "shout" }, ult = "berserk", passives = { "ironskin", "regen" },
-    base = function(w, e) hpUp(e, 1.5); mulMod(e, "range", 0.8); mulMod(e, "dmg", 1.25); mulMod(e, "armor", 0.9) end },
+    base = function(w, e) hpUp(e, 1.5); mulMod(e, "range", 0.8); mulMod(e, "dmg", 1.2); mulMod(e, "armor", 0.9) end },
   { key = "warden", name = "Warden", tag = "Auras for allies and creeps; charge and smite.",
     skills = { "charge", "holyshield", "hammers", "smite", "prayer" }, ult = "judgment", passives = { "might", "prayeraura", "freezeaura" },
-    base = function(w, e) hpUp(e, 1.15) end },
+    base = function(w, e) hpUp(e, 1.2); mulMod(e, "armor", 0.92) end },
   { key = "shifter", name = "Shifter", tag = "Wolf pack, bear form and storms.",
     skills = { "wolves", "bear", "cyclone", "firestorm", "oaksage" }, ult = "cataclysm", passives = { "pack", "lycan" },
-    base = function(w, e) end },
+    base = function(w, e) hpUp(e, 1.2); mulMod(e, "dmg", 1.1) end },
   { key = "infiltrator", name = "Infiltrator", tag = "Trap turrets, stealth and a shadow clone.",
     skills = { "sentry", "mindblast", "fade", "clone", "talon" }, ult = "swarm", passives = { "crit", "venom", "shadowstep" },
-    base = function(w, e) mulMod(e, "speed", 1.15); hpUp(e, 0.95) end },
+    base = function(w, e) mulMod(e, "speed", 1.15); hpUp(e, 1.05); mulMod(e, "dmg", 1.1) end },
 }
 A.byClass = {}
 for _, c in ipairs(A.CLASSES) do A.byClass[c.key] = c end
@@ -977,15 +968,16 @@ function A.update(w, dt)
 end
 
 ---------------------------------------------------------------------------
--- Score par for the Arena: 14 minutes, +3 per extra enemy
+-- Score par for the Arena: about what a clean, decisive win takes (computer-vs-computer
+-- games run ~12 minutes; a player who is winning pushes faster). +2 per extra enemy.
 
-A.TEMPLATE_PAR = { classic = 14, longroad = 17, gauntlet = 12, open = 13 }
+A.TEMPLATE_PAR = { classic = 10, longroad = 12.5, gauntlet = 8.5, open = 9.5 }
 
 function A.par(w)
-  local base = A.TEMPLATE_PAR[w.map.template or "classic"] or 14
+  local base = A.TEMPLATE_PAR[w.map.template or "classic"] or 10
   local enemies, allies = 0, 0
   for t = 2, w.np do if w:hostile(t, 1) then enemies = enemies + 1 else allies = allies + 1 end end
-  return (base + 3 * (enemies - 1) - 2 * allies) * 60
+  return math.floor((base + 2 * (enemies - 1) - 1.5 * allies) * 60)
 end
 
 return A

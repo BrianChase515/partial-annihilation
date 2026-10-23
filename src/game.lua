@@ -208,10 +208,16 @@ function G.new(opts)
         MUSIC.bump((e.team == 1 or o.team == 1) and 0.05 or 0.02)
       end
     end
-    if self:onScreen(e.x, e.y) and (e.team == 1 or world:isVisible(e)) then
-      local w = e.def.weapon
-      local heavy = w.damage >= 60 or w.ballistic
-      SFX.play(heavy and "cannon" or "shot", (heavy and 0.7 or 0.35) * math.min(1, self.cam.zoom + 0.3))
+    if e.team == 1 or world:isVisible(e) then
+      local snd = SFX.weaponSound(e.def.weapon)
+      -- Arena creeps fire constantly: keep them a notch under the Commanders and towers
+      local v = (self.arena and e.key ~= "commander" and not e.def.building) and 0.6 or 1
+      if snd then SFX.at(snd, e.x, e.y, self:soundView(), v) end
+    end
+  end
+  world.onImpact = function(p)
+    if (p.weapon and p.weapon.ballistic) and world:tileVisible(math.floor(p.tx / world.T), math.floor(p.ty / world.T)) then
+      SFX.at("impact", p.tx, p.ty, self:soundView(), p.weapon.bomb and 1 or 0.8)
     end
   end
   world.onLevel = function(e)
@@ -222,9 +228,10 @@ function G.new(opts)
     if attacker and attacker.team and (world:allied(o.team, 1) or world:allied(attacker.team, 1)) then
       MUSIC.bump(o.def.building and 0.15 or (o.key == "commander" and 0.6 or 0.07))
     end
-    if self:onScreen(o.x, o.y) and (o.team == 1 or world:isVisible(o)) then
+    if o.team == 1 or world:isVisible(o) then
       local big = o.def.building or o.key == "commander" or o.def.radius >= 14
-      SFX.play("boom", big and 0.9 or 0.5, 0.3)
+      if big then SFX.at("bigboom", o.x, o.y, self:soundView(), 1)
+      else SFX.at("boom", o.x, o.y, self:soundView(), self.arena and 0.6 or 0.85) end
     end
     if o.team == 1 then self.stats.lost = self.stats.lost + 1
     elseif attacker and attacker.team == 1 then self.stats.killed = self.stats.killed + 1 end
@@ -272,7 +279,7 @@ function G.new(opts)
       if k == 1 then self:notice("The creeps are marching. Push a lane!", 3); VOICE.say("creeps") end
     end
     world.onSkill = function(c, def)
-      if c.team == 1 then SFX.play("cannon", 0.6, 0.2) end
+      if c.team == 1 or world:isVisible(c) then SFX.at("skill", c.x, c.y, self:soundView(), c.team == 1 and 1 or 0.7) end
       if self.log and def.ult then self.log:event(string.format("%s used %s", D.teamName[c.team], def.name)) end
     end
   end
@@ -282,7 +289,7 @@ function G.new(opts)
   if not self.opts.autotest then
     MUSIC.reset()
     -- a different soundtrack each match
-    MUSIC.start(MUSIC.SUITES[love.math.random(#MUSIC.SUITES)])
+    MUSIC.match()
     local ok, lg = pcall(MatchLog.start, self)
     if ok then self.log = lg else print("match log disabled:", lg) end
   end
@@ -637,6 +644,18 @@ function G:goHome()
 end
 
 -- Open a pre-filled GitHub issue with this game's official score
+-- where the "ears" are for positional combat sounds: the middle of the view
+function G:soundView()
+  local cam = self.cam
+  if not cam.wx0 then return nil end
+  local v = self._sv or {}
+  self._sv = v
+  v.cx, v.cy = (cam.wx0 + cam.wx1) / 2, (cam.wy0 + cam.wy1) / 2
+  v.halfW = (cam.wx1 - cam.wx0) / 2
+  v.zoomMul = math.min(1, 0.45 + cam.zoom * 0.6)
+  return v
+end
+
 function G:submitScore()
   local f, w = self.finalScore, self.world
   if not f or not f.official or self.submitted then return end
@@ -922,6 +941,11 @@ function G:update(dt)
     self.lastW, self.lastH = gw, gh
     local c = self.world.teams[1].commander
     if c and not self.opts.autotest then self:centerOn(c.x, c.y) end
+  end
+  -- Arena: your Commander is always selected (summons can be added alongside him)
+  if self.arena then
+    local c = self.world.teams[1].commander
+    if c and c.alive and not self.selected[c] then self.selected[c] = true end
   end
   if self.world.over then
     if not self.overShown then
@@ -1361,10 +1385,8 @@ end
 function G:mousemoved(x, y, dx, dy)
   local rd = self.rightDown
   if rd then
-    if not self.rightPan and (math.abs(x - rd[1]) > 8 or math.abs(y - rd[2]) > 8) then
-      self.rightPan = true
-      self.follow = nil
-    end
+    -- right-drag panning is off: on trackpads (Steam Deck) a slightly moving right-click
+    -- turned into a pan and the order was lost. Right-click is always an order now.
     if self.rightPan then
       local z = self.cam.zoom
       self.cam.x = rd[3] - (x - rd[1]) / z

@@ -768,6 +768,27 @@ function W:fire(e, o)
   }
   e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.arena and (self:bv(e, "rof") or 1) or 1)
   if self.arena and m.chill then self.projectiles[#self.projectiles].chill = true end
+  -- Ranger's Volley: two extra arrows per shot, at other enemies in range when there are any
+  if e.volleyUntil and self.time < e.volleyUntil then
+    local main = self.projectiles[#self.projectiles]
+    local r = self:rangeOf(e)
+    local others = {}
+    self:query(e.x, e.y, r, function(x)
+      if x ~= o and x.alive and self:hostile(x.team, e.team) and D.canHit(w, x.def.domain)
+        and U.dist(e.x, e.y, x.x, x.y) <= r and not (x.fadeUntil and x.fadeUntil > self.time) then
+        others[#others + 1] = x
+      end
+    end)
+    table.sort(others, function(a, b) return U.dist2(e.x, e.y, a.x, a.y) < U.dist2(e.x, e.y, b.x, b.y) end)
+    for k = 1, 2 do
+      local t2 = others[k] or o
+      self.projectiles[#self.projectiles + 1] = {
+        x = e.x, y = e.y, tx = t2.x, ty = t2.y, target = t2, speed = main.speed * (0.92 + 0.08 * k),
+        damage = main.damage * 0.5, splash = main.splash, team = e.team,
+        weapon = main.weapon, sx = e.x, sy = e.y, source = e, hitsAir = main.hitsAir, chill = main.chill,
+      }
+    end
+  end
   e.flash = 0.08
   if self.onFire then self.onFire(e, o) end
   if not e.def.building then
@@ -864,6 +885,9 @@ function W:kill(o, attacker)
       end
     end
   end
+  if self.debugDeaths and attacker and attacker.key == "scout" and os.getenv("PA_DEBUG_AI") then
+    print(string.format("SCOUTKILL t=%d team%d scout killed team%d %s", self.time, attacker.team, o.team, o.key))
+  end
   if o.key == "commander" and self.debugDeaths then
     local tm = self.teams[o.team]
     print(string.format("CMDDEATH team %d t=%d mode=%s distHome=%d killer=%s lvl=%d", o.team, self.time,
@@ -916,6 +940,7 @@ function W:updateProjectiles(dt)
           end
         end)
         self.effects[#self.effects + 1] = { kind = "splash", x = p.tx, y = p.ty, t = 0, life = 0.35, size = p.splash }
+        if self.onImpact then self.onImpact(p) end
       elseif p.target and p.target.alive then
         if p.chill then p.target.slowUntil = math.max(p.target.slowUntil or 0, self.time + 1) end
         self:damage(p.target, p.damage, p.source)

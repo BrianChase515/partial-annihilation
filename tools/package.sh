@@ -44,4 +44,16 @@ ls -la dist/
 if command -v npx >/dev/null 2>&1; then
   rm -rf docs && mkdir -p docs
   npx --yes love.js@11.4.1 -c -t "Partial Annihilation" -m 268435456 PartialAnnihilation.love docs >/dev/null 2>&1 && echo "Built docs/ (browser version)"
+  # GitHub Pages: serve files as-is, and scale the game canvas down to fit smaller windows
+  touch docs/.nojekyll
+  python3 - <<'PY'
+p = "docs/index.html"
+s = open(p).read()
+css = ('<style>html,body{margin:0;background:#0b0e13;overflow:hidden}'
+       '#canvas{display:block;margin:0 auto;max-width:100vw;max-height:100vh;width:auto;height:auto;'
+       'object-fit:contain}</style>')
+if "object-fit:contain" not in s:
+    s = s.replace("</head>", css + "\n</head>", 1)
+open(p, "w").write(s)
+PY
 fi

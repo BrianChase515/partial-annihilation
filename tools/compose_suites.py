@@ -215,10 +215,146 @@ def suite_c():
 
     return "c", 76, ambient, tension, combat
 
+# ---------------------------------------------------------------------------- Suite D
+def suite_d():
+    """Overdrive: A minor, 112 bpm - marimba and oboe calm, racing staccato strings, taiko and brass stabs."""
+    rng = random.Random(305)
+    prog = ["Am", "F", "C", "G", "Am", "F", "Dm", "E", "F", "G", "Am", "Am", "Dm", "F", "E", "E",
+            "Am", "F", "C", "G", "F", "Dm", "E", "Am", "F", "G", "C", "Am", "Dm", "F", "E", "E"]
+    mel = gen_melody(prog, PC["A"], rng, 64, 81, "heroic")
+
+    def ambient():
+        mar = C.Track(0, 12, "marimba"); oboe = C.Track(1, 68, "oboe"); pad = C.Track(2, 49, "slow strings")
+        vib = C.Track(3, 11, "vibes"); bass = C.Track(4, 32, "ac bass")
+        for b in range(BARS):
+            s = b * 4; r, pcs = chord(prog[b])
+            for p in vce(pcs, 52, 67)[:3]: pad.note(s, 4, p, 34)
+            bass.note(s, 2, 33 + (r - 33) % 12, 44); bass.note(s + 2.5, 1.5, 33 + (r - 33) % 12 + 7 if (r + 7) % 12 in pcs else 33 + (r - 33) % 12, 36)
+            arp = vce(pcs, 60, 79)
+            for i in range(8):
+                mar.note(s + i * .5, .5, arp[[0, 2, 1, 3, 2, 1, 3, 4][i] % len(arp)], 40 if i % 2 == 0 else 30)
+            if b % 4 in (0, 1) and b >= 4:
+                beat = s
+                for p, d in mel[b]:
+                    oboe.note(beat, d, p, 44); beat += d
+            if b % 8 == 7:
+                for i, p in enumerate(vce(pcs, 72, 88)[:4]): vib.note(s + i * .5, 2, p, 34)
+        return [mar, oboe, pad, vib, bass]
+
+    def tension():
+        sto = C.Track(0, 45, "pizz"); vla = C.Track(1, 48, "strings"); taiko = C.Track(2, 116, "taiko")
+        low = C.Track(3, 42, "cello"); trem = C.Track(4, 44, "trem")
+        for b in range(BARS):
+            s = b * 4; r, pcs = chord(prog[b])
+            base = 45 + (r - 45) % 12
+            for i in range(16):
+                p = base + [0, 12, 7, 12, 0, 12, 7, 15][i % 8]
+                if p % 12 not in pcs: p = base + 12
+                vla.note(s + i * .25, .18, p, 60 if i % 4 == 0 else 44)
+            low.note(s, 4, base - 12, 58)
+            for off in (0, 1.5, 3): taiko.note(s + off, .5, 48 if off == 0 else 45, 72 if off == 0 else 58)
+            for p in vce(pcs, 72, 81)[:2]: trem.note(s, 4, p, 34 + (b % 8) * 3)
+            if b % 2 == 1: sto.note(s + 3.5, .3, base + 24, 60)
+        return [sto, vla, taiko, low, trem]
+
+    def combat():
+        strs = C.Track(0, 48, "strings"); brass = C.Track(1, 61, "brass"); tpt = C.Track(2, 56, "tpt")
+        bones = C.Track(3, 57, "bones"); taiko = C.Track(4, 116, "taiko"); horns = C.Track(5, 60, "horns")
+        dr = C.Track(9, 0, "drums")
+        for b in range(BARS):
+            s = b * 4; r, pcs = chord(prog[b])
+            base = 45 + (r - 45) % 12
+            for i in range(16):
+                strs.note(s + i * .25, .18, base + 12 + [0, 7, 12, 7][i % 4], 80 if i % 4 == 0 else 60)
+            beat = s
+            for p, d in mel[b]:
+                horns.note(beat, d * .95, p, 94); tpt.note(beat, d * .9, p + 12 if b >= 24 else p, 70 if b < 24 else 92); beat += d
+            # syncopated tutti stabs
+            for off in (0, 1.5, 3):
+                for p in vce(pcs, 48, 62)[:3]: brass.note(s + off, .4, p, 96 if off == 0 else 84)
+                bones.note(s + off, .4, base - 12 if base - 12 >= 40 else base, 92)
+            for off, v in ((0, 115), (.75, 85), (1.5, 100), (2, 90), (2.5, 80), (3, 105), (3.5, 85)):
+                taiko.note(s + off, .3, 48, v)
+            dr.note(s, .25, 36, 110); dr.note(s + 2, .25, 36, 100)
+            for off in (1, 3): dr.note(s + off, .25, 38, 96)
+            if b % 8 == 7:
+                for i in range(8): dr.note(s + 2 + i * .25, .25, 38, 60 + i * 7)
+            if b % 8 == 0: dr.note(s, 2, 49, 104)
+        return [strs, brass, tpt, bones, taiko, horns, dr]
+
+    return "d", 112, ambient, tension, combat
+
+# ---------------------------------------------------------------------------- Suite E
+def suite_e():
+    """Last Light: G minor, 88 bpm - piano and solo horn calm, triplet string ostinato, a snare-driven march."""
+    rng = random.Random(4242)
+    prog = ["Gm", "Eb", "Bb", "F", "Gm", "Cm", "D", "D", "Eb", "F", "Bb", "Gm", "Cm", "Eb", "D", "D",
+            "Gm", "Eb", "Bb", "F", "Cm", "Gm", "D", "Gm", "Eb", "Cm", "Gm", "F", "Eb", "F", "D", "D"]
+    mel = gen_melody(prog, PC["G"], rng, 62, 79, "dark")
+
+    def ambient():
+        pno = C.Track(0, 0, "piano"); horn = C.Track(1, 60, "horn"); pad = C.Track(2, 48, "strings")
+        harp = C.Track(3, 46, "harp"); bass = C.Track(4, 43, "contrabass")
+        for b in range(BARS):
+            s = b * 4; r, pcs = chord(prog[b])
+            for p in vce(pcs, 50, 65)[:3]: pad.note(s, 4, p, 32)
+            bass.note(s, 4, 31 + (r - 31) % 12, 36)
+            ct = vce(pcs, 55, 74)
+            for i in range(4): pno.note(s + i, 1.2, ct[(i * 2 + b) % len(ct)], 38 if i == 0 else 30)
+            if b % 8 in (2, 3, 4, 5):
+                beat = s
+                for p, d in mel[b]:
+                    horn.note(beat, d, p - 12, 44); beat += d
+            if b % 4 == 3:
+                for i, p in enumerate(vce(pcs, 67, 86)[:6]): harp.note(s + 2 + i * .33, 1, p, 32)
+        return [pno, horn, pad, harp, bass]
+
+    def tension():
+        strs = C.Track(0, 48, "strings"); low = C.Track(1, 42, "cello"); timp = C.Track(2, 47, "timp")
+        brass = C.Track(3, 61, "brass"); sn = C.Track(9, 0, "drums")
+        for b in range(BARS):
+            s = b * 4; r, pcs = chord(prog[b])
+            base = 43 + (r - 43) % 12
+            for i in range(12):   # triplet ostinato
+                strs.note(s + i / 3, .3, base + [12, 15, 19][i % 3] if (base + 15) % 12 in pcs else base + [12, 16, 19][i % 3], 58 if i % 3 == 0 else 44)
+            low.note(s, 4, base - 12 if base - 12 >= 36 else base, 60)
+            timp.note(s, .6, base if base <= 50 else base - 12, 64)
+            if b % 4 == 3:   # low brass swell
+                for p in vce(pcs, 43, 55)[:2]:
+                    for k in range(4): brass.note(s + k, 1, p, 40 + k * 10)
+            for off in (0, 2): sn.note(s + off + 1, .2, 38, 34)
+        return [strs, low, timp, brass, sn]
+
+    def combat():
+        choir = C.Track(0, 52, "choir"); brass = C.Track(1, 61, "brass"); horns = C.Track(2, 60, "horns")
+        strs = C.Track(3, 48, "strings"); timp = C.Track(4, 47, "timp"); tuba = C.Track(5, 58, "tuba")
+        dr = C.Track(9, 0, "drums")
+        for b in range(BARS):
+            s = b * 4; r, pcs = chord(prog[b])
+            base = 43 + (r - 43) % 12
+            for p in vce(pcs, 55, 72)[:3]: choir.note(s, 4, p, 78)
+            beat = s
+            for p, d in mel[b]:
+                horns.note(beat, d * .95, p, 96); brass.note(beat, d * .95, p - 12, 84); beat += d
+            for i in range(12):
+                strs.note(s + i / 3, .25, base + 12 + [0, 7, 12][i % 3], 76 if i % 3 == 0 else 58)
+            tuba.note(s, 1, base - 12 if base - 12 >= 31 else base, 90); tuba.note(s + 2, 1, base - 5 if base - 5 >= 31 else base + 7, 84)
+            timp.note(s, .4, base if base <= 50 else base - 12, 100); timp.note(s + 2, .4, base if base <= 50 else base - 12, 90)
+            # march snare: four on the floor with ruffs
+            for off in (0, 1, 2, 3): dr.note(s + off, .2, 38, 92 if off in (0, 2) else 78)
+            for off in (.66, 2.66, 3.33): dr.note(s + off, .15, 38, 64)
+            dr.note(s, .25, 36, 108); dr.note(s + 2, .25, 36, 96)
+            if b % 4 == 0: dr.note(s, 2, 57, 92)
+        return [choir, brass, horns, strs, timp, tuba, dr]
+
+    return "e", 88, ambient, tension, combat
+
 def main():
     os.makedirs(C.OUT, exist_ok=True)
     td = tempfile.mkdtemp()
-    for make in (suite_b, suite_c):
+    makers = {"b": suite_b, "c": suite_c, "d": suite_d, "e": suite_e}
+    want = sys.argv[1:] or list(makers)
+    for make in (makers[k] for k in want):
         tag, bpm, amb, ten, com = make()
         C.BPM = bpm
         loop = int(round(BARS * 4 * 60 / bpm * SR))
