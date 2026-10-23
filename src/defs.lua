@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.10.7"  -- the first two numbers are the high-score season
+D.VERSION = "0.10.8"  -- the first two numbers are the high-score season
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 
 D.units = {
@@ -299,7 +299,7 @@ function D.aiLevel(n)
     waveBase = math.max(5, math.floor(11 - 0.75 * (n - 1) + 0.5)),
     waveGrow = 1 + math.floor(n / 4),
     firstWave = math.max(90, 540 - 75 * (n - 1)),
-    maxFactories = 1 + math.floor(n / 2),
+    maxFactories = 2 + math.floor(n / 2),
     turrets = 1 + math.floor(n / 3),
     builderBonus = n >= 7 and 1 or 0,
     retreat = n >= 4,          -- pulls badly damaged units home

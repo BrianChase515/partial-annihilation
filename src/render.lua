@@ -88,8 +88,11 @@ end
 
 -- a unit's mark: its picture when it's big enough on screen, otherwise the short label
 local function unitMark(e, x, y, r, labelSize, zoom, scale)
-  if zoom * r >= 7 and ICONS.has(e.key) then
-    ICONS.draw(e.key, x, y, r * (scale or 1.55))
+  -- Arena Commanders show their class (a bow for the Ranger, axes for the Juggernaut...)
+  local key = e.key
+  if key == "commander" and e.class and ICONS.has("cls_" .. e.class) then key = "cls_" .. e.class end
+  if zoom * r >= 7 and ICONS.has(key) then
+    ICONS.draw(key, x, y, r * (scale or 1.55))
   else
     drawLabel(e.def.short, x, y, labelSize, zoom)
   end

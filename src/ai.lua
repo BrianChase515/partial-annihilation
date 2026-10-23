@@ -35,6 +35,9 @@ function AI.new(world, team, level, profileKey)
     self.huntersFrom = p.huntersFrom or 180
   end
   self.hunters, self.isHunter = {}, {}
+  -- what this computer has actually seen: enemy buildings (they don't move) and which
+  -- corners it has checked. Until it finds an enemy base it attacks its best guess.
+  self.known, self.cleared, self.foundBase = {}, {}, {}
   self.lastRaid = 0
   self.raiders = {}
   self.timer = 1
@@ -70,10 +73,79 @@ function AI:chooseTarget()
   self.targetTeam = best
   local et = world.teams[best]
   self.enemyX, self.enemyY = et.startX, et.startY
+  if not self.foundBase[best] then
+    local gx, gy = self:guessBase()
+    if gx then self.enemyX, self.enemyY = gx, gy end
+  end
   local dx, dy = U.norm(self.enemyX - self.baseX, self.enemyY - self.baseY)
   self.dirX, self.dirY = dx, dy
   self.stageX, self.stageY = self.baseX + dx * 320, self.baseY + dy * 320
   if self.seaSet then self.navalReach = self:navalReachTo(best) end
+end
+
+-- corners that could hold an enemy base: not ours, not an ally's, not checked and found empty
+function AI:candidateCorners()
+  local world = self.world
+  local out = {}
+  for i, st in ipairs(world.map.starts) do
+    local x, y = world.map:center(st.x, st.y)
+    local mine = false
+    for t = 1, world.np do
+      local tm = world.teams[t]
+      if not self:isHostile(t) and tm.startX and U.dist2(tm.startX, tm.startY, x, y) < 200 * 200 then mine = true end
+    end
+    if not mine and not self.cleared[i] then out[#out + 1] = { i = i, x = x, y = y } end
+  end
+  return out
+end
+
+function AI:guessBase()
+  local best, bd
+  for _, c in ipairs(self:candidateCorners()) do
+    local d = U.dist(self.baseX, self.baseY, c.x, c.y)
+    if not bd or d < bd then best, bd = c, d end
+  end
+  if best then return best.x, best.y end
+end
+
+-- every couple of seconds: note enemy buildings near any of our units, and check corners
+function AI:updateKnowledge()
+  local world = self.world
+  local t = world.time
+  if t < (self.nextKnow or 0) then return end
+  self.nextKnow = t + 2
+  local mine = self:mine(function(e) return e.alive end)
+  local function seenBy(x, y, r)
+    local hit = false
+    world:query(x, y, r, function(o)
+      if not hit and o.alive and o.team == self.team and U.dist2(o.x, o.y, x, y) < r * r then hit = true end
+    end)
+    return hit
+  end
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.def.building and not self.known[e] and self:isHostile(e.team) and seenBy(e.x, e.y, 420) then
+      self.known[e] = true
+      local tm = world.teams[e.team]
+      if tm.startX and U.dist2(e.x, e.y, tm.startX, tm.startY) < 900 * 900 and not self.foundBase[e.team] then
+        self.foundBase[e.team] = true
+        if e.team == self.targetTeam then self.retarget = 0 end
+      end
+    end
+  end
+  for k in pairs(self.known) do if not k.alive then self.known[k] = nil end end
+  for _, c in ipairs(self:candidateCorners()) do
+    if seenBy(c.x, c.y, 450) then
+      local found = false
+      for t2 = 1, world.np do
+        local tm = world.teams[t2]
+        if self:isHostile(t2) and tm.startX and U.dist2(tm.startX, tm.startY, c.x, c.y) < 200 * 200 then
+          found = true
+          if not self.foundBase[t2] then self.foundBase[t2] = true; self.retarget = 0 end
+        end
+      end
+      if not found then self.cleared[c.i] = true; self.retarget = 0 end
+    end
+  end
 end
 
 function AI:navalReachTo(team)
@@ -215,7 +287,7 @@ function AI:bestNukeTarget()
   local cands = {}
   for _, e in ipairs(world.entities) do
     if e.alive and self:isHostile(e.team) and not world.teams[e.team].dead then
-      if e.def.building or (e.def.weapon and e.key ~= "commander") then cands[#cands + 1] = e end
+      if (e.def.building and self.known[e]) then cands[#cands + 1] = e end
     end
   end
   local best, bx, by
@@ -319,7 +391,11 @@ function AI:thinkCommander()
     world:issue(c, { type = "retreat", x = fx, y = fy })
     return true
   end
-  if self.cmdMode ~= "retreat" and ((hpf < retreatAt and danger > 0) or outgunned or (hpf < 0.4 and distHome > 500)) then
+  -- retreating powers him down, and most raiders are faster than him: only run from fights
+  -- he can't win (a few scouts or a lone tank he simply shoots)
+  local beatable = danger <= 450 * hpf + support * 0.6
+  if self.cmdMode ~= "retreat" and ((hpf < retreatAt and danger > 0 and not beatable) or outgunned
+    or hpf < 0.22 or (hpf < 0.4 and distHome > 500 and not beatable)) then
     if homeHot and spawnDist < 650 and homeFight() then return end
     -- flee home at +50% speed; he only repairs at his spawn point, powered down until full
     self.cmdMode = "retreat"
@@ -642,7 +718,9 @@ function AI:thinkEconomy()
       local bx, by = self:baseTile()
 
       -- energy keeps pace with metal (factories eat a lot of energy)
-      local needEnergy = eFuture < mFuture * 9 + 8 or (tm.energy < tm.eStore * 0.15 and eFuture < mFuture * 14)
+      -- energy only when it's actually short: a full energy bank means metal is the bottleneck
+      local needEnergy = (eFuture < mFuture * 5.5 + 6 and tm.energy < tm.eStore * 0.85)
+        or (tm.energy < tm.eStore * 0.15 and eFuture < mFuture * 10)
       local p = self.profile
       local hasWater = self.waterTX and (self.waterSize or 0) > 120
       -- Turtles fortify continuously: the target grows with the clock, and every other
@@ -660,9 +738,15 @@ function AI:thinkEconomy()
         self.fortWhere = (self.fortN % 3 == 0) and "outpost" or "ring"
       elseif needEnergy and solars < 60 then
         task = "solar"
+      elseif tm.metal > tm.mStore * 0.45 and t > 150 and factories < self.diff.maxFactories + 2
+        and (self.lastFacOrder or -99) < t - 25 then
+        -- metal is piling up: more production beats another extractor
+        self.lastFacOrder = t
+        local airShare = p.factoryAirShare or 0.3
+        task = (airfacs > 0 and self.rng:random() >= airShare) and "landfac" or (airfacs == 0 and landfacs >= 2 and "airfac" or "landfac")
       else
         local em = self.diff.expandMul
-        local range = isCmd and 520 or math.min(2800 * em, 900 + t * 4.5 * em)
+        local range = isCmd and (t < 240 and 950 or 520) or math.min(2800 * em, 900 + t * 4.5 * em)
         local dp = self:nearestFreeDeposit(b.x, b.y, range)
         if dp and (isCmd or mexes < 30 * em) then
           task = { key = "mex", tx = dp.x, ty = dp.y }
@@ -679,11 +763,12 @@ function AI:thinkEconomy()
         elseif turrets < self.diff.turrets and t > 160 then task = "turret"
         elseif aas < wantAA then task = "aaturret"
         elseif storages == 0 and t > 300 then task = "storage"
-        elseif factories < self.diff.maxFactories and mFuture > (10 + factories * 4) * (p.factoryEcoMul or 1) then
+        elseif (factories < self.diff.maxFactories and mFuture > (10 + factories * 4) * (p.factoryEcoMul or 1))
+          or (factories < self.diff.maxFactories + 2 and tm.metal > tm.mStore * 0.55 and t > 180) then
           local airShare = p.factoryAirShare or 0.4
           if p.navalFirst and hasWater and self.rng:random() < 0.5 then task = "shipyard"
           else task = (self.rng:random() < airShare) and "airfac" or "landfac" end
-        elseif needEnergy == false and eFuture < mFuture * 12 then
+        elseif needEnergy == false and eFuture < mFuture * 8 and tm.energy < tm.eStore * 0.5 then
           task = "solar"
         end
       end
@@ -714,6 +799,17 @@ function AI:thinkEconomy()
         end
         if tx then
           world:issue(b, { type = "build", key = key, tx = tx, ty = ty })
+          -- extractors: chain the next two nearest free deposits so the builder never idles
+          if key == "mex" and not isCmd then
+            local lx, ly = world.map:center(tx, ty)
+            for _ = 1, 2 do
+              local nd = self:nearestFreeDeposit(lx, ly, 700)
+              if not nd then break end
+              world:issue(b, { type = "build", key = "mex", tx = nd.x, ty = nd.y }, true)
+              mexes = mexes + 1; mFuture = mFuture + 1.6 * tm.incomeMul
+              lx, ly = world.map:center(nd.x, nd.y)
+            end
+          end
           -- update counters so the next builder doesn't duplicate
           if key == "landfac" then landfacs = landfacs + 1 end
           if key == "airfac" then airfacs = airfacs + 1 end
@@ -1053,7 +1149,7 @@ function AI:pickTarget(domain)
   local world = self.world
   local best, bd, bx, by
   for _, e in ipairs(world.entities) do
-    if e.alive and self:isHostile(e.team) and (e.def.building or (domain == "sea" and (e.def.domain == "sea" or e.def.domain == "sub"))) then
+    if e.alive and self:isHostile(e.team) and ((e.def.building and self.known[e]) or (domain == "sea" and (e.def.domain == "sea" or e.def.domain == "sub") and self.known[e])) then
       local d = U.dist(e.x, e.y, self.baseX, self.baseY) + (e.team == self.targetTeam and 0 or 700)
       if self.world.teams[e.team].dead then d = d + 5000 end
       local px, py = e.x, e.y
@@ -1067,9 +1163,12 @@ function AI:pickTarget(domain)
   end
   if best then return bx, by end
   if domain == "sea" then return nil end
-  local c = self.targetTeam and world.teams[self.targetTeam].commander
-  if c and c.alive then return c.x, c.y end
-  return nil
+  -- nothing known yet: go look where the enemy most likely is
+  if self.targetTeam and self.foundBase[self.targetTeam] then
+    local tm = world.teams[self.targetTeam]
+    return tm.startX, tm.startY
+  end
+  return self:guessBase()
 end
 
 -- Alien Tech: send a strong group to take and hold the landing zone
@@ -1119,7 +1218,7 @@ function AI:launchRaid(army, inWave)
   -- target: the enemy extractor/solar farthest from their start
   local best, bd
   for _, e in ipairs(world.entities) do
-    if e.alive and self:isHostile(e.team) and (e.key == "mex" or e.key == "solar") then
+    if e.alive and self:isHostile(e.team) and (e.key == "mex" or e.key == "solar") and self.known[e] then
       local d = U.dist(e.x, e.y, self.enemyX, self.enemyY)
       if not bd or d > bd then best, bd = e, d end
     end
@@ -1173,6 +1272,7 @@ function AI:thinkHunters(army, inWave)
   for _, u in ipairs(pack) do cx, cy, str = cx + u.x, cy + u.y, str + 35 * (u.hp / u.maxhp) end
   cx, cy = cx / #pack, cy / #pack
   local t = world.time
+  self:updateKnowledge()
   -- chased? run home and regroup
   local danger = self:strengthNear(cx, cy, 380, true)
   if danger > str * 1.3 then
@@ -1192,8 +1292,9 @@ function AI:thinkHunters(army, inWave)
     local best, bs
     for _, e in ipairs(world.entities) do
       if e.alive and self:isHostile(e.team) and e.key ~= "commander" and e.built >= 1 then
-        local v = (e.def.builds and not e.def.factory and not e.def.building and e.def.domain == "land") and 3
-          or (e.key == "mex" and 2) or (e.key == "solar" and 1) or nil
+        local v = (e.def.builds and not e.def.factory and not e.def.building and e.def.domain == "land"
+            and U.dist2(cx, cy, e.x, e.y) < 900 * 900) and 3
+          or (e.key == "mex" and self.known[e] and 2) or (e.key == "solar" and self.known[e] and 1) or nil
         if v and world:layerOf(pack[1]) and world.map:canReach("land", cx, cy, e.x, e.y, 120) then
           local tt = world.teams[e.team]
           local dBase = tt.startX and U.dist(e.x, e.y, tt.startX, tt.startY) or 9999
@@ -1214,9 +1315,25 @@ function AI:thinkHunters(army, inWave)
       for _, u in ipairs(pack) do world:issue(u, { type = "amove", x = prey.x + self.rng:random(-20, 20), y = prey.y + self.rng:random(-20, 20) }) end
     end
   else
-    for _, u in ipairs(pack) do
-      if #u.orders == 0 and U.dist(u.x, u.y, self.stageX, self.stageY) > 300 then
-        world:issue(u, { type = "move", x = self.stageX, y = self.stageY })
+    -- nothing to hunt: go looking (unchecked corners first, then deposits toward the enemy)
+    local idle = true
+    for _, u in ipairs(pack) do if #u.orders > 0 then idle = false end end
+    if idle then
+      local tx, ty
+      local cc = self:candidateCorners()
+      if #cc > 0 then
+        table.sort(cc, function(a, b) return U.dist2(cx, cy, a.x, a.y) < U.dist2(cx, cy, b.x, b.y) end)
+        tx, ty = cc[1].x, cc[1].y
+      else
+        local map = world.map
+        for _ = 1, 8 do
+          local dp = map.deposits[self.rng:random(#map.deposits)]
+          local x, y = map:center(dp.x, dp.y)
+          if U.dist(x, y, self.baseX, self.baseY) > U.dist(x, y, self.enemyX, self.enemyY) * 0.8 then tx, ty = x, y; break end
+        end
+      end
+      if tx then
+        for _, u in ipairs(pack) do world:issue(u, { type = "amove", x = tx + self.rng:random(-40, 40), y = ty + self.rng:random(-40, 40) }) end
       end
     end
   end
@@ -1285,6 +1402,7 @@ function AI:thinkArmy()
   end
   self.wave = inWave
 
+  self:updateKnowledge()
   self:thinkHunters(army, inWave)
   self:defendOutposts(army, inWave)
 
@@ -1294,6 +1412,12 @@ function AI:thinkArmy()
       local map = world.map
       local dp = map.deposits[self.rng:random(#map.deposits)]
       local x, y = map:center(dp.x, dp.y)
+      -- first find the enemy: the nearest corner nobody has checked yet
+      local cc = self:candidateCorners()
+      if #cc > 0 then
+        table.sort(cc, function(a, b) return U.dist2(u.x, u.y, a.x, a.y) < U.dist2(u.x, u.y, b.x, b.y) end)
+        x, y = cc[1].x, cc[1].y
+      end
       world:issue(u, { type = "amove", x = x, y = y })
       inWave[u] = true
       self.wave[u] = true

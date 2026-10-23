@@ -333,6 +333,11 @@ function Menu:draw()
         label = (self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2) and "That saved map is 2-player only" or "Put someone on another team"
       end
       lg.print(label, r.x + r.w / 2 - R.font(fs):getWidth(label) / 2, r.y + r.h / 2 - fs * 0.62)
+      if r.roster then
+        local ck = ARENA.CLASSES[r.roster].key
+        lg.setColor(1, 1, 1, 0.9)
+        require("src.icons").draw("cls_" .. ck, r.x + 18, r.y + r.h / 2, r.h - 6)
+      end
     end
   end
   if self.mode == "arena" then

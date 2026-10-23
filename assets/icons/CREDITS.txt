@@ -33,3 +33,12 @@ airfac       airplane-departure by delapouite  https://game-icons.net/1x1/delapo
 shipyard     harbor-dock by delapouite  https://game-icons.net/1x1/delapouite/harbor-dock.html
 turret       turret by sbed  https://game-icons.net/1x1/sbed/turret.html
 aaturret     anti-aircraft-gun by pierre-leducq  https://game-icons.net/1x1/pierre-leducq/anti-aircraft-gun.html
+
+Arena class icons:
+cls_ranger       pocket-bow by lorc  https://game-icons.net/1x1/lorc/pocket-bow.html
+cls_elementalist fire-spell-cast by delapouite  https://game-icons.net/1x1/delapouite/fire-spell-cast.html
+cls_reclaimer    skull-staff by delapouite  https://game-icons.net/1x1/delapouite/skull-staff.html
+cls_juggernaut   crossed-axes by lorc  https://game-icons.net/1x1/lorc/crossed-axes.html
+cls_warden       templar-shield by delapouite  https://game-icons.net/1x1/delapouite/templar-shield.html
+cls_shifter      werewolf by lorc  https://game-icons.net/1x1/lorc/werewolf.html
+cls_infiltrator  ninja-mask by lorc  https://game-icons.net/1x1/lorc/ninja-mask.html
