@@ -6,6 +6,8 @@ Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of 
 
 ![A 2v2 battle](screenshots/rts-battle.gif)
 
+**[Play it in your browser](https://brianchase515.github.io/partial-annihilation/)**, or [download](#download) it for Windows, Mac, Linux and the Steam Deck.
+
 **Two games in one:** a full RTS, and **Commander Arena**, a single-player lane-battle mode where you control only your Commander.
 
 ## What makes it different
@@ -124,6 +126,10 @@ Shapes tell you the domain, and the number tells you the type:
 - Shipyard
 - Gun Tower
 - AA Tower
+
+## Play in your browser
+
+**[brianchase515.github.io/partial-annihilation](https://brianchase515.github.io/partial-annihilation/)**: no install, about a 14 MB download. The browser version runs slower than the desktop builds in very large battles, and it has no online leaderboard or updater. For the best experience, grab a download below.
 
 ## Download
 
