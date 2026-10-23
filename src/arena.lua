@@ -223,10 +223,10 @@ end
 
 -- the Spiritcaller's stances: one at a time, each reshapes his basic attack
 local STANCES = {
-  jaguar    = { mul = { rof = 1.4, speed = 1.15 } },
+  jaguar    = { mul = { rof = 1.35, speed = 1.15 } },
   gorilla   = { mul = { armor = 0.65 }, regen = 0.01 },
   eagle     = { mul = { range = 1.25, speed = 1.2 }, chill = true },
-  centipede = { mul = {}, poison = 70, lifesteal = 0.1 },
+  centipede = { mul = {}, poison = 70, lifesteal = 0.08 },
 }
 A.STANCES = STANCES
 function A.setStance(w, c, key)
@@ -635,7 +635,7 @@ A.SKILLS = {
 
   -- Spiritcaller (spirit stances: one at a time, each reshapes your attack)
   jaguar = { name = "Jaguar Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
-    desc = "Stance: attack 40% faster and move 15% faster.",
+    desc = "Stance: attack 35% faster and move 15% faster.",
     use = function(w, c) if c.stance == "jaguar" then return false end; A.setStance(w, c, "jaguar") end },
   gorilla = { name = "Gorilla Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
     desc = "Stance: take 35% less damage and regenerate 1% health per second.",
@@ -644,7 +644,7 @@ A.SKILLS = {
     desc = "Stance: +25% range, +20% speed, and your shots slow.",
     use = function(w, c) if c.stance == "eagle" then return false end; A.setStance(w, c, "eagle") end },
   centipede = { name = "Centipede Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
-    desc = "Stance: your shots poison, and you heal for 10% of the damage you deal.",
+    desc = "Stance: your shots poison, and you heal for 8% of the damage you deal.",
     use = function(w, c) if c.stance == "centipede" then return false end; A.setStance(w, c, "centipede") end },
   rushclaw = { name = "Rushing Claw", aim = "point", range = 340, cd = 9, tags = { "dmg", "move" },
     desc = "Lunge to the target and rake everything around you.",
@@ -735,7 +735,7 @@ A.CLASSES = {
     base = function(w, e) hpUp(e, 1.3); e.mods.melee = true; e.mods.lifesteal = (e.mods.lifesteal or 0) + 0.05; mulMod(e, "range", 0.42); mulMod(e, "dmg", 1.6); mulMod(e, "speed", 1.15); mulMod(e, "armor", 0.86) end },
   { key = "hexer", name = "Hexer", tag = "Poisons, ghouls and hexes that turn creeps against their own side.",
     skills = { "plague", "ghouls", "grasp", "sacrifice", "soulharvest" }, ult = "gargantuan", passives = { "toxin", "fetish" },
-    base = function(w, e) hpUp(e, 0.95); mulMod(e, "skillDmg", 1.1) end },
+    base = function(w, e) hpUp(e, 1.0); mulMod(e, "skillDmg", 1.1) end },
   { key = "spiritcaller", name = "Spiritcaller", tag = "Switches between four spirit stances that reshape every attack.",
     skills = { "jaguar", "gorilla", "eaglestance", "centipede", "rushclaw" }, ult = "avatar", passives = { "primal", "ferocity" },
     base = function(w, e) hpUp(e, 1.05); mulMod(e, "dmg", 1.05) end },

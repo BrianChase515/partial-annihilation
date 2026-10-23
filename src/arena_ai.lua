@@ -726,6 +726,14 @@ function AI:update(dt)
     local s, sd = self:nearestEnemyStructure(c)
     if s and not s.protected and sd < w:rangeOf(c) + 60 and self:creepsNear(s.x, s.y, s.def.weapon.range, false) >= 2 then
       w:issue(c, { type = "attack", target = s })
+    elseif c.mods and c.mods.melee then
+      -- melee fighters have to walk up to things: take the weakest enemy creep close by
+      local best
+      w:query(c.x, c.y, 360, function(o)
+        if o.alive and o.creep and w:hostile(o.team, self.team) and U.dist(c.x, c.y, o.x, o.y) < 340
+          and not self:towerThreat(o.x, o.y) and (not best or o.hp < best.hp) then best = o end
+      end)
+      if best then w:issue(c, { type = "attack", target = best }) end
     end
   end
 end
