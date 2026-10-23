@@ -64,7 +64,12 @@ end
 
 -- kick off the update check + leaderboard fetch (call once on the title screen)
 function O.check()
-  if O.checked or not O.enabled() then return end
+  if not O.enabled() then return end
+  -- once per launch, and again whenever you come back to the title screen a while later
+  local now = love.timer.getTime()
+  if O.checkedAt and now - O.checkedAt < 120 then return end
+  if pending.version or O.state == "downloading" or O.state == "updated" then return end
+  O.checkedAt = now
   O.checked = true
   run("version", "curl -fsSL --max-time 8 " .. O.RAW .. "VERSION")
   run("board", "curl -fsSL --max-time 8 " .. O.RAW .. "leaderboard/v" .. D.SEASON .. ".json")
