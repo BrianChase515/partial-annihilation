@@ -39,7 +39,13 @@ end
 
 -- start a match: random first suite, then rotate through the rest
 function M.match()
-  M.queue = M.playlist(M.SUITES[love.math.random(#M.SUITES)])
+  -- start on a different soundtrack than the one that was just playing
+  local first
+  for _ = 1, 8 do
+    first = M.SUITES[love.math.random(#M.SUITES)]
+    if first ~= M.suite then break end
+  end
+  M.queue = M.playlist(first)
   M.qi = 1
   M.rotate = true
   M.start(M.queue[1])
@@ -155,7 +161,7 @@ function M.menu()
   if stinger and stinger:isPlaying() then return end
   M.fadeOut = nil
   M.rotate = false
-  if not playing then M.reset(); M.start() end
+  if not playing then M.reset(); M.start(M.suite or M.SUITES[love.math.random(#M.SUITES)]) end
   M.heat, M.floor = 0, 0
 end
 

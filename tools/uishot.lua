@@ -8,6 +8,12 @@ local function script(mode, secs)
   local opts = { size = mode == "arena" and 80 or 112, water = 0.3, seed = 31, autotest = true,
     players = { { ally = 1, level = 5 }, { ally = 2, level = 5 }, { ally = 1, level = 5 }, { ally = 2, level = 5 } } }
   if mode == "arena" then opts.mode = "arena"; opts.players[1].class = "ranger" end
+  local tmpl = mode:match("^arena%-(%a+)")
+  if tmpl then
+    opts.mode, opts.template, opts.size = "arena", tmpl, 96
+    opts.players = { { ally = 1, level = 6, class = "ranger" }, { ally = 2, level = 6 }, { ally = 1, level = 6 },
+      { ally = 2, level = 6 }, { ally = 1, level = 6 }, { ally = 2, level = 6 } }
+  end
   game = startFn(opts)
   game.opts.autotest = false
   local w = game.world
@@ -16,10 +22,16 @@ local function script(mode, secs)
     for _ = 1, 30 do w:update(1 / 30); for _, ai in ipairs(game.ais) do ai:update(1 / 30) end end
     frame()
   end
-  -- frame the busiest spot near our Commander
+  -- frame the busiest spot near our Commander (or the whole map for overviews)
   local c = w.teams[1].commander
   game.cam.zoom = 1.0
   game:centerOn(c.x, c.y)
+  if tmpl then
+    w.noFog = true
+    local vw, vh = love.graphics.getWidth(), love.graphics.getHeight() - 240
+    game.cam.zoom = math.min(vw / (w.map.w * w.T), vh / (w.map.h * w.T))
+    game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
+  end
   for _ = 1, 6 do game:update(1 / 30); frame() end
   pending = "uishot_" .. mode .. ".png"
   frame(); frame()

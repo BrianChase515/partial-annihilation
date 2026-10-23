@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.10.8"  -- the first two numbers are the high-score season
+D.VERSION = "0.11.0"  -- the first two numbers are the high-score season
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 
 D.units = {
@@ -159,6 +159,29 @@ D.units = {
     desc = "An Infiltrator's trap turret.",
   },
 
+  -- Arena jungle: neutral camps and the Colossus (they only fight back) ---------------
+  scavenger = {
+    name = "Scavenger", short = "s", domain = "land", shape = "square", arenaOnly = true, jungle = true,
+    radius = 10, hp = 650, speed = 75, sight = 260, xp = 70,
+    weapon = { damage = 26, range = 130, reload = 0.8, speed = 650, targets = { land = true, sea = true } },
+    cost = { metal = 60, energy = 0, work = 1 },
+    desc = "A feral salvage drone guarding its scrap pile. Only fights if you start it.",
+  },
+  ravager = {
+    name = "Ravager", short = "RV", domain = "land", shape = "square", arenaOnly = true, jungle = true,
+    radius = 15, hp = 2200, speed = 65, sight = 280, xp = 210,
+    weapon = { damage = 70, range = 150, reload = 1.2, speed = 600, splash = 40, targets = { land = true, sea = true } },
+    cost = { metal = 200, energy = 0, work = 1 },
+    desc = "A heavy jungle brute. Worth a lot of experience.",
+  },
+  colossus = {
+    name = "Colossus", short = "COL", domain = "land", shape = "square", arenaOnly = true, jungle = true, boss = true,
+    radius = 26, hp = 16000, speed = 45, sight = 340, xp = 900,
+    weapon = { damage = 150, range = 230, reload = 1.6, speed = 520, splash = 70, targets = { land = true, sea = true } },
+    cost = { metal = 1500, energy = 0, work = 1 },
+    desc = "The ancient war machine in the pit. Whoever brings it down wins the Colossus Crest for their whole side.",
+  },
+
   -- Commander Arena structures (not buildable) ------------------------
   atower = {
     name = "Defense Tower", short = "DT", domain = "building", building = true, arenaOnly = true,
@@ -276,8 +299,10 @@ D.teamColor = {
   [2] = { 1.00, 0.34, 0.28 },
   [3] = { 0.35, 0.85, 0.40 },
   [4] = { 1.00, 0.78, 0.22 },
+  [5] = { 0.20, 0.85, 0.80 },
+  [6] = { 1.00, 0.48, 0.78 },
 }
-D.teamName = { "Blue", "Red", "Green", "Gold", [0] = "Neutral", [-1] = "Marauders" }
+D.teamName = { "Blue", "Red", "Green", "Gold", "Teal", "Pink", [0] = "Neutral", [-1] = "Marauders" }
 -- Groovy modifier palette (60s/70s): turquoise, hot pink, lime, tangerine
 D.groovyColor = {
   [-1] = { 0.95, 0.95, 0.30 },

@@ -244,6 +244,113 @@ local function polyAt(pts, f)
 end
 M.polyAt = polyAt
 
+-- Arena jungle features for the Treeline and Battlefield templates: neutral camps, capture
+-- shrines, the boss pit(s) and healing relics. Placed on side 1's half and mirrored.
+function M:placeJungle(rng, laneDist, corner, template)
+  local w, h = self.w, self.h
+  local terrain = self.terrain
+  local rot = function(x, y) return self.syms[2](x, y) end
+  local cx, cy = math.floor((w - 1) / 2), math.floor((h - 1) / 2)
+  self.camps, self.shrines, self.pits, self.relics = {}, {}, {}, {}
+  local taken = {}
+  local function carve(x, y, r)
+    for yy = math.floor(y - r), math.ceil(y + r) do
+      for xx = math.floor(x - r), math.ceil(x + r) do
+        if self:inBounds(xx, yy) and math.min(xx, yy, w - 1 - xx, h - 1 - yy) >= 2 and U.dist(xx, yy, x, y) <= r + 0.3 then
+          terrain[yy * w + xx] = M.LAND
+        end
+      end
+    end
+  end
+  -- a walkable path from a feature to the nearest lane point
+  local function pathToLane(x, y)
+    local best, bx, by
+    for _, L in ipairs(self.lanes) do
+      for f = 0, 1, 0.01 do
+        local px, py = polyAt(L.pts, f)
+        local d = U.dist(x, y, px, py)
+        if not best or d < best then best, bx, by = d, px, py end
+      end
+    end
+    if not bx then return end
+    local n = math.ceil(best)
+    for k = 0, n do
+      carve(x + (bx - x) * k / math.max(1, n), y + (by - y) * k / math.max(1, n), 1.3)
+    end
+  end
+  local function both(list, x, y, extra)
+    local a = { x = x, y = y }
+    for k, v in pairs(extra or {}) do a[k] = v end
+    local rx, ry = rot(x, y)
+    local b = { x = rx, y = ry }
+    for k, v in pairs(extra or {}) do b[k] = v end
+    a.half, b.half = 1, 2
+    list[#list + 1] = a; list[#list + 1] = b
+    for _, p in ipairs({ a, b }) do taken[#taken + 1] = p end
+    return a, b
+  end
+  local function farFromTaken(x, y, minD)
+    for _, p in ipairs(taken) do if U.dist(x, y, p.x, p.y) < minD then return false end end
+    return true
+  end
+  local function inHalf1(x, y)
+    return U.dist(x, y, corner[1][1], corner[1][2]) < U.dist(x, y, corner[2][1], corner[2][2]) - 4
+  end
+  local function riverD(x, y)
+    if not self.river then return 99 end
+    return math.abs(x - y) / 1.41
+  end
+
+  if template == "treeline" then
+    -- boss pit in the middle of the jungle; shrines either side; relics by each lane
+    self.pits[1] = { x = cx, y = cy }
+    taken[#taken + 1] = self.pits[1]
+    local sd = math.floor(w * (0.10 + rng:random() * 0.05))
+    both(self.shrines, cx - sd, cy + rng:random(-2, 2))
+    both(self.relics, cx + rng:random(-4, 4), self.laneBand[1] + 4)
+  else
+    -- Battlefield: two pits on the river (the Colossus alternates between them),
+    -- shrines further along the river, a relic either side of mid
+    local d = math.floor(w * (0.13 + rng:random() * 0.04))
+    both(self.pits, cx - d, cy - d)
+    local d2 = d + math.floor(w * (0.12 + rng:random() * 0.04))
+    both(self.shrines, cx - d2, cy - d2)
+    local d3 = math.floor(w * 0.06)
+    both(self.relics, cx - d3 + 1, cy - d3 - 1)
+  end
+  -- camps: small ones and one big one per side, in the jungle away from lanes and bases
+  local want = template == "treeline" and { "small", "small", "big", "small" } or { "small", "small", "big", "small", "big" }
+  for _, kind in ipairs(want) do
+    for _ = 1, 400 do
+      local x, y = rng:random(4, w - 5), rng:random(4, h - 5)
+      local base = math.min(U.dist(x, y, corner[1][1], corner[1][2]), U.dist(x, y, corner[2][1], corner[2][2]))
+      local inJungle = true
+      if template == "treeline" then
+        inJungle = y > self.laneBand[1] + 4 and y < self.laneBand[2] - 4 and x > corner[1][1] + 7 and x < w - 1 - corner[1][1] - 7
+      end
+      if inJungle and inHalf1(x, y) and laneDist(x, y) >= 5 and base >= 12 and riverD(x, y) >= 4 and farFromTaken(x, y, 8) then
+        both(self.camps, x, y, { kind = kind })
+        break
+      end
+    end
+  end
+  -- clearings and paths
+  for _, p in ipairs(self.pits) do carve(p.x, p.y, 4.5) end
+  for _, list in ipairs({ self.shrines, self.relics, self.camps }) do
+    for _, p in ipairs(list) do carve(p.x, p.y, list == self.camps and (p.kind == "big" and 3.2 or 2.6) or 2.2) end
+  end
+  for _, list in ipairs({ self.pits, self.shrines, self.relics, self.camps }) do
+    for _, p in ipairs(list) do pathToLane(p.x, p.y) end
+  end
+  -- mirror the carving exactly (paths are carved per point; make the halves identical)
+  for y = 0, h - 1 do
+    for x = 0, w - 1 do
+      local rx, ry = rot(x, y)
+      if terrain[y * w + x] == M.LAND then terrain[ry * w + rx] = M.LAND end
+    end
+  end
+end
+
 function M.generateArena(opts)
   local self = setmetatable({}, M)
   local w = opts.size or 80
@@ -340,6 +447,55 @@ function M.generateArena(opts)
   elseif template == "open" then
     rockAt, hillAt = 0.8, 0.6
   end
+  -- DOTA-style templates (two sides only), randomized each match but always mirror-fair
+  local rot = function(p) local x, y = self.syms[2](p[1], p[2]); return { x, y } end
+  local jungleT = (template == "treeline" or template == "battlefield") and not ffa
+  if template == "treeline" and not ffa then
+    -- Treeline (3v3): bases left and right, a top and a bottom lane, the jungle between
+    local cy = math.floor(h / 2)
+    corner[1] = { lo, cy }
+    corner[2] = rot(corner[1])
+    local topY = math.floor(h * (0.17 + rng:random() * 0.05))
+    local bump = rng:random(-2, 3)
+    local top = { corner[1], { lo + 3, topY }, { math.floor(w * 0.32), topY + bump }, { math.floor((w - 1) / 2), topY }, }
+    -- second half of the top lane is the mirror of the bottom lane's first half
+    local botFirst = {}
+    for k = #top, 1, -1 do botFirst[#botFirst + 1] = rot(top[k]) end
+    -- top lane: A ... center ... B, where the right half is the rotation of the bottom's left half
+    local topFull = {}
+    for _, p in ipairs(top) do topFull[#topFull + 1] = p end
+    -- right half of the top lane: rotate the left half of the bottom lane (built from 'top' by symmetry)
+    local leftBot = { corner[1], { lo + 3, h - 1 - topY }, { math.floor(w * 0.32), h - 1 - topY - bump }, { math.floor((w - 1) / 2), h - 1 - topY } }
+    for k = #leftBot - 1, 1, -1 do topFull[#topFull + 1] = rot(leftBot[k]) end
+    local botFull = {}
+    for k = #topFull, 1, -1 do botFull[#botFull + 1] = rot(topFull[k]) end
+    lanes = { { id = "top", name = "top", a = 1, b = 2, pts = topFull }, { id = "bot", name = "bot", a = 1, b = 2, pts = botFull } }
+    self.laneBand = { topY, h - 1 - topY }
+    laneR, rockAt, hillAt = 2.7, 0.5, 0.43
+  elseif template == "battlefield" and not ffa then
+    -- Battlefield (DOTA): three lanes corner to corner, a river across the other diagonal,
+    -- jungle in the four quarters
+    local amp = (rng:random() < 0.5 and -1 or 1) * w * (0.02 + rng:random() * 0.025)
+    for _, L in ipairs(lanes) do
+      if L.id ~= "mid" then
+        local pts, n = {}, 18
+        for k = 0, n do
+          local f = k / n
+          local x, y, dx, dy = polyAt(L.pts, f)
+          local a = amp * math.sin(f * math.pi) * math.min(1, math.min(f, 1 - f) * 5)
+          pts[#pts + 1] = { math.floor(x - dy * a + 0.5), math.floor(y + dx * a + 0.5) }
+        end
+        pts[1], pts[#pts] = L.pts[1], L.pts[#L.pts]
+        L.pts = pts
+      end
+    end
+    -- keep the bottom lane the exact mirror of the top
+    local botFull = {}
+    for k = #lanes[1].pts, 1, -1 do botFull[#botFull + 1] = rot(lanes[1].pts[k]) end
+    lanes[3].pts = botFull
+    laneR, rockAt, hillAt = 2.6, 0.52, 0.44
+  end
+  self.jungleT = jungleT
   self.lanes = lanes
   self.lanesByName = {}
   for _, L in ipairs(lanes) do self.lanesByName[L.name] = L end
@@ -360,6 +516,9 @@ function M.generateArena(opts)
     return best
   end
   local ns = #self.syms
+  -- river wiggle: odd around the map center so the river stays point-symmetric
+  local rA, rK = 1.2 + rng:random() * 1.6, (1.5 + rng:random() * 2) * math.pi / (w - 1)
+  local function rjit(sum) return rA * math.sin(rK * (sum - (w - 1))) end
   for y = 0, h - 1 do
     for x = 0, w - 1 do
       local v = 0
@@ -372,8 +531,15 @@ function M.generateArena(opts)
       local ld = laneDist(x, y)
       local base = math.huge
       for sd = 1, nSides do base = math.min(base, U.dist(x, y, corner[sd][1], corner[sd][2])) end
+      local riverHere = false
+      if jungleT and template == "battlefield" then
+        local d = (x - y) - rjit(x + y)
+        riverHere = math.abs(d) <= 2.2 and edge >= 3
+      end
+      if riverHere then self.river = self.river or {}; self.river[i] = true end
       if edge < 2 then terrain[i] = M.ROCK
-      elseif ld <= laneR or base <= 9 then terrain[i] = M.LAND
+      elseif ld <= laneR or base <= 9 or riverHere then terrain[i] = M.LAND
+      elseif jungleT and template == "treeline" and (y < self.laneBand[1] - 3 or y > self.laneBand[2] + 3) then terrain[i] = M.ROCK
       elseif v > rockAt then terrain[i] = M.ROCK
       elseif v > hillAt then terrain[i] = M.HILL
       else terrain[i] = M.LAND end
@@ -381,12 +547,13 @@ function M.generateArena(opts)
   end
   self.height, self.terrain = height, terrain
   self.waterLevel = -1
+  if jungleT then self:placeJungle(rng, laneDist, corner, template) end
   self.deposits, self.deposit, self.blocked = {}, {}, {}
 
   -- structures: on every lane, an outer and an inner tower at each end, and a Core per side
   self.towers = {}
   local tiers = { { "outer", ffa and 0.3 or 0.36 }, { "inner", ffa and 0.16 or 0.2 } }
-  if template == "longroad" or template == "gauntlet" then
+  if template == "longroad" or template == "gauntlet" or template == "battlefield" or template == "treeline" then
     tiers = { { "outer", ffa and 0.34 or 0.42 }, { "middle", ffa and 0.24 or 0.3 }, { "inner", ffa and 0.14 or 0.17 } }
   end
   for _, L in ipairs(lanes) do
@@ -925,6 +1092,9 @@ function M:buildImages()
       if t == M.WATER then
         local depth = U.clamp((self.waterLevel - hv) * 6, 0, 1)
         r, g, b = 0.10 - depth * 0.05, 0.28 - depth * 0.12, 0.48 - depth * 0.12
+      elseif t == M.LAND and self.river and self.river[i] then
+        -- Arena river: shallow ford, walkable
+        r, g, b = 0.22, 0.40, 0.46
       elseif t == M.LAND then
         local k = U.clamp((hv - self.waterLevel) * 3, 0, 1)
         r, g, b = 0.30 + k * 0.06, 0.42 + k * 0.03, 0.24 + k * 0.02

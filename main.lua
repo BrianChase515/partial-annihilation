@@ -136,6 +136,8 @@ function love.load(args)
   for i, a in ipairs(args or {}) do
     if a == "--menushot" then
       menu.mode = args[i + 1] or "rts"
+      if os.getenv("PA_HELP") then menu.showHelp = true end
+      if tonumber(args[i + 2] or "") then menu.arena.format = tonumber(args[i + 2]); menu.arena.template = tonumber(args[i + 3] or "") or menu.arena.template end
       menu.noOnline = true
       menuShot = 0
     end

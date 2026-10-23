@@ -42,3 +42,8 @@ cls_juggernaut   crossed-axes by lorc  https://game-icons.net/1x1/lorc/crossed-a
 cls_warden       templar-shield by delapouite  https://game-icons.net/1x1/delapouite/templar-shield.html
 cls_shifter      werewolf by lorc  https://game-icons.net/1x1/lorc/werewolf.html
 cls_infiltrator  ninja-mask by lorc  https://game-icons.net/1x1/lorc/ninja-mask.html
+
+Arena jungle:
+scavenger    spider-bot by delapouite  https://game-icons.net/1x1/delapouite/spider-bot.html
+ravager      rock-golem by delapouite  https://game-icons.net/1x1/delapouite/rock-golem.html
+colossus     giant by delapouite  https://game-icons.net/1x1/delapouite/giant.html

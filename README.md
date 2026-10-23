@@ -25,12 +25,21 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
 - **Roguelike levels to 10.** Levels 2, 4 and 8 offer 1 of 2 class skills (cast with Q/W/E at the mouse), level 6 unlocks your ultimate (R), and the other levels offer upgrade cards.
 - **Death isn't the end.** Your Commander respawns at your Core. Towers must fall in order (outer, inner, then the Core), and a lane whose towers are down sends super creeps.
 - **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal, dive a weakened Commander, gang up with allies and use their skills.
-- **1v1, 1v2, 2v2, 2v1, or a 3- or 4-way free-for-all** (bases on a triangle or in every corner, with a lane between each pair of bases), with its own scoring, high scores and online leaderboard.
-- **Four map templates:**
+- **1v1 up to 3v3, 1v2, 2v1, or a 3- or 4-way free-for-all** (bases on a triangle or in every corner, with a lane between each pair of bases), with its own scoring, high scores and online leaderboard.
+- **Six map templates:**
   - **Classic:** three lanes, two towers each.
   - **Long Road:** winding lanes walled in by rock, with three towers each, for longer games.
   - **Gauntlet:** one wide lane, three towers deep.
   - **Open Field:** almost no rock between the lanes, so roaming and ganks rule.
+  - **Treeline** (built for 3v3): two lanes with a jungle between them.
+  - **Battlefield** (DOTA style): three lanes, a river across the other diagonal, and jungle in every quarter.
+  - Treeline and Battlefield are randomized every match and always mirror-fair.
+- **The jungle** (Treeline and Battlefield):
+  - **Neutral camps** of Scavengers and Ravagers only fight if you start it. They give XP, chase you a short way, then walk home and heal.
+  - **Two capture shrines:** stand on one to take it. Each shrine you hold gives your side's Commanders +8% speed and damage.
+  - **The Colossus** wakes in its pit at 7:00. Bring it down and your whole side gets the **Colossus Crest**: stronger Commanders and stronger creeps for 2 minutes. On Battlefield it alternates between two pits.
+  - **Healing relics** respawn every 70 seconds.
+  - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler.
 - **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy.
 
 ![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)

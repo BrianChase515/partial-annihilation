@@ -598,6 +598,7 @@ function UI.drawMinimap(game, L)
       end
     end
   end
+  if world.arena and world.arena.jungle then require("src.jungle").drawMinimap(world, mm, s) end
   local a = world.alien
   if a and (a.state == "announced" or a.state == "dormant") then
     local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
@@ -1131,6 +1132,9 @@ Goal: destroy the enemy Core (in free-for-all: be the last Core standing). Each 
   outer first, then middle (Long Road / Gauntlet), then inner, then the Core (shielded ones glow blue).
   Towers shoot creeps first - and you, if you attack an enemy Commander under them.
   A lane whose enemy towers are down sends super creeps.
+Jungle (Treeline / Battlefield maps): neutral camps give XP (they only fight back); stand on a shrine to
+  capture it (+8% speed and damage per shrine); the Colossus wakes at 7:00 - kill it for the Crest (2 min of
+  stronger Commanders and creeps); green relics heal 35%.
 
 Your Commander
   Right-click ............... move / attack        A then click ... attack-move
@@ -1162,12 +1166,36 @@ Classes
 
 function UI.drawHelp(arena)
   local w, h = lg.getDimensions()
-  local bw, bh = 780, math.min(h - 20, 800)
+  local text = arena and ARENA_HELP or HELP
+  local f = font(12)
+  local lines = {}
+  for l in (text .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = l end
+  local need = #lines * f:getHeight() + 36
+  local bh = math.min(h - 20, math.max(need, 300))
+  if need <= h - 20 then
+    local bw = 780
+    local x, y = (w - bw) / 2, (h - bh) / 2
+    panelBox(x, y, bw, bh, 0.97)
+    lg.setFont(f)
+    lg.setColor(0.9, 0.93, 0.97)
+    lg.print(text, x + 24, y + 18)
+    return
+  end
+  -- too tall for the screen (Steam Deck): two columns, split at a section break near the middle
+  local split = math.floor(#lines / 2)
+  for k = 0, 12 do
+    if lines[split + k] == "" then split = split + k; break end
+    if lines[split - k] == "" then split = split - k; break end
+  end
+  local left = table.concat(lines, "\n", 1, split)
+  local right = table.concat(lines, "\n", split + 1, #lines)
+  local bw = math.min(w - 20, 1260)
   local x, y = (w - bw) / 2, (h - bh) / 2
   panelBox(x, y, bw, bh, 0.97)
-  lg.setFont(font(12))
+  lg.setFont(font(10))
   lg.setColor(0.9, 0.93, 0.97)
-  lg.print(arena and ARENA_HELP or HELP, x + 24, y + 18)
+  lg.print(left, x + 16, y + 14)
+  lg.print(right, x + bw / 2 - 10, y + 14)
 end
 
 local function button(x, y, w, h, label, hot)

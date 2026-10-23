@@ -28,6 +28,10 @@ function AI.new(world, team, level, opts)
     self:pickLane()
   else
     local order = #st.sideTeams[self.side] == 1 and { "mid" } or { "top", "bot", "mid" }
+    if world.map.jungleT and not world.map.lanesByName.mid then
+      order = #st.sideTeams[self.side] == 1 and { "top" } or { "top", "bot" }
+      if idx == 3 then self.role = "jungle" end
+    end
     local name = opts and opts.lane or order[(idx - 1) % #order + 1]
     self.laneObj = world.map.lanesByName[name] or world.map.lanes[(idx - 1) % #world.map.lanes + 1]
     self.lane = self.laneObj.id
@@ -114,7 +118,8 @@ function AI:strength(x, y, r, hostile)
   local w = self.world
   local s = 0
   w:query(x, y, r + 30, function(o)
-    if o.alive and not o.neutral and o.def.weapon and U.dist(x, y, o.x, o.y) < r then
+    if o.alive and not o.neutral and o.def.weapon and U.dist(x, y, o.x, o.y) < r
+      and not (o.passive and not (o.aggro and next(o.aggro))) then
       local isHostile = w:hostile(o.team, self.team)
       if isHostile == hostile then
         local v = o.hp / 100
@@ -221,6 +226,97 @@ function AI:useSkills(c, enemyC, danger)
   end
 end
 
+-- Jungle maps: take shrines, gang up on the Colossus, farm camps (the jungler lives there)
+function AI:enemyCommandersNear(x, y, r)
+  local w, n = self.world, 0
+  for t = 1, w.np do
+    local o = w.teams[t].commander
+    if o and o.alive and w:hostile(t, self.team) and U.dist(o.x, o.y, x, y) < r then n = n + 1 end
+  end
+  return n
+end
+
+function AI:campToFarm(c, reach)
+  local j = self.world.arena.jungle
+  local best, bd
+  for _, cp in ipairs(j.camps) do
+    local alive = 0
+    for _, u in ipairs(cp.units) do if u.alive then alive = alive + 1 end end
+    if alive > 0 then
+      local d = U.dist(c.x, c.y, cp.x, cp.y)
+      -- big camps once we can take them
+      if cp.kind == "big" and (c.clevel or 0) < 4 then d = d + 2000 end
+      if d < reach and self:enemyCommandersNear(cp.x, cp.y, 600) == 0 and (not bd or d < bd) then best, bd = cp, d end
+    end
+  end
+  return best
+end
+
+function AI:jungleThink(c, hpf, enemyC, danger)
+  local w = self.world
+  local st = w.arena
+  local j = st.jungle
+  local t = w.time
+  -- 1. the Colossus: when the side is strong enough, everyone nearby piles on
+  local boss = j.boss
+  if boss and boss.alive then
+    j.bossCall = j.bossCall or {}
+    local lv, n = 0, 0
+    for _, tt in ipairs(st.sideTeams[self.side]) do
+      local a = w.teams[tt].commander
+      if a and a.alive then lv = lv + (a.clevel or 0); n = n + 1 end
+    end
+    if not j.bossCall[self.side] and n >= 2 and lv >= 6 * n and lv >= 12 and self.level >= 4 then j.bossCall[self.side] = t end
+    local call = j.bossCall[self.side]
+    if call and t - call < 60 and hpf > 0.5 and U.dist(c.x, c.y, boss.x, boss.y) < 2400 then
+      if not (c.orders[1] and c.orders[1].type == "attack" and c.orders[1].target == boss) then
+        w:issue(c, { type = "attack", target = boss })
+      end
+      self.mode = "boss"
+      return true
+    end
+  elseif j.bossCall then j.bossCall[self.side] = nil end
+  -- 2. shrines nobody is contesting
+  for _, sh in ipairs(j.shrines) do
+    local d = U.dist(c.x, c.y, sh.x, sh.y)
+    local reach = self.role == "jungle" and 1400 or 750
+    sh.claim = sh.claim or {}
+    local cl = sh.claim[self.side]
+    local mine = not cl or cl.team == self.team or t - cl.t > 6
+    if sh.owner ~= self.side and t >= sh.lockUntil - 5 and d < reach and hpf > 0.5 and not danger and mine
+      and self:enemyCommandersNear(sh.x, sh.y, 650) == 0 then
+      sh.claim[self.side] = { team = self.team, t = t }
+      if d > 90 then w:issue(c, { type = "move", x = sh.x + self.rng:random(-40, 40), y = sh.y + self.rng:random(-40, 40), arrive = 40 }) end
+      self.mode = "shrine"
+      return true
+    end
+  end
+  -- 3. camps: the jungler's job; laners grab one now and then when it's close
+  local farm = self.role == "jungle" or (self.rng:random() < 0.25 and hpf > 0.7)
+  if farm and hpf > 0.45 then
+    local cp = self:campToFarm(c, self.role == "jungle" and 3000 or 650)
+    if cp then
+      local tgt
+      for _, u in ipairs(cp.units) do if u.alive and (not tgt or u.hp < tgt.hp) then tgt = u end end
+      if tgt and not (c.orders[1] and c.orders[1].type == "attack" and c.orders[1].target == tgt) then
+        w:issue(c, { type = "attack", target = tgt })
+      end
+      self.mode = "camp"
+      return true
+    end
+  end
+  if self.role == "jungle" then
+    -- nothing to farm: help the lane with the closest enemy Commander
+    if enemyC then return false end
+    local L = w.map.lanes[self.rng:random(#w.map.lanes)]
+    local x, y = Map.polyAt(L.pts, 0.5)
+    local wx, wy = w.map:center(x, y)
+    if #c.orders == 0 then w:issue(c, { type = "amove", x = wx, y = wy, arrive = 80 }) end
+    return true
+  end
+  return false
+end
+
 function AI:update(dt)
   local w = self.world
   if w.over then return end
@@ -290,6 +386,8 @@ function AI:update(dt)
       return
     end
   end
+
+  if w.arena.jungle and self:jungleThink(c, hpf, enemyC, danger) then return end
 
   -- lane: stand a little behind our frontmost creep, fight what's in range
   local front = 0.12

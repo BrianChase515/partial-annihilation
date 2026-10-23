@@ -561,6 +561,7 @@ function R.drawWorld(cam, game)
     end
   end
 
+  if world.arena and world.arena.jungle then require("src.jungle").draw(world) end
   for _, e in ipairs(list) do R.drawEntity(e, cam, sel[e]) end
 
   -- nano build beams

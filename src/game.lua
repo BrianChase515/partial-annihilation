@@ -278,6 +278,13 @@ function G.new(opts)
     world.onWave = function(k)
       if k == 1 then self:notice("The creeps are marching. Push a lane!", 3); VOICE.say("creeps") end
     end
+    world.onJungle = function(text, side, kind)
+      local st = world.arena
+      local who = side and (side == st.teamSide[1] and "Your side" or (st.ffa and D.teamName[st.sideOwner[side]] or "The enemy")) or nil
+      self:notice(who and string.format(text, who) or text, 3)
+      if kind == "boss" or kind == "crest" then MUSIC.bump(0.4) end
+      if self.log then self.log:event(who and string.format(text, who) or text) end
+    end
     world.onSkill = function(c, def)
       if c.team == 1 or world:isVisible(c) then SFX.at("skill", c.x, c.y, self:soundView(), c.team == 1 and 1 or 0.7) end
       if self.log and def.ult then self.log:event(string.format("%s used %s", D.teamName[c.team], def.name)) end

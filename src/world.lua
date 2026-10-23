@@ -665,9 +665,13 @@ function W:modsOf(e) return e.mods or NOMODS end
 
 -- timed buff value (Arena skills), or nil
 function W:bv(e, key)
+  local v
   local b = e.buffs and e.buffs[key]
-  if b and b[2] > self.time then return b[1] end
-  return nil
+  if b and b[2] > self.time then v = b[1] end
+  -- standing bonuses from the Arena jungle (shrines, the Colossus Crest)
+  local z = e.zoneMul and e.zoneMul[key]
+  if z then v = (v or 1) * z end
+  return v
 end
 
 function W:rangeOf(e)
@@ -743,6 +747,8 @@ end
 
 function W:canTarget(e, o)
   if not o.alive or o.dormant or o.neutral or self.ally[o.team] == self.ally[e.team] then return false end
+  if o.passive and (e.creep or e.arenaTower) then return false end
+  if e.passive and not (e.aggro and e.aggro[o] and self.time < e.aggro[o]) then return false end
   if o.fadeUntil and self.time < o.fadeUntil then return false end
   if o.def.domain == "air" and e.mods and e.mods.hitsAir then return true end
   return D.canHit(e.def.weapon, o.def.domain)
@@ -876,6 +882,11 @@ function W:damage(o, amount, attacker)
   o.hp = o.hp - amount
   o.hitTimer = 0.15
   o.lastHit = self.time
+  if o.passive and attacker and attacker.alive and attacker.team ~= o.team then
+    o.aggro = o.aggro or {}
+    o.aggro[attacker] = self.time + 8
+    if self.onProvoke then self.onProvoke(o, attacker) end
+  end
   self.teams[o.team].lastAttacked = self.time
   self.teams[o.team].lastAttackX, self.teams[o.team].lastAttackY = o.x, o.y
   if attacker and attacker.alive and not o.def.building and #o.orders == 0 and o.def.weapon and not o.retaliate and not o.disarmed then

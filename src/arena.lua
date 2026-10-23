@@ -570,9 +570,17 @@ function A.setup(w, opts)
     st["core" .. side] = core
     st.cores[side] = core
   end
+  -- three Commanders a side hit much harder: their towers and Core get tougher to match
+  local biggest = 1
+  for side = 1, n do biggest = math.max(biggest, #st.sideTeams[side]) end
+  local hpMul = biggest >= 3 and 1.4 or 1
+  if hpMul > 1 then
+    for side = 1, n do local core = st.cores[side]; core.maxhp = math.floor(core.maxhp * hpMul); core.hp = core.maxhp end
+  end
   for _, t in ipairs(map.towers) do
     local x, y = map:center(t.x, t.y)
     local tw = w:spawn("atower", st.sideOwner[t.side], x, y)
+    if hpMul > 1 then tw.maxhp = math.floor(tw.maxhp * hpMul); tw.hp = tw.maxhp end
     tw.arenaTower = true
     tw.side, tw.lane, tw.tier = t.side, t.lane, t.tier
     st.structures[#st.structures + 1] = tw
@@ -592,6 +600,7 @@ function A.setup(w, opts)
     st.deaths[t] = 0
     p.class = ck
   end
+  if map.jungleT then require("src.jungle").setup(w) end
 end
 
 -- inner towers need the outer one down; the Core needs any inner tower down
@@ -683,6 +692,7 @@ end
 
 function A.xpValue(o)
   if o.key == "commander" then return 260 + 90 * (o.clevel or 0) end
+  if o.def.xp then return o.def.xp * (1 + 0.15 * (o.level or 0)) end
   if o.def.building then return 0 end
   if o.summon then return 30 end
   return ((o.def.cost and o.def.cost.metal) or 50) * 0.35
@@ -715,6 +725,19 @@ function A.onKill(w, o, attacker)
   end
   local value = A.xpValue(o)
   if value <= 0 then return end
+  -- jungle neutrals: the killer gets it all, teammates close by get a share
+  if o.jungle then
+    local ks = attacker and attacker.team and st.teamSide[attacker.team]
+    for t = 1, w.np do
+      local c = w.teams[t].commander
+      if c and c.alive and ks and st.teamSide[t] == ks then
+        if c == killerC then A.commanderXP(w, c, value)
+        elseif U.dist(c.x, c.y, o.x, o.y) < 700 then A.commanderXP(w, c, value * 0.35) end
+      end
+    end
+    require("src.jungle").onKill(w, o, attacker)
+    return
+  end
   -- denied: finished off by its own side - nobody gets anything
   if attacker and attacker.team and w.ally[attacker.team] == w.ally[o.team] then
     fx(w, "ring", o.x, o.y, 30, 0.6, { color = { 1, 1, 1 } })
@@ -854,7 +877,7 @@ function A.spawnWave(w)
           u.lane = L.id
           if level > 0 then A.setLevel(u, level) end
           -- after 7 minutes the armies keep growing, so games always reach an end
-          local m = superMul * (k > 14 and (1 + 0.12 * (k - 14)) or 1)
+          local m = superMul * (k > 14 and (1 + 0.12 * (k - 14)) or 1) * require("src.jungle").creepMul(w, side)
           if m > 1 then
             u.maxhp = math.floor(u.maxhp * m); u.hp = u.maxhp; u.dmgMul = m
             u.super = superMul > 1
@@ -918,6 +941,7 @@ function A.update(w, dt)
     end
   end
 
+  if tick and st.jungle then require("src.jungle").update(w, dt) end
   if tick then
     -- fountain: heal friendly Commanders at their Core
     for side = 1, st.nSides do
@@ -971,7 +995,7 @@ end
 -- Score par for the Arena: about what a clean, decisive win takes (computer-vs-computer
 -- games run ~12 minutes; a player who is winning pushes faster). +2 per extra enemy.
 
-A.TEMPLATE_PAR = { classic = 10, longroad = 12.5, gauntlet = 8.5, open = 9.5 }
+A.TEMPLATE_PAR = { classic = 10, longroad = 12.5, gauntlet = 8.5, open = 9.5, treeline = 10.5, battlefield = 13 }
 
 function A.par(w)
   local base = A.TEMPLATE_PAR[w.map.template or "classic"] or 10
