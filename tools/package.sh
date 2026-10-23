@@ -49,9 +49,12 @@ if command -v npx >/dev/null 2>&1; then
   python3 - <<'PY'
 p = "docs/index.html"
 s = open(p).read()
-css = ('<style>html,body{margin:0;background:#0b0e13;overflow:hidden}'
-       '#canvas{display:block;margin:0 auto;max-width:100vw;max-height:100vh;width:auto;height:auto;'
-       'object-fit:contain}</style>')
+css = ('<style>html,body{margin:0;background:#0b0e13;overflow:hidden}h1{display:none}'
+       '#canvas{position:fixed;inset:0;margin:auto;display:block;max-width:100vw;max-height:100vh;'
+       'width:auto;height:auto;object-fit:contain}'
+       'footer{position:fixed!important;right:6px!important;left:auto!important;bottom:4px!important;'
+       'opacity:.5;z-index:5;margin:0!important;padding:0!important;width:auto!important}'
+       'footer p{margin:0!important;font-size:0!important}footer button{font-size:11px}</style>')
 if "object-fit:contain" not in s:
     s = s.replace("</head>", css + "\n</head>", 1)
 open(p, "w").write(s)

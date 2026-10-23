@@ -40,6 +40,11 @@ local function fitWindow(args)
     return
   end
   local dw, dh = love.window.getDesktopDimensions()
+  if love.system.getOS() == "Web" then
+    -- browser: never lay out smaller than the Steam Deck layout; the page scales the canvas to fit
+    if dw and dh then love.window.setMode(math.max(1280, dw), math.max(800, dh), { resizable = false, vsync = 1, msaa = 4 }) end
+    return
+  end
   if dw and (dw < 1650 or dh < 1010) then
     flags.fullscreen, flags.fullscreentype = true, "desktop"
     love.window.setMode(dw, dh, flags)
