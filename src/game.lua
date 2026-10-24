@@ -412,7 +412,7 @@ function G.new(opts)
   if not self.opts.autotest then
     MUSIC.reset()
     -- a different soundtrack each match
-    MUSIC.match(self.craft and "craft" or (self.arena and "arena" or "rts"))
+    MUSIC.match(self.craft and "craft" or (self.arena and "arena" or (self.world.wih and "wih" or "rts")))
     local ok, lg = pcall(MatchLog.start, self)
     if ok then self.log = lg else print("match log disabled:", lg) end
   end

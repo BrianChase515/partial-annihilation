@@ -1046,6 +1046,33 @@ local function skillState(sq, slot, t)
   return def, "ready", true, false
 end
 
+-- Commander of Heroes: what the ground under the mouse does
+function UI.drawTerrainHover(game)
+  local world = game.world
+  if not world.squads then return end
+  local mx, my = love.mouse.getPosition()
+  if UI.overPanel(game, mx, my) then return end
+  local wx, wy = game:screenToWorld(mx, my)
+  local SQ = require("src.squads")
+  local text, col
+  if SQ.inBunker(world, wx, wy) then
+    text, col = string.format("BUNKER: units inside take %d%% less damage, but see %d%% less", math.floor((1 - SQ.BUNKER_TAKEN) * 100 + 0.5), math.floor((1 - SQ.BUNKER_SIGHT) * 100 + 0.5)), { 0.7, 0.85, 0.6 }
+  else
+    local tx, ty = world.map:tileAt(wx, wy)
+    if world.map:inBounds(tx, ty) and world.map:terrainAt(tx, ty) == 2 and (world.noFog or world.explored[ty * world.map.w + tx]) then
+      text, col = string.format("HIGH GROUND: units here see %d%% further, but take %d%% more damage", math.floor((SQ.HILL_SIGHT - 1) * 100 + 0.5), math.floor((SQ.HILL_TAKEN - 1) * 100 + 0.5)), { 0.86, 0.68, 0.38 }
+    end
+  end
+  if not text then return end
+  lg.setFont(font(12))
+  local tw = font(12):getWidth(text) + 16
+  local x, y = math.min(mx + 18, lg.getWidth() - tw - 6), my + 20
+  lg.setColor(0.04, 0.05, 0.08, 0.88)
+  lg.rectangle("fill", x, y, tw, 22, 5)
+  lg.setColor(col[1], col[2], col[3])
+  lg.print(text, x + 8, y + 4)
+end
+
 function UI.drawSquadInfo(game, L)
   local SQ = require("src.squads")
   local world = game.world
@@ -1113,6 +1140,18 @@ function UI.drawSquadInfo(game, L)
     if not up and sq.respawnAt then
       lg.setColor(1, 0.55, 0.45)
       lg.print(string.format("leader back in %ds", math.max(0, math.ceil(sq.respawnAt - t))), cx + 8, y + 52)
+    else
+      -- the ground they're on: high ground (+sight, +damage taken) or a bunker (-damage, -sight)
+      local nh, nb = 0, 0
+      for _, u in ipairs(sq.members) do if u.alive then if u.onHill then nh = nh + 1 elseif u.inBunker then nb = nb + 1 end end end
+      lg.setFont(font(10))
+      local tx = cx + 8
+      if nh > 0 then
+        lg.setColor(0.86, 0.68, 0.38); lg.print(string.format("^ %d high ground", nh), tx, y + 51); tx = tx + 92
+      end
+      if nb > 0 then
+        lg.setColor(0.7, 0.85, 0.6); lg.print(string.format("# %d in bunker", nb), tx, y + 51)
+      end
     end
     -- the two skills
     for slot = 1, 2 do
@@ -1155,6 +1194,8 @@ function UI.drawSquadInfo(game, L)
       if u.alive then
         lg.setColor(u == sq.leader and 1 or 0.85, u == sq.leader and 0.85 or 0.88, u == sq.leader and 0.4 or 0.92)
         lg.print(nm, cx + 8, ry)
+        if u.onHill then lg.setColor(0.86, 0.68, 0.38); lg.print("^", cx + cw - 58, ry)
+        elseif u.inBunker then lg.setColor(0.7, 0.85, 0.6); lg.print("#", cx + cw - 58, ry) end
         local f = u.hp / u.maxhp
         lg.setColor(0.12, 0.14, 0.18)
         lg.rectangle("fill", cx + cw - 46, ry + 3, 38, 5, 1)
@@ -2270,6 +2311,7 @@ function UI.draw(game)
   UI.drawInfo(game, L)
   UI.drawCard(game, L)
   UI.drawOrders(game)
+  UI.drawTerrainHover(game)
 
   -- mode hint
   local hint

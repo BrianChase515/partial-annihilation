@@ -633,6 +633,12 @@ function Menu:drawCohInfo(x0, y)
   -- (terrain applies here too)
 end
 
+-- which soundtrack the title screen plays (War is Hell has its own)
+function Menu:musicMode()
+  if self.mode == "coh" then return COH_SETUP.game == "wih" and "wih" or "rts" end
+  return self.mode
+end
+
 function Menu:activeCount()
   local n = 0
   for _, s in ipairs(self.slots) do if s.on then n = n + 1 end end
