@@ -315,6 +315,10 @@ function G.new(opts)
     world.onDeny = function(o, by)
       if by and by.team == 1 then self:notice("Denied!", 0.8, o.x, o.y) end
     end
+    world.onCreepLevel = function(side, L)
+      local mine = side == world.arena.teamSide[1]
+      self:notice((mine and "Our creeps reached level " or "Enemy creeps reached level ") .. L, 2.5)
+    end
     world.onWave = function(k)
       if k == 1 then self:notice("The creeps are marching. Push a lane!", 3); VOICE.say("creeps") end
     end

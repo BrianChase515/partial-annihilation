@@ -1038,8 +1038,7 @@ function W:damage(o, amount, attacker)
     o.cmdHit[attacker] = self.time
   elseif attacker and self:hostile(attacker.team, o.team) then
     if self.arena and attacker.creep then
-      -- Arena creeps earn veterancy from last hits only (which is what denying takes away)
-      if o.hp - amount <= 0 and not o.def.building then self:creepVeterancy(attacker, o) end
+      -- Arena creeps level as a side (see ARENA.onKill), not one by one
     else
       local dealt = math.min(amount, math.max(0, o.hp))
       local xp = dealt * (o.def.building and 0.5 or 1)

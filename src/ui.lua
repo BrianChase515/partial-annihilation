@@ -434,23 +434,25 @@ function UI.drawCommanderCard(game)
 end
 
 -- Arena jungle maps: who holds which shrine and what it's worth, the Crest, and the Colossus
--- Arena: experience each side has taken from lane creeps, and what its denies cost the enemy
+-- Arena: each side's creep level (creeps level together from enemy creeps they kill; a deny
+-- keeps that kill from the enemy), progress to the next level, and denies
 function UI.drawLanePanel(game)
   local world = game.world
   local st = world.arena
   if not st or not st.nSides then return end
+  local A = require("src.arena")
   local w = lg.getWidth()
   local mySide = st.teamSide[1]
   local bw = UI.SCORE_W
-  local bh = 26 + st.nSides * 20 + 2
+  local bh = 26 + st.nSides * 22 + 2
   local x = w - bw - 10
   local y = game.jungleRect and (game.jungleRect.y + game.jungleRect.h + 6) or ((game.cardBottom or (UI.TOP_H + 200)) + 6)
   panelBox(x, y, bw, bh, 0.86)
   lg.setFont(font(12))
   lg.setColor(0.95, 0.85, 0.5)
-  lg.print("LANES", x + 10, y + 6)
+  lg.print("CREEPS", x + 10, y + 6)
   lg.setColor(0.6, 0.66, 0.74)
-  local hd = "creep XP    denies"
+  local hd = "level        denies"
   lg.print(hd, x + bw - 10 - font(12):getWidth(hd), y + 6)
   local yy = y + 26
   for side = 1, st.nSides do
@@ -459,14 +461,22 @@ function UI.drawLanePanel(game)
     lg.rectangle("fill", x + 10, yy + 3, 10, 10, 2)
     lg.setColor(side == mySide and 1 or 0.8, side == mySide and 1 or 0.8, side == mySide and 1 or 0.8)
     lg.print(side == mySide and "Your side" or (st.ffa and D.teamName[st.sideOwner[side]] or "Enemy"), x + 26, yy)
-    local xp = math.floor((st.creepXP and st.creepXP[side] or 0) + 0.5)
+    -- level and a bar toward the next one
+    local L = (st.creepLvl and st.creepLvl[side]) or 0
+    local bar = (st.creepBar and st.creepBar[side]) or 0
+    local bx, bwid = x + 112, 74
+    lg.setColor(1, 0.85, 0.35)
+    lg.print("Lv " .. L, bx, yy)
+    lg.setColor(0.15, 0.17, 0.22)
+    lg.rectangle("fill", bx + 34, yy + 5, bwid - 34, 6, 2)
+    local f = L >= A.CREEP_MAX and 1 or math.min(1, bar / A.creepNeed(L))
+    lg.setColor(1, 0.8, 0.3)
+    lg.rectangle("fill", bx + 34, yy + 5, (bwid - 34) * f, 6, 2)
     local d = st.denies and st.denies[side]
-    local dt = d and string.format("%d (-%s)", d.n, U.fmt(math.floor(d.xp))) or "0"
-    lg.setColor(0.8, 0.86, 0.95)
-    lg.print(U.fmt(xp), x + bw - 120 - font(12):getWidth(U.fmt(xp)), yy)
+    local dt = tostring(d and d.n or 0)
     lg.setColor(0.75, 0.9, 1)
     lg.print(dt, x + bw - 10 - font(12):getWidth(dt), yy)
-    yy = yy + 20
+    yy = yy + 22
   end
 end
 
@@ -1353,9 +1363,8 @@ Your Commander
   Right-click ............... move / attack        A then click ... attack-move
   S ......................... stop                 F .............. flee home (+50% speed, can't be cancelled)
   Hold D .................... hold fire, to time last hits.  Right-click your own creep under 35% health: DENY it
-  Creeps rank up from killing blows (gold pips, max 3: +12% health/damage each).
-  Denying also stops enemy creeps ranking up.
-  The LANES panel (right) shows each side's creep XP, and its denies with the XP they took from the enemy.
+  Creeps level up as a side (up to 5) from enemy creeps they kill - a deny keeps that kill from the enemy.
+  The CREEPS panel (right) shows each side's creep level, the bar to the next, and its denies.
   Q W E ..................... your skills, cast at the mouse (or click the button, then the map)
   R ......................... your ultimate (unlocks at level 6)
   Z / X ..................... choose a level-up card

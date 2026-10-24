@@ -202,6 +202,10 @@ local function deploy(w, owner, x, y, dur)
   return s
 end
 
+-- side-wide creep levels: kills of enemy lane creeps needed for the next level
+A.CREEP_MAX = 5
+function A.creepNeed(L) return 30 + 18 * L end
+
 function A.setLevel(u, L)
   u.level = L
   u.maxhp = math.floor(u.def.hp * (1 + 0.10 * L))
@@ -1000,9 +1004,22 @@ function A.onKill(w, o, attacker)
     require("src.jungle").onKill(w, o, attacker)
     return
   end
-  -- live tally per side (the Lanes panel): experience from creeps, and what denying took away
+  -- live tally per side (the Lanes panel): creep levels, and what denying took away
   st.creepXP = st.creepXP or {}
   st.denies = st.denies or {}
+  st.creepLvl, st.creepBar = st.creepLvl or {}, st.creepBar or {}
+  if o.creep and attacker and attacker.team and w.ally[attacker.team] ~= w.ally[o.team] then
+    local ks = st.teamSide[attacker.team]
+    if ks and (st.creepLvl[ks] or 0) < A.CREEP_MAX then
+      st.creepBar[ks] = (st.creepBar[ks] or 0) + (o.key == "artillery" and 1.5 or 1)
+      while (st.creepLvl[ks] or 0) < A.CREEP_MAX and st.creepBar[ks] >= A.creepNeed(st.creepLvl[ks] or 0) do
+        st.creepBar[ks] = st.creepBar[ks] - A.creepNeed(st.creepLvl[ks] or 0)
+        st.creepLvl[ks] = (st.creepLvl[ks] or 0) + 1
+        if w.onCreepLevel then w.onCreepLevel(ks, st.creepLvl[ks]) end
+        if os.getenv("PA_CREEPDBG") then print(string.format("CREEPLV t=%d side %d -> %d", w.time, ks, st.creepLvl[ks])) end
+      end
+    end
+  end
   -- denied: finished off by its own side - nobody gets anything
   if attacker and attacker.team and w.ally[attacker.team] == w.ally[o.team] then
     local ds = st.teamSide[attacker.team]
@@ -1125,7 +1142,9 @@ function A.spawnWave(w)
   local map = w.map
   st.wave = st.wave + 1
   local k = st.wave
-  local level = math.min(5, math.floor((k - 1) / 4))
+  -- each side's creeps level up together from the enemy creeps they kill (denies keep that from
+  -- the enemy); a slow clock-based floor makes sure long games still escalate
+  local floorLevel = math.min(A.CREEP_MAX, math.floor((k - 1) / 10))
   local comp = { "tank", "tank", "tank", "artillery" }
   if k % 3 == 0 then comp[#comp + 1] = "tank" end
   if k >= 8 and k % 2 == 0 then comp[#comp + 1] = "artillery" end
@@ -1152,7 +1171,12 @@ function A.spawnWave(w)
           local u = w:spawn(key, team, x, y)
           u.creep = true
           u.lane = L.id
-          if level > 0 then A.setLevel(u, level) end
+          local level = math.max(floorLevel, (st.creepLvl and st.creepLvl[side]) or 0)
+          if level > 0 then
+            A.setLevel(u, level)
+            u.dmgMul = (u.dmgMul or 1) * (1 + 0.08 * level)
+            u.vet = level -- the gold pips show the side's creep level
+          end
           -- after 7 minutes the armies keep growing, so games always reach an end
           local m = superMul * (k > 14 and (1 + 0.12 * (k - 14)) or 1) * require("src.jungle").creepMul(w, side)
           if m > 1 then
