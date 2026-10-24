@@ -354,6 +354,23 @@ local function run()
         c, kind, lvl, wins, runs, 100 * hp / runs, t / runs, 100 * left / runs))
       io.stdout:flush()
     end
+  elseif what == "stats" then
+    local L = tonumber(args[2]) or 6
+    for _, c in ipairs(CLASSES) do
+      local game, w = newWorld(9600, c)
+      local h = w.teams[1].commander
+      levelUp(w, h, L, brainFor(w, 1, 9600))
+      local m = h.mods
+      local sk = {}
+      for i = 1, 4 do if h.skills[i] then sk[#sk + 1] = h.skills[i].key end end
+      local ups = {}
+      for _, u in ipairs(h.upgrades or {}) do if not u.skill then ups[#ups + 1] = u.key end end
+      local wpn = h.def.weapon
+      local dps = wpn.damage * (m.dmg or 1) * (m.rof or 1) / wpn.reload
+      print(string.format("STAT %-13s L%d hp %5d  dps %5.1f  range %3d  speed %3d  skillDmg %.2f | %s | %s", c, L, h.maxhp, dps,
+        w:rangeOf(h), w:speedOf(h), m.skillDmg or 1, table.concat(sk, ","), table.concat(ups, ",")))
+      frame()
+    end
   elseif what == "duel" then
     print("RESULT", duel(args[2], args[3], tonumber(args[4]) or 6, 9500))
   elseif what == "duels" then
