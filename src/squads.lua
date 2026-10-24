@@ -443,7 +443,8 @@ function S.update(world, dt)
     local hq0 = world.teams[sq.team].hq
     for i = #sq.queue, 1, -1 do
       local q = sq.queue[i]
-      if t >= q.at and hq0 and hq0.alive then
+      -- the leader comes back first: replacements wait at the HQ until he's there to lead them
+      if t >= q.at and hq0 and hq0.alive and sq.leader and sq.leader.alive then
         table.remove(sq.queue, i)
         local d = D.units[q.key]
         local x, y = place(world, hq0.x + (math.random() - 0.5) * 160, hq0.y + 120, d.domain == "air" and nil or "land")
@@ -452,7 +453,7 @@ function S.update(world, dt)
         prep(u, sq)
         u.rejoining = true
         sq.members[#sq.members + 1] = u
-        if sq.leader and sq.leader.alive then world:issue(u, { type = "move", x = sq.leader.x, y = sq.leader.y }) end
+        if sq.leader and sq.leader.alive then world:issue(u, { type = "move", x = sq.leader.x, y = sq.leader.y, rejoin = true }) end
         if world.onSquadReinforced then world.onSquadReinforced(sq, u) end
       end
     end
@@ -467,6 +468,8 @@ function S.update(world, dt)
       -- a squad that pulls back stops digging in (Hull Down would halve its speed)
       if fleeing then for _, sk in ipairs(sq.skills) do if sk.key == "hulldown" and t < sk.untilT then sk.untilT = t end end end
       for _, u in ipairs(sq.members) do
+        -- given an order of their own (by you or the computer)? then they're back in the squad already
+        if u.alive and u.rejoining and u.orders[1] and not u.orders[1].rejoin then u.rejoining = nil end
         if u.alive and u.rejoining then
           if U.dist2(u.x, u.y, L.x, L.y) < 260 * 260 then
             u.rejoining = nil
@@ -476,7 +479,7 @@ function S.update(world, dt)
           elseif fleeing and U.dist2(u.x, u.y, gx, gy) < 150 * 150 then
             if #u.orders > 0 then u.orders = {}; u.path = nil end -- at the rally point: wait for him
           elseif #u.orders == 0 or (u.orders[1].type == "move" and U.dist2(u.orders[1].x, u.orders[1].y, gx, gy) > 120 * 120) then
-            world:issue(u, { type = "move", x = gx, y = gy, arrive = 100 })
+            world:issue(u, { type = "move", x = gx, y = gy, arrive = 100, rejoin = true })
           end
         end
       end
