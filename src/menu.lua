@@ -877,7 +877,7 @@ function Menu:draw()
   local tip = self.mode == "arena"
     and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
     or self.mode == "craft" and "Tip: keep five workers on gold and a few on wood, build Farms before you need them, and creep with your hero early."
-    or self.mode == "coh" and "Tip: 1-5 grab a squad wherever it is. Q / W fire its leader's skills at the mouse. Keep the Battery behind the Armor."
+    or self.mode == "coh" and "Tip: 1-5 grab a squad (Shift adds). Q / W fire the ACTIVE (gold) squad's skills; C moves the gold to the next one."
     or (require("src.ghost").unlocked() and "Tip: Mirror (plays like you) and Nemesis (plays against your habits) are in the personality list."
       or string.format("Finish %d more Annihilation games (win or lose, no gameplay modifiers) to unlock two opponents that learn from you.",
         math.max(0, require("src.ghost").NEEDED - require("src.ghost").completed())))

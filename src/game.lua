@@ -1924,16 +1924,14 @@ function G:keypressed(key)
     local SQ = require("src.squads")
     local sq = SQ.squadsOf(self.world, 1)[n]
     if not sq then return end
-    local alive = {}
-    for _, e in ipairs(sq.members) do if e.alive then alive[#alive + 1] = e end end
-    self:select(alive)
     local now = love.timer.getTime()
-    if self.lastGroupTap.n == n and now - self.lastGroupTap.t < 0.4 and #alive > 0 then
+    local twice = self.lastGroupTap.n == n and now - self.lastGroupTap.t < 0.4
+    self:pickSquad(sq, shift)
+    if twice then
       local L = sq.leader
-      if L and L.alive then self:centerOn(L.x, L.y) else self:centerOn(alive[1].x, alive[1].y) end
+      if L and L.alive then self:centerOn(L.x, L.y) end
     end
     self.lastGroupTap = { n = n, t = now }
-    if #alive == 0 then self:notice(string.format("Squad %d is gone for now - replacements are on the way from the HQ", n), 1.8) end
     return
   end
   if n and n >= 1 and n <= 9 then
@@ -2048,18 +2046,27 @@ function G:keypressed(key)
       local g = list[self.genIdx]
       self:centerOn(g.x, g.y); self:select({ g })
     end
-  elseif key == "c" and self.world.mods and self.world.mods.squads then
-    -- Squad Tactics: cycle through your squad leaders
+  elseif key == "c" and self.world.squads then
+    -- Commander of Heroes: C moves the active squad (the gold one Q / W fire for) through the
+    -- selected squads; with one or none selected it steps to the next squad
     local SQ = require("src.squads")
-    local list = {}
-    for _, sq in ipairs(SQ.squadsOf(self.world, 1)) do
-      if sq.leader and sq.leader.alive then list[#list + 1] = sq.leader end
-    end
-    if #list == 0 then self:notice("No leaders on the field - a fallen leader returns at the HQ after 45 s", 2)
+    local sel = self:selectedSquads()
+    local cur = self:activeSquad()
+    if #sel > 1 then
+      local i = 1
+      for j, sq in ipairs(sel) do if sq == cur then i = j end end
+      self.activeSq = sel[i % #sel + 1]
+      self:notice(string.format("Active: squad %d, %s", self.activeSq.idx, SQ.byType[self.activeSq.type].name), 1.2)
     else
-      self.leaderIdx = (self.leaderIdx or 0) % #list + 1
-      local L = list[self.leaderIdx]
-      self:centerOn(L.x, L.y); self:select({ L })
+      local all = SQ.squadsOf(self.world, 1)
+      local i = 0
+      for j, sq in ipairs(all) do if sq == cur then i = j end end
+      local nx = all[i % #all + 1]
+      if nx then
+        self:pickSquad(nx)
+        local L = nx.leader
+        if L and L.alive then self:centerOn(L.x, L.y) end
+      end
     end
   elseif key == "home" or key == "c" then
     local c = self.world.teams[1].commander
@@ -2143,12 +2150,36 @@ function G:selectedSquads()
   return out
 end
 
+-- the squad Q / W fire for: the active one if it's selected, else the first selected
+function G:activeSquad()
+  local list = self:selectedSquads()
+  for _, sq in ipairs(list) do if sq == self.activeSq then return sq end end
+  self.activeSq = list[1]
+  return list[1]
+end
+
+-- select a squad (Shift adds it) and make it the active one; again on the active one jumps to it
+function G:pickSquad(sq, add)
+  local alive = {}
+  for _, e in ipairs(sq.members) do if e.alive then alive[#alive + 1] = e end end
+  local again = self.activeSq == sq and self.selected[alive[1] or false]
+  self:select(alive, add)
+  self.activeSq = sq
+  if again or #alive == 0 then
+    local L = sq.leader
+    if L and L.alive then self:centerOn(L.x, L.y) elseif alive[1] then self:centerOn(alive[1].x, alive[1].y) end
+  end
+  if #alive == 0 then self:notice(string.format("Squad %d is gone for now - replacements are on the way from the HQ", sq.idx), 1.8) end
+end
+
 -- Q / W: skill 1 or 2 of the selected squads. Self skills fire for every selected squad that has
 -- it ready; aimed skills go to the mouse, from the first squad that can
 function G:squadSkill(slot, sqOnly, wx, wy)
   local SQ = require("src.squads")
-  local list = sqOnly and { sqOnly } or self:selectedSquads()
-  if #list == 0 then self:notice("Select a squad first (1, 2, 3 or click one)", 1.2); return end
+  local act = self:activeSquad()
+  local list = sqOnly and { sqOnly } or (act and { act } or {})
+  if #list == 0 then self:notice("Select a squad first (1-5, or click its card)", 1.2); return end
+  if sqOnly then self.activeSq = sqOnly end
   if not wx then wx, wy = self:screenToWorld(love.mouse.getPosition()) end
   local done, why = false, nil
   for _, sq in ipairs(list) do

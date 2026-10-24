@@ -446,10 +446,12 @@ function UI.drawSquadPanel(game)
     local up = L and L.alive
     local chosen = false
     for _, u in ipairs(sq.members) do if u.alive and game.selected[u] then chosen = true; break end end
+    local isActive = chosen and sq == game:activeSquad()
     if chosen then
-      lg.setColor(1, 0.8, 0.25, 0.14)
+      local c = isActive and { 1, 0.8, 0.25 } or { 0.45, 0.7, 1 }
+      lg.setColor(c[1], c[2], c[3], isActive and 0.14 or 0.07)
       lg.rectangle("fill", x + 3, ry - 2, bw - 6, rh - 2, 5)
-      lg.setColor(1, 0.8, 0.25, 0.95)
+      lg.setColor(c[1], c[2], c[3], isActive and 0.95 or 0.6)
       lg.setLineWidth(2)
       lg.rectangle("line", x + 3, ry - 2, bw - 6, rh - 2, 5)
       lg.setLineWidth(1)
@@ -1003,115 +1005,120 @@ end
 ---------------------------------------------------------------------------
 -- Selection info
 
--- Commander of Heroes: the selected squads - who's in them, the leader, and his two skills
+-- Commander of Heroes: every squad as a card along the bottom. Selected squads are outlined;
+-- the ACTIVE one (gold) is the one Q / W fire for - C cycles it within the selection.
+-- Hover a skill for what it does; click it to cast (aimed skills then want a click on the map).
 local function skillState(sq, slot, t)
   local SQ = require("src.squads")
   local sk = sq.skills[slot]
   local def = SQ.SKILLS[sk.key]
   local up = sq.leader and sq.leader.alive
-  if not up then return def, "leader down", false end
-  if t < sk.untilT then return def, string.format("active %ds", math.ceil(sk.untilT - t)), true end
-  if t < sk.readyAt then return def, string.format("%ds", math.ceil(sk.readyAt - t)), false end
-  return def, "ready", true
+  if not up then return def, "leader down", false, false end
+  if t < sk.untilT then return def, string.format("on %ds", math.ceil(sk.untilT - t)), true, true end
+  if t < sk.readyAt then return def, string.format("%ds", math.ceil(sk.readyAt - t)), false, false end
+  return def, "ready", true, false
 end
 
-function UI.drawSquadInfo(game, L, sqs)
+function UI.drawSquadInfo(game, L)
   local SQ = require("src.squads")
   local world = game.world
   local t = world.time
-  local x, y, w = L.infoX, L.panelY + 10, L.infoW
-  game.sqInfoBtns = {}
+  local list = SQ.squadsOf(world, 1)
+  local x, y = L.infoX, L.panelY + 10
+  local w = lg.getWidth() - x - 14
+  local sel = {}
+  for _, sq in ipairs(game:selectedSquads()) do sel[sq] = true end
+  local active = game:activeSquad()
+  local n = math.max(#list, 1)
+  local gap = 8
+  local cw = math.min(210, (w - gap * (n - 1)) / n)
+  local ch = UI.PANEL_H - 22
+  game.sqInfoBtns, game.sqCards = {}, {}
   local mx, my = love.mouse.getPosition()
-  local function skillBtn(bx, by, bw, bh, sq, slot, withDesc)
-    local def, st, ok = skillState(sq, slot, t)
-    local hov = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
-    local active = st:sub(1, 6) == "active"
-    if active then lg.setColor(0.2, 0.48, 0.3)
-    elseif ok then lg.setColor(hov and 0.25 or 0.17, hov and 0.32 or 0.22, hov and 0.44 or 0.3)
-    else lg.setColor(0.1, 0.11, 0.14) end
-    lg.rectangle("fill", bx, by, bw, bh, 5)
-    lg.setColor(0.45, 0.55, 0.68, 0.8)
-    lg.rectangle("line", bx + 0.5, by + 0.5, bw - 1, bh - 1, 5)
-    if not ok and sq.leader and sq.leader.alive then
-      lg.setColor(0.3, 0.36, 0.46, 0.45)
-      lg.rectangle("fill", bx, by, bw * U.clamp(1 - (sq.skills[slot].readyAt - t) / def.cd, 0, 1), bh, 5)
-    end
-    lg.setFont(font(13))
-    lg.setColor(1, 1, 1, ok and 1 or 0.6)
-    lg.print((slot == 1 and "Q  " or "W  ") .. def.name, bx + 8, by + 5)
-    lg.setFont(font(11))
-    lg.setColor(active and 0.6 or 0.85, active and 1 or 0.88, active and 0.6 or 0.95, ok and 1 or 0.6)
-    lg.print(st, bx + bw - 8 - font(11):getWidth(st), by + 7)
-    if withDesc then
-      lg.setColor(0.7, 0.75, 0.82, 0.9)
-      lg.printf(def.desc, bx + 8, by + 24, bw - 16)
-    end
-    game.sqInfoBtns[#game.sqInfoBtns + 1] = { x = bx, y = by, w = bw, h = bh, sq = sq, slot = slot }
-  end
-  if #sqs == 1 then
-    local sq = sqs[1]
+  local tip
+  for i, sq in ipairs(list) do
+    local cx = x + (i - 1) * (cw + gap)
+    local isA, isS = sq == active, sel[sq]
+    local up = sq.leader and sq.leader.alive
+    -- the card
+    if isA then lg.setColor(0.24, 0.19, 0.07) elseif isS then lg.setColor(0.1, 0.16, 0.24) else lg.setColor(0.09, 0.11, 0.14) end
+    lg.rectangle("fill", cx, y, cw, ch, 6)
+    if isA then lg.setColor(1, 0.8, 0.25); lg.setLineWidth(2.5)
+    elseif isS then lg.setColor(0.45, 0.7, 1); lg.setLineWidth(1.5)
+    else lg.setColor(0.25, 0.3, 0.38); lg.setLineWidth(1) end
+    lg.rectangle("line", cx + 0.5, y + 0.5, cw - 1, ch - 1, 6)
+    lg.setLineWidth(1)
+    -- name, count, who's coming
     local ty = SQ.byType[sq.type]
-    local Ld = sq.leader
-    lg.setFont(font(15))
-    lg.setColor(1, 0.85, 0.4)
-    local n = 0
-    for _, u in ipairs(sq.members) do if u.alive then n = n + 1 end end
-    local inc = SQ.coming(sq)
-    lg.print(string.format("Squad %d  -  %s  (%d)%s", sq.idx, ty.name, n, inc > 0 and string.format("   +%d on the way from the HQ", inc) or ""), x, y)
-    lg.setFont(font(12))
-    if Ld and Ld.alive then
-      lg.setColor(0.85, 0.88, 0.92)
-      lg.print(string.format("Leader: veteran %s   %d / %d", D.units[ty.leader].name, math.floor(Ld.hp), Ld.maxhp), x, y + 22)
-    else
-      lg.setColor(1, 0.55, 0.45)
-      lg.print(string.format("Leader down - back at the HQ in %ds (no skills until then)", math.max(0, math.ceil((sq.respawnAt or t) - t))), x, y + 22)
-    end
-    -- members by type (the leader first, with a star)
-    local counts, order = {}, {}
+    local alive = 0
+    local hp, max = 0, 0
     for _, u in ipairs(sq.members) do
-      if u.alive and not u.squadLeader then
-        if not counts[u.key] then counts[u.key] = 0; order[#order + 1] = u.key end
-        counts[u.key] = counts[u.key] + 1
+      max = max + u.maxhp
+      if u.alive then alive = alive + 1; hp = hp + u.hp end
+    end
+    lg.setFont(font(14))
+    lg.setColor(isA and 1 or 0.92, isA and 0.85 or 0.92, isA and 0.4 or 0.95)
+    lg.print(string.format("%d  %s", i, ty.name), cx + 8, y + 6)
+    lg.setFont(font(11))
+    lg.setColor(0.75, 0.8, 0.88)
+    local un = D.units[ty.unit].name
+    local sub = string.format("%d / %d %s", alive, ty.size, un .. (un:match("y$") and "" or "s"))
+    local inc = SQ.coming(sq)
+    if inc > 0 then sub = sub .. string.format("  +%d", inc) end
+    lg.print(sub, cx + 8, y + 26)
+    local frac = max > 0 and hp / max or 0
+    lg.setColor(0.12, 0.14, 0.18)
+    lg.rectangle("fill", cx + 8, y + 43, cw - 16, 6, 2)
+    lg.setColor(0.2 + (1 - frac) * 0.8, 0.3 + frac * 0.6, 0.15)
+    lg.rectangle("fill", cx + 8, y + 43, (cw - 16) * frac, 6, 2)
+    if not up and sq.respawnAt then
+      lg.setColor(1, 0.55, 0.45)
+      lg.print(string.format("leader back in %ds", math.max(0, math.ceil(sq.respawnAt - t))), cx + 8, y + 52)
+    end
+    -- the two skills
+    for slot = 1, 2 do
+      local def, st, ok, on = skillState(sq, slot, t)
+      local bx, by, bw, bh = cx + 6, y + 68 + (slot - 1) * 38, cw - 12, 32
+      local hov = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
+      if on then lg.setColor(0.2, 0.48, 0.3)
+      elseif ok then lg.setColor(hov and 0.26 or 0.17, hov and 0.33 or 0.22, hov and 0.46 or 0.3)
+      else lg.setColor(0.08, 0.09, 0.12) end
+      lg.rectangle("fill", bx, by, bw, bh, 5)
+      if up and not ok and not on then
+        lg.setColor(0.3, 0.36, 0.46, 0.45)
+        lg.rectangle("fill", bx, by, bw * U.clamp(1 - (sq.skills[slot].readyAt - t) / def.cd, 0, 1), bh, 5)
       end
+      lg.setColor(hov and 1 or 0.45, hov and 0.85 or 0.55, hov and 0.4 or 0.68, 0.9)
+      lg.rectangle("line", bx + 0.5, by + 0.5, bw - 1, bh - 1, 5)
+      lg.setFont(font(12))
+      lg.setColor(1, 1, 1, (ok or on) and 1 or 0.55)
+      local key = isA and (slot == 1 and "Q " or "W ") or ""
+      lg.print(key .. def.name, bx + 7, by + 3)
+      lg.setFont(font(10))
+      lg.setColor(on and 0.6 or 0.8, on and 1 or 0.85, on and 0.6 or 0.9, (ok or on) and 1 or 0.6)
+      lg.print(st, bx + 7, by + 18)
+      game.sqInfoBtns[#game.sqInfoBtns + 1] = { x = bx, y = by, w = bw, h = bh, sq = sq, slot = slot }
+      if hov then tip = { def = def, x = bx, y = by, sq = sq } end
     end
-    local ix = x
-    if Ld and Ld.alive then
-      lg.setColor(0.2, 0.17, 0.08)
-      lg.rectangle("fill", ix, y + 42, 56, 62, 5)
-      lg.setColor(1, 0.8, 0.25)
-      lg.rectangle("line", ix + 0.5, y + 42.5, 55, 61, 5)
-      UI.drawIcon(Ld.key, ix + 28, y + 68, 40, 1)
-      lg.setFont(font(11)); lg.setColor(1, 0.85, 0.35); lg.print("leader", ix + 12, y + 88)
-      ix = ix + 62
-    end
-    for _, k in ipairs(order) do
-      lg.setColor(0.12, 0.15, 0.2)
-      lg.rectangle("fill", ix, y + 42, 56, 62, 5)
-      UI.drawIcon(k, ix + 28, y + 68, 40, 1)
-      lg.setFont(font(12)); lg.setColor(1, 1, 1); lg.print("x" .. counts[k], ix + 30, y + 86)
-      ix = ix + 62
-    end
-    -- the two skills, with what they do
-    local bw = math.min(250, (w - (ix - x) - 30) / 2)
-    if bw >= 150 then
-      for slot = 1, 2 do skillBtn(x + w - (3 - slot) * (bw + 8), y + 6, bw, 98, sq, slot, true) end
-    else
-      for slot = 1, 2 do skillBtn(x + (slot - 1) * 208, y + 108, 200, 24, sq, slot, false) end
-    end
-    return
+    game.sqCards[#game.sqCards + 1] = { x = cx, y = y, w = cw, h = ch, sq = sq }
   end
-  -- several squads: one line each
-  lg.setFont(font(13))
-  lg.setColor(1, 1, 1)
-  lg.print(#sqs .. " squads selected   (Q / W use each squad's skill)", x, y)
-  for i, sq in ipairs(sqs) do
-    local ry = y + 22 + (i - 1) * 34
-    local n = 0
-    for _, u in ipairs(sq.members) do if u.alive then n = n + 1 end end
-    lg.setFont(font(13))
-    lg.setColor(1, 0.85, 0.4)
-    lg.print(string.format("%d  %s (%d)", sq.idx, SQ.byType[sq.type].name, n), x, ry + 6)
-    for slot = 1, 2 do skillBtn(x + 170 + (slot - 1) * 212, ry, 204, 28, sq, slot, false) end
+  -- a skill's tooltip, above the panel
+  if tip then
+    local d = tip.def
+    local text = d.name .. (d.aim == "point" and "  (aimed: click the map, or Q/W at the mouse)" or "  (around the leader)")
+      .. "\n" .. d.desc .. string.format("\nCooldown %ds", d.cd)
+    lg.setFont(font(12))
+    local tw = 300
+    local _, lines = font(12):getWrap(text, tw - 16)
+    local th = #lines * 15 + 14
+    local tx = U.clamp(tip.x, 8, lg.getWidth() - tw - 8)
+    local ty2 = L.panelY - UI.ORDERS_H - th - 8
+    lg.setColor(0.04, 0.05, 0.08, 0.96)
+    lg.rectangle("fill", tx, ty2, tw, th, 6)
+    lg.setColor(1, 0.8, 0.25, 0.8)
+    lg.rectangle("line", tx + 0.5, ty2 + 0.5, tw - 1, th - 1, 6)
+    lg.setColor(0.92, 0.94, 0.97)
+    lg.printf(text, tx + 8, ty2 + 7, tw - 16)
   end
 end
 
@@ -1120,10 +1127,7 @@ function UI.drawInfo(game, L)
   local x, y, w = L.infoX, L.panelY + 12, L.infoW
   local foreign = false
   game.sqInfoBtns = nil
-  if game.world.squads and #list > 0 then
-    local sqs = game:selectedSquads()
-    if #sqs > 0 then return UI.drawSquadInfo(game, L, sqs) end
-  end
+  if game.world.squads and not (#list == 0 and game:inspectValid()) then return UI.drawSquadInfo(game, L) end
   if #list == 0 and game:inspectValid() then list = { game.inspect }; foreign = true end
   if #list == 0 then
     lg.setFont(font(14))
@@ -1715,12 +1719,15 @@ local COH_HELP = [[
 COMMANDER OF HEROES - CONTROLS
 
   Left-click a unit ......... selects its whole squad (Alt-click: just that unit)
-  1 - 5 ..................... always select that squad (tap twice to jump to its leader)
-  C ......................... cycle through your squad leaders
+  1 - 5 ..................... select that squad (Shift adds it; twice jumps to its leader)
+  Bottom panel .............. every squad as a card: click to select (Shift adds),
+                              hover a skill to learn it, click a skill to use it
+  ACTIVE SQUAD (gold) ....... the one Q / W fire for. With several squads selected,
+  C ......................... moves "active" to the next selected squad
+                              (nothing or one selected: C steps to the next squad)
   Right-click ............... move (each squad keeps its own pace) / attack a target
   A then click .............. attack-move: the squad forms ranks, marches, then fights and kites
-  Q / W ..................... the leader's two skills, aimed at the mouse
-                              (or click a skill in the squad panel, then click the spot)
+  Q / W ..................... the ACTIVE squad's two skills, aimed at the mouse
   F ......................... flee: back to your HQ, weapons off until repaired
   S / D ..................... stop / hold fire       + / - ... game speed
 
@@ -2402,7 +2409,7 @@ function UI.click(game, x, y, b)
     for _, f in ipairs(game:selectedFactories()) do f.assignGroup = nextG > 0 and nextG or nil end
     return true
   end
-  -- Commander of Heroes: skill buttons in the bottom panel
+  -- Commander of Heroes: skill buttons and squad cards in the bottom panel
   for _, sb in ipairs(game.sqInfoBtns or {}) do
     if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
       local def = require("src.squads").SKILLS[sb.sq.skills[sb.slot].key]
@@ -2412,6 +2419,12 @@ function UI.click(game, x, y, b)
       else
         game:squadSkill(sb.slot, sb.sq)
       end
+      return true
+    end
+  end
+  for _, c in ipairs(game.sqCards or {}) do
+    if x >= c.x and x <= c.x + c.w and y >= c.y and y <= c.y + c.h then
+      game:pickSquad(c.sq, love.keyboard.isDown("lshift", "rshift"))
       return true
     end
   end

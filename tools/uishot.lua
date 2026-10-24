@@ -199,7 +199,15 @@ local function script(mode, secs)
     print("COH over", w.over and w.over.winnerAlly, math.floor(w.time))
     local L = SQ.squadsOf(w, 1)[1].leader
     local fx, fy = (L and L.alive) and L.x or w.capPoints[3].x, (L and L.alive) and L.y or w.capPoints[3].y
-    game:select(L and L.alive and { L } or {})
+    local all = {}
+    for _, sq in ipairs(SQ.squadsOf(w, 1)) do for _, u in ipairs(sq.members) do if u.alive then all[#all + 1] = u end end end
+    game:select(all)
+    game:keypressed("c")
+    if os.getenv("PA_HOVER") then
+      for _ = 1, 2 do game:update(1 / 30); frame() end
+      local b = game.sqInfoBtns and game.sqInfoBtns[3]
+      if b then love.mouse.setPosition(b.x + 10, b.y + 10) end
+    end
     game.cam.zoom = 0.9
     game:centerOn(fx, fy)
     for _ = 1, 6 do game:update(1 / 30); frame() end
