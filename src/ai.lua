@@ -11,6 +11,7 @@ function AI.new(world, team, level, profileKey)
   local self = setmetatable({}, AI)
   self.world = world
   self.team = team
+  world:setKiteSkill(team, level)
   self.rng = love.math.newRandomGenerator(world.map.seed + team * 101)
   -- strength (1-10) and personality are independent
   local d = D.aiLevel(level)

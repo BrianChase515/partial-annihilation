@@ -14,6 +14,7 @@ function AI.new(world, team, level, opts)
   self.world = world
   self.team = team
   self.level = math.max(1, math.min(10, level or 5))
+  world:setKiteSkill(team, self.level)
   if world.teams[team].commander then world.teams[team].commander.aiLevel = self.level end
   self.rng = love.math.newRandomGenerator(team * 977 + (world.map.seed % 100000))
   self.think = 0

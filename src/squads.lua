@@ -256,6 +256,7 @@ function S.newAI(world, team, level)
   local self = setmetatable({}, AI)
   self.world, self.team = world, team
   self.level = math.max(1, math.min(10, level or 5))
+  world:setKiteSkill(team, self.level)
   self.think = math.max(0.4, 1.6 - 0.12 * self.level)
   self.timer = 1
   self.rng = love.math.newRandomGenerator((world.map.seed or 1) + team * 37)

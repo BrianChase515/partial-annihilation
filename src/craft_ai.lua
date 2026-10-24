@@ -74,6 +74,7 @@ function AI.new(world, team, level, opts)
   local self = setmetatable({}, AI)
   self.world, self.team = world, team
   self.level = math.max(1, math.min(10, level or 5))
+  world:setKiteSkill(team, self.level)
   local L = self.level
   local P = (opts and opts.bench) and AI.BENCH or AI.params(L)
   if opts and opts.legacy then P.legacy = true end

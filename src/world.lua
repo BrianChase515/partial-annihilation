@@ -64,6 +64,7 @@ function W.new(opts)
   for i = 0, n - 1 do self.visible[i] = 0; self.explored[i] = false end
   self.fogTimer = 0
   self.noFog = opts.noFog
+  self.noKite = os.getenv("PA_NOKITE") ~= nil -- test harness: switch kiting off to compare
 
   self.nukes = {}
   self.rngCmd = love.math.newRandomGenerator((opts.seed or 1) + 777)
@@ -926,7 +927,8 @@ function W:findTarget(e, range)
   local best, bd, bestIsUnit
   local w = e.def.weapon
   self:query(e.x, e.y, range + 48, function(o)
-    if self:canTarget(e, o) and (not e.def.needsSpotter or self:spotted(e, o)) then
+    -- nobody shoots into the fog: past its own sight a unit needs a friend's eyes on the target
+    if self:canTarget(e, o) and self:spotted(e, o) then
       local d = U.dist(e.x, e.y, o.x, o.y) - (o.def.building and o.def.radius * 0.7 or o.def.radius)
       if d <= range and d >= w.minRange then
         -- prefer armed units, then units, then buildings
@@ -1227,10 +1229,12 @@ function W:updateWeapon(e, dt, focus)
   e.scanTimer = e.scanTimer - dt
   local tgt = nil
   if e.holdFire then return end
-  if focus and focus.alive and (self:canTarget(e, focus) or self:canDeny(e, focus)) and self:inRange(e, focus) then
+  if focus and focus.alive and (self:canTarget(e, focus) or self:canDeny(e, focus)) and self:inRange(e, focus)
+    and (focus.team == nil or not self:hostile(focus.team, e.team) or self:spotted(e, focus)) then
     tgt = focus
   else
-    if e.autoTarget and (not e.autoTarget.alive or not self:inRange(e, e.autoTarget, 10)) then
+    if e.autoTarget and (not e.autoTarget.alive or not self:inRange(e, e.autoTarget, 10)
+      or (e.scanTimer <= 0 and not self:spotted(e, e.autoTarget))) then
       e.autoTarget = nil
     end
     if not e.autoTarget and e.scanTimer <= 0 then
@@ -1276,7 +1280,7 @@ end
 function W:approach(e, o, dt)
   -- move toward a target until inside weapon range
   local w = e.def.weapon
-  if self:inRange(e, o, -8) then
+  if self:inRange(e, o, -8) and (not o.team or not self:hostile(o.team, e.team) or self:spotted(e, o)) then
     e.path = nil
     e.destX = nil
     return true
@@ -1286,6 +1290,126 @@ function W:approach(e, o, dt)
   end
   self:followPath(e, dt, w and self:rangeOf(e) * 0.6 or 20)
   return false
+end
+
+---------------------------------------------------------------------------
+-- Kiting: a ranged unit fighting (attack, attack-move, patrol, guard or idle) steps back from
+-- a shorter-ranged enemy closing in, keeps shooting (weapons fire on the move), then re-engages.
+-- Plain moves and group moves never kite. Computer players kite by difficulty (W:setKiteSkill);
+-- people's units always do.
+
+local KITE_ORDERS = { amove = true, patrol = true, attack = true, guard = true }
+
+function W:setKiteSkill(team, level)
+  self.kiteSkill = self.kiteSkill or {}
+  self.kiteSkill[team] = U.clamp(((level or 5) - 3) / 5, 0, 1)
+end
+
+function W:canKite(e, o)
+  if not e.def.weapon or e.def.building or e.creep or e.neutral or e.passive or e.disarmed or e.holdFire then return false end
+  if e.def.domain == "air" or e.def.weapon.bomb or e.def.worker or e.stunUntil and self.time < e.stunUntil then return false end
+  local m = self:modsOf(e)
+  if m.melee or e.def.melee then return false end
+  if o and not KITE_ORDERS[o.type] then return false end
+  if self.noKite then return false end
+  return true
+end
+
+-- the nearest hostile fighter that is out-ranged by e and closing on it
+function W:kiteThreat(e)
+  local myR = self:rangeOf(e)
+  local best, bd
+  self:query(e.x, e.y, myR + 40, function(o)
+    if o.alive and o ~= e and o.team and not o.def.building and o.def.weapon and not o.neutral and not o.disarmed
+      and self:hostile(o.team, e.team) and self:canTarget(o, e) then
+      local theirR = (o.mods and o.mods.melee or o.def.melee) and math.min(self:rangeOf(o), 100) or self:rangeOf(o)
+      if theirR + 40 < myR then
+        local d = U.dist(e.x, e.y, o.x, o.y)
+        local edge = d - theirR - o.def.radius - e.def.radius
+        local minR = e.def.weapon.minRange or 0
+        if (edge < 60 or d < minR + 30) and (not bd or edge < bd) then best, bd = o, edge end
+      end
+    end
+  end)
+  return best
+end
+
+-- where to step: away from the threat, leaning home, on passable ground, out of enemy tower reach
+function W:kitePoint(e, threat)
+  local theirR = (threat.mods and threat.mods.melee or threat.def.melee) and math.min(self:rangeOf(threat), 100) or self:rangeOf(threat)
+  local d = U.dist(e.x, e.y, threat.x, threat.y)
+  local want = theirR + threat.def.radius + e.def.radius + 90
+  local step = U.clamp(want - d, 50, 150)
+  local ax, ay = U.norm(e.x - threat.x, e.y - threat.y)
+  if ax == 0 and ay == 0 then ax = 1 end
+  local tm = self.teams[e.team]
+  local hx, hy = e.respawnX or (tm and tm.startX) or e.x, e.respawnY or (tm and tm.startY) or e.y
+  local bx, by = U.norm(hx - e.x, hy - e.y)
+  local layer = self:layerOf(e)
+  local base = math.atan2(ay, ax)
+  local best, bs
+  for _, off in ipairs({ 0, 0.55, -0.55, 1.1, -1.1, 1.6, -1.6 }) do
+    local a = base + off
+    local cx, cy = math.cos(a), math.sin(a)
+    local px, py = e.x + cx * step, e.y + cy * step
+    local ok = true
+    if layer then
+      for f = 0.5, 1, 0.5 do
+        local tx, ty = self.map:tileAt(e.x + cx * step * f, e.y + cy * step * f)
+        if not self.map:passable(layer, tx, ty) then ok = false; break end
+      end
+    else
+      ok = px > 0 and py > 0 and px < self.map.w * self.T and py < self.map.h * self.T
+    end
+    if ok then
+      -- never back into an enemy tower or defence
+      self:query(px, py, 480, function(b)
+        if ok and b.alive and b.def.building and b.def.weapon and b.team and self:hostile(b.team, e.team)
+          and not b.neutral and b.built >= 1 and U.dist(px, py, b.x, b.y) < self:rangeOf(b) + e.def.radius + 10 then ok = false end
+      end)
+    end
+    if ok then
+      local s = (cx * ax + cy * ay) + 0.35 * (cx * bx + cy * by)
+      if not bs or s > bs then best, bs = { px, py }, s end
+    end
+  end
+  return best
+end
+
+-- returns true while e is busy stepping back
+function W:updateKite(e, dt, o)
+  if e.kite then
+    local k = e.kite
+    if self.time > k.untilT or not self:canKite(e, o) or (o and o ~= k.order) then
+      e.kite = nil
+      e.path, e.destX = nil, nil
+      e.kiteScan = 0 -- still chased? look again at once
+      return false
+    end
+    local dx, dy = k.x - e.x, k.y - e.y
+    local nx, ny, len = U.norm(dx, dy)
+    if len < 10 then e.kite = nil; e.path, e.destX = nil, nil; return false end
+    local stepLen = math.min(len, self:speedOf(e) * dt)
+    local x0, y0 = e.x, e.y
+    self:tryMove(e, nx * stepLen, ny * stepLen)
+    if U.dist2(x0, y0, e.x, e.y) < 0.01 then e.kite = nil; e.path, e.destX = nil, nil; return false end
+    e.angle = math.atan2(ny, nx)
+    e.moving = true
+    return true
+  end
+  e.kiteScan = (e.kiteScan or 0) - dt
+  if e.kiteScan > 0 then return false end
+  local skill = self.kiteSkill and self.kiteSkill[e.team] or 1
+  e.kiteScan = 0.15 + (1 - skill) * 0.6 -- sharper players react faster
+  if not self:canKite(e, o) then return false end
+  if skill <= 0 or (skill < 1 and math.random() > skill) then return false end
+  local threat = self:kiteThreat(e)
+  if not threat then return false end
+  local p = self:kitePoint(e, threat)
+  if not p then return false end
+  e.kite = { x = p[1], y = p[2], untilT = self.time + 0.6, order = o, threat = threat }
+  e.kites = (e.kites or 0) + 1
+  return true
 end
 
 function W:updateUnit(e, dt)
@@ -1305,6 +1429,13 @@ function W:updateUnit(e, dt)
   if regen and regen > 0 and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + regen * dt); if e.key == "commander" and e.atBase then e.healing = 0.3 end end
   local o = e.orders[1]
   local focus = nil
+
+  if self:updateKite(e, dt, o) then
+    -- stepping back: keep shooting what we were fighting (or whatever is in range)
+    local t = (o and o.type == "attack" and o.target) or e.chase or e.kite.threat
+    self:updateWeapon(e, dt, t)
+    return
+  end
 
   if not o then
     -- idle: retaliate / defend area, then return home

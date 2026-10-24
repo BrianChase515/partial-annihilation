@@ -20,6 +20,14 @@ local CLASSES = { "warden", "ranger", "elementalist", "ascetic", "infiltrator", 
 local VANGUARD = { warden = true, ranger = true, elementalist = true, ascetic = true, infiltrator = true }
 
 local function newWorld(seed, class, class2)
+  if os.getenv("BS_ARENA") then
+    -- Commander Arena rules (BS_ARENA=1): a classic map, no creep waves, the fight in the middle
+    local game = startFn({ mode = "arena", size = 80, seed = seed, autotest = true, template = "classic",
+      players = { { ally = 1, level = 5, class = class }, { ally = 2, level = 5, class = class2 } } })
+    game.ais = {}
+    game.world.arena.waveAt = 1e9
+    return game, game.world
+  end
   local race = (not class or VANGUARD[class]) and "vanguard" or "warband"
   local race2 = (class2 and VANGUARD[class2]) and "vanguard" or "warband"
   local game = startFn({ mode = "craft", size = 88, seed = seed, autotest = true, template = "horseshoe",
@@ -35,6 +43,8 @@ local function brainFor(w, team, seed)
   local b = setmetatable({ world = w, team = team, level = 7, rng = love.math.newRandomGenerator(seed), skillChance = 0.85 },
     { __index = ArenaAI })
   b.nearestEnemyStructure = function() return nil end
+  -- heroes kite like a sharp player (BS_KLEVEL=1..10 to play it worse)
+  w:setKiteSkill(team, tonumber(os.getenv("BS_KLEVEL") or "") or 10)
   return b
 end
 
@@ -54,25 +64,6 @@ local function think(w, h, brain)
   end
   if h.offers and #h.offers > 0 then brain:pickOffer(h) end
   brain:useSkills(h, eh, n >= 4 or eh ~= nil)
-  -- BS_KITE=1: a hero that outranges the enemy keeps it at the edge of its range, like a player would
-  if os.getenv("BS_KITE") and not w:isFleeing(h) and (h.kiteT or 0) <= w.time then
-    local myR = w:rangeOf(h)
-    local m, md
-    for _, o in ipairs(w.entities) do
-      if o.alive and o.team and o.team ~= h.team and o.def.weapon and not o.def.building then
-        local d = U.dist(o.x, o.y, h.x, h.y)
-        if d < myR and (not md or d < md) then m, md = o, d end
-      end
-    end
-    if m and w:rangeOf(m) < myR - 25 and md < myR - 30 then
-      local dx, dy = U.norm(h.x - m.x, h.y - m.y)
-      local back = math.min(140, myR - 15 - md)
-      local x, y = spot(w, h.x + dx * back, h.y + dy * back)
-      w:issue(h, { type = "move", x = x, y = y })
-      w:issue(h, { type = "attack", target = m }, true)
-      h.kiteT = w.time + 0.9
-    end
-  end
 end
 
 local function levelUp(w, h, L, brain)
@@ -92,6 +83,7 @@ end
 
 -- clear the small camp nearest the left base and fight there
 local function arena(w)
+  if w.arena then return w.map.w * w.T / 2, w.map.h * w.T / 2 end
   for _, cp in ipairs(w.craft.camps) do
     for _, u in ipairs(cp.units) do u.alive = false end
   end
@@ -162,8 +154,8 @@ local function duel(a, b, L, seed)
     if os.getenv("BS_DBG") then
       local sk = {}
       for i = 1, 4 do if ha.skills[i] then sk[#sk + 1] = ha.skills[i].key end end
-      print(string.format("D %.1f %s %d/%d (%s) dist %d  |  %s %d/%d  o=%s chase=%s", w.time, a, ha.hp, ha.maxhp, table.concat(sk, ","),
-        U.dist(ha.x, ha.y, hb.x, hb.y), b, hb.hp, hb.maxhp, ha.orders[1] and ha.orders[1].type or "-", ha.chase and ha.chase.key or "-"))
+      print(string.format("D %.1f %s %d/%d (%s) dist %d kites %d |  %s %d/%d  o=%s chase=%s", w.time, a, ha.hp, ha.maxhp, table.concat(sk, ","),
+        U.dist(ha.x, ha.y, hb.x, hb.y), ha.kites or 0, b, hb.hp, hb.maxhp, ha.orders[1] and ha.orders[1].type or "-", ha.chase and ha.chase.key or "-"))
     end
     if not ha.alive or not hb.alive then return true end
     if ha.orders[1] == nil then w:issue(ha, { type = "amove", x = hb.x, y = hb.y }) end
@@ -332,6 +324,7 @@ local function rtsFight(ka, kb, budget, seed)
   local game = startFn({ size = 72, water = 0.15, seed = seed, autotest = true, players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
   game.ais = {}
   local w = game.world
+  w.kiteSkill = nil -- units kite like a sharp player's
   local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
   local function value(k) local c = D.units[k].cost; return c.metal + (c.energy or 0) / 10 end
   local function place(k, team, dx)
