@@ -56,6 +56,7 @@ function love.load(args)
   love.graphics.setDefaultFilter("linear", "linear")
   love.keyboard.setKeyRepeat(false)
   require("src.sfx").init()
+  require("src.ghost").install() -- Mirror and Nemesis, if this version has unlocked them
   for i, a in ipairs(args or {}) do
     if a == "--autotest" then
       autotest = { minutes = tonumber(args[i + 1]) or 15, seed = tonumber(args[i + 2]) or 12345, size = tonumber(args[i + 3]) or 96,

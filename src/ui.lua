@@ -1465,6 +1465,27 @@ function UI.drawOver(game)
   local win = o.winner == 1
   local px, py = w / 2 - OVER_W / 2, h / 2 - OVER_H / 2
   panelBox(px, py, OVER_W, OVER_H, 0.97)
+  -- the fifth finished Annihilation game: introduce Mirror and Nemesis
+  if game.ghostUnlocked then
+    local GH = require("src.ghost")
+    local bw = math.min(w - 40, OVER_W)
+    local _, lines = font(14):getWrap(GH.UNLOCK_TEXT, bw - 28)
+    local bh = #lines * font(14):getHeight() + 22
+    local by = math.max(8, py - bh - 10)
+    panelBox(w / 2 - bw / 2, by, bw, bh, 0.97)
+    lg.setColor(1, 0.85, 0.35, 0.9)
+    lg.setLineWidth(2)
+    lg.rectangle("line", w / 2 - bw / 2 + 1, by + 1, bw - 2, bh - 2, 6)
+    lg.setFont(font(14))
+    lg.setColor(1, 0.92, 0.7)
+    lg.printf(GH.UNLOCK_TEXT, w / 2 - bw / 2 + 14, by + 11, bw - 28)
+  elseif game.ghostProgress and not require("src.ghost").unlocked() then
+    lg.setFont(font(13))
+    lg.setColor(0.8, 0.85, 0.95)
+    local t = string.format("Finished Annihilation games: %d / %d - two opponents that learn from you unlock at %d.",
+      game.ghostProgress, require("src.ghost").NEEDED, require("src.ghost").NEEDED)
+    lg.print(t, w / 2 - font(13):getWidth(t) / 2, py - 22)
+  end
   local title = win and "VICTORY" or "DEFEAT"
   lg.setFont(font(44))
   if win then lg.setColor(0.4, 1, 0.5) else lg.setColor(1, 0.4, 0.35) end

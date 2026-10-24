@@ -460,6 +460,34 @@ local function run()
         na, pr[1], nb, pr[2], 100 * sw / runs, 100 * sa / runs, 100 * sb / runs))
       io.stdout:flush()
     end
+  elseif what == "ghost" then
+    -- Mirror / Nemesis from five made-up games (all tanks, no anti-air, slow expansion), then a match
+    local GH = require("src.ghost")
+    GH.data = { games = {}, completed = 0, unlocked = false }
+    GH.save = function() end
+    for i = 1, 5 do
+      GH.data.games[i] = { units = { tank = 30, scout = 4, builder = 5 }, built = { turret = 1, mex = 6 }, mex5 = 4, mex10 = 7,
+        firstAttack = 380, oppLevel = 5, won = i % 2 == 0, cmdUps = {} }
+    end
+    GH.data.completed, GH.data.unlocked = 5, true
+    GH.install()
+    for _, pp in ipairs(require("src.defs").profiles) do if pp.ghost then print("GHOST", pp.key, "level", GH.level(pp.key), pp.desc) end end
+    local game = startFn({ size = 96, water = 0.25, seed = 4321, autotest = true,
+      players = { { ally = 1, level = 5, profile = "Balanced" }, { ally = 2, level = GH.level(os.getenv("BS_GHOST") or "Nemesis"), profile = os.getenv("BS_GHOST") or "Nemesis" } } })
+    local w = game.world
+    while w.time < 600 and not w.over do
+      for _ = 1, 30 do w:update(1 / 30); for _, ai in ipairs(game.ais) do ai:update(1 / 30) end end
+      frame()
+    end
+    local cnt = { {}, {} }
+    for _, e in ipairs(w.entities) do if e.alive and e.team >= 1 and e.team <= 2 and not e.def.building then cnt[e.team][e.key] = (cnt[e.team][e.key] or 0) + 1 end end
+    for t = 1, 2 do
+      local parts = {}
+      for k, v in pairs(cnt[t]) do parts[#parts + 1] = k .. "=" .. v end
+      table.sort(parts)
+      print("TEAM", t, game.ais[t] and game.ais[t].profileName, table.concat(parts, " "))
+    end
+    print("OVER", w.over and w.over.winnerAlly, math.floor(w.time))
   elseif what == "rtsone" then
     print("RESULT", rtsFight(args[2], args[3], 1200, 9701))
   elseif what == "stats" then

@@ -260,8 +260,17 @@ function G.new(opts)
     end
     if self.log then self.log:event(string.format("%s %s promoted: %s", D.teamName[g.team], g.def.name, g.genName)) end
   end
+  -- Annihilation games you play to the end teach the Mirror and Nemesis opponents
+  if not self.arena and not self.craft and not self.opts.autotest and self.players[1] and self.players[1].human then
+    local GH = require("src.ghost")
+    self.ghostRec = GH.newRecorder(world)
+    local lv = 0
+    for i, p in ipairs(self.players) do if not p.human and world:hostile(i, 1) then lv = math.max(lv, p.level or 5) end end
+    self.ghostRec.oppLevel = lv > 0 and lv or 5
+  end
   world.onBuilt = function(b)
     if b.team == 1 and b.def.building then VOICE.say("construction") end
+    if self.ghostRec then require("src.ghost").onBuilt(self.ghostRec, b) end
   end
   if self.arena then
     world.onCommanderDown = function(c, attacker)
@@ -1062,6 +1071,12 @@ function G:update(dt)
       self.overTime = love.timer.getTime()
       local won = self.world.over.winnerAlly == self.world.ally[1]
       VOICE.say(won and "victory" or "defeat")
+      if self.ghostRec then
+        local GH = require("src.ghost")
+        self.ghostUnlocked = GH.finish(self.ghostRec, self.world)
+        self.ghostProgress = GH.completed()
+        self.ghostRec = nil
+      end
       MUSIC.finale(won)
       local w = self.world
       if w.score then
@@ -1087,6 +1102,10 @@ function G:update(dt)
         end
       end
     end
+  end
+  if self.ghostRec then
+    self.ghostT = (self.ghostT or 0) - dt
+    if self.ghostT <= 0 then self.ghostT = 5; require("src.ghost").sample(self.ghostRec, self.world) end
   end
   self:applyMouseLock()
   -- dropship encounter: a brief, suspenseful pause while the coin flips

@@ -15,7 +15,9 @@ function AI.new(world, team, level, profileKey)
   -- strength (1-10) and personality are independent
   local d = D.aiLevel(level)
   if profileKey == "Random" then
-    profileKey = D.profiles[self.rng:random(1, #D.profiles - 1)].key
+    local pool = {}
+    for _, pp in ipairs(D.profiles) do if not pp.ghost and pp.key ~= "Random" then pool[#pool + 1] = pp.key end end
+    profileKey = pool[self.rng:random(1, #pool)]
   end
   local p = D.profile(profileKey)
   self.profile = p
@@ -47,6 +49,7 @@ function AI.new(world, team, level, profileKey)
   -- Scouts as artillery spotters: level 5 knows the trick and uses it now and then, level 10 always
   local L0 = (self.diff and self.diff.level) or level or 5
   self.spotChance = L0 >= 5 and math.min(1, 0.35 + 0.13 * (L0 - 5)) or 0
+  if p.spotChance then self.spotChance = math.max(self.spotChance, p.spotChance) end
   self.spotters = {}
   self.lastWave = -999
   local tm = world.teams[team]

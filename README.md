@@ -161,6 +161,8 @@ Shapes tell you the domain, and the number tells you the type:
 | Triangle | Air | Fighter (1), Bomber (2), Gunship (3) |
 | Circle | Sea | Sea Constructor (B), Patrol Boat (1), Destroyer (2), Submarine (3, only ships can hit it), Battleship (4, long oval hull) |
 
+**Mirror and Nemesis.** Finish five Annihilation games on a version (win or lose; games you quit don't count) and two new enemy personalities unlock. **Mirror** plays like you: your unit mix, expansion speed, defences and attack timing, learned from your last games. **Nemesis** plays against you: it finds two of your habits (no anti-air, slow expansion, few defences, too many tanks...) and builds to punish them. Both pick their own strength from your record, and they reset with each new version.
+
 **Artillery needs spotters.** It only sees 270, but shoots 440: it fires at full range only at targets a friendly unit or building can see. Scouts see farthest (420), so a Scout or two parked at the edge of an enemy's defences turns your artillery loose on them.
 
 **Buildings:**

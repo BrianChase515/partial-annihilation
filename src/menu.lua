@@ -354,9 +354,16 @@ function Menu:rects()
     if s.on then
       r[#r + 1] = { x = x0 + 78, y = yy, w = 90, h = 36, label = "Team " .. s.team, slot = i, kind = "team" }
       if not s.human then
-        r[#r + 1] = { x = x0 + 176, y = yy, w = 32, h = 36, label = "-", slot = i, kind = "lvdown" }
-        r[#r + 1] = { x = x0 + 212, y = yy, w = 132, h = 36, label = s.level .. "  " .. LEVEL_NAMES[s.level], slot = i, kind = "lvlabel" }
-        r[#r + 1] = { x = x0 + 348, y = yy, w = 32, h = 36, label = "+", slot = i, kind = "lvup" }
+        local prof = D.profiles[s.prof]
+        if prof and prof.ghost then
+          -- Mirror and Nemesis pick their own strength
+          local L = require("src.ghost").level(prof.key)
+          r[#r + 1] = { x = x0 + 176, y = yy, w = 204, h = 36, label = "Auto  (level " .. L .. ")", slot = i, kind = "lvauto" }
+        else
+          r[#r + 1] = { x = x0 + 176, y = yy, w = 32, h = 36, label = "-", slot = i, kind = "lvdown" }
+          r[#r + 1] = { x = x0 + 212, y = yy, w = 132, h = 36, label = s.level .. "  " .. LEVEL_NAMES[s.level], slot = i, kind = "lvlabel" }
+          r[#r + 1] = { x = x0 + 348, y = yy, w = 32, h = 36, label = "+", slot = i, kind = "lvup" }
+        end
         r[#r + 1] = { x = x0 + 388, y = yy, w = 132, h = 36, label = D.profiles[s.prof].key .. "  v", slot = i, kind = "prof" }
       end
     end
@@ -585,7 +592,7 @@ function Menu:draw()
   local hy = y + 44 + 5 * 40 + 34
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("ANNIHILATION HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
+  lg.print("HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
   local official = not (self.mods.alien or self.mods.drops)
   if official then lg.setColor(0.5, 0.9, 0.55) else lg.setColor(1, 0.6, 0.35) end
   local ot = official and "this game counts" or "modifiers on: unofficial"
@@ -633,7 +640,9 @@ function Menu:draw()
   local tip = self.mode == "arena"
     and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
     or self.mode == "craft" and "Tip: keep five workers on gold and a few on wood, build Farms before you need them, and creep with your hero early."
-    or "Tip: build Metal Extractors on the yellow deposits and Solar Collectors for energy, then a Vehicle Plant. Kill enemy Commanders to win."
+    or (require("src.ghost").unlocked() and "Tip: Mirror (plays like you) and Nemesis (plays against your habits) are in the personality list."
+      or string.format("Finish %d more Annihilation games (win or lose) to unlock two opponents that learn from how you play.",
+        math.max(0, require("src.ghost").NEEDED - require("src.ghost").completed())))
   -- (skipped when the buttons reach the bottom of a small screen)
   if not (self.mode == "arena" and self.arenaStartY and self.arenaStartY + 104 > h - 44) then
     lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 40)
@@ -867,7 +876,10 @@ function Menu:options()
   local players = {}
   for _, s in ipairs(self.slots) do
     if s.on then
-      players[#players + 1] = { human = s.human, ally = s.team, level = s.level, profile = (not s.human) and D.profiles[s.prof].key or nil }
+      local prof = (not s.human) and D.profiles[s.prof] or nil
+      local lvl = s.level
+      if prof and prof.ghost then lvl = require("src.ghost").level(prof.key) end
+      players[#players + 1] = { human = s.human, ally = s.team, level = lvl, profile = prof and prof.key or nil }
     end
   end
   local o = {

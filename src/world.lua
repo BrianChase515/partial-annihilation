@@ -1568,6 +1568,7 @@ function W:produce(f, key)
   local u = self:spawn(key, f.team, x, y)
   u.homeX, u.homeY = x, y
   if self.craft then CRAFT.onSpawn(self, u) end
+  if self.onProduced then self.onProduced(u) end
   local rt = f.rally and f.rally.type == "guard" and f.rally.target
   if rt and rt.alive and self:layerOf(rt) == self:layerOf(u) or (rt and rt.alive and d.domain == "air") then
     -- rally onto a unit: new units join it and follow it around
