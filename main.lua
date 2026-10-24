@@ -51,6 +51,24 @@ local function fitWindow(args)
   end
 end
 
+-- Text lands on whole pixels: centred labels often fall between pixels, and with smooth
+-- filtering that draws them blurry (worst on small fonts and on a Retina or Deck screen)
+do
+  local lg = love.graphics
+  local print0, printf0 = lg.print, lg.printf
+  local floor = math.floor
+  lg.print = function(t, x, y, ...)
+    if type(x) == "number" then x = floor(x + 0.5) end
+    if type(y) == "number" then y = floor(y + 0.5) end
+    return print0(t, x, y, ...)
+  end
+  lg.printf = function(t, x, y, ...)
+    if type(x) == "number" then x = floor(x + 0.5) end
+    if type(y) == "number" then y = floor(y + 0.5) end
+    return printf0(t, x, y, ...)
+  end
+end
+
 function love.load(args)
   fitWindow(args)
   love.graphics.setDefaultFilter("linear", "linear")
