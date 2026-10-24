@@ -37,13 +37,68 @@ local function center(x, y)
   game:centerOn(x, y)
 end
 
+-- the soundtrack of a recording: every sound the game makes while frames are being captured,
+-- logged with its time, loudness and pan (tools/trailer_audio.py mixes them with the score)
+local audio = { ev = {}, int = {}, busyUntil = -1 }
+local recording = false
+local function tnow() return frameNo / FPS end
+local function placed(x, y, view)
+  if not view then return 0, 1 end
+  local dx, dy = x - view.cx, y - view.cy
+  local hw = math.max(200, view.halfW)
+  local pan = math.max(-1, math.min(1, dx / hw)) * 0.8
+  local d = math.sqrt(dx * dx + dy * dy) / hw
+  local fall = d <= 1 and 1 - 0.3 * d or math.max(0, 0.7 - (d - 1) * 0.9)
+  return pan, fall
+end
+local function hookAudio()
+  local SFX, CR, VO = require("src.sfx"), require("src.cries"), require("src.voice")
+  SFX.recorder = function(name, x, y, view, vol)
+    if not recording then return end
+    local mix = SFX.MIX[name] or { 0.5, 0.05 }
+    local pan, fall = placed(x, y, view)
+    local v = (vol or 1) * mix[1] * fall * (SFX.combatVolume or 1)
+    if v < 0.02 then return end
+    audio.ev[#audio.ev + 1] = string.format("sfx\t%s\t%.3f\t%.3f\t%.2f\t%.2f\t%.3f", name, tnow(), v, pan, SFX.pitchMul or 1, mix[2])
+  end
+  CR.recorder = function(key, u, view, vol, urgent)
+    if not recording then return end
+    local t = tnow()
+    if t < audio.busyUntil and not (urgent and audio.busyHurt) then return end
+    local pan, fall = placed(u.x, u.y, view)
+    local v = (vol or 1) * fall
+    if v < 0.03 then return end
+    audio.ev[#audio.ev + 1] = string.format("voice\t%s\t%.3f\t%.3f\t%.2f\t1\t0", key, t, v, pan)
+    audio.busyUntil, audio.busyHurt = t + (key:find("death") and 1.0 or 1.8), key:find("hurt") ~= nil
+    return true
+  end
+  VO.recorder = function(key)
+    if not recording or tnow() < audio.busyUntil then return end
+    audio.ev[#audio.ev + 1] = string.format("announcer\t%s\t%.3f\t0.9\t0\t1\t0", key, tnow())
+    audio.busyUntil, audio.busyHurt = tnow() + 2.4, false
+  end
+end
+local function saveAudio()
+  local out = {}
+  for _, l in ipairs(audio.ev) do out[#out + 1] = l end
+  for i, v in ipairs(audio.int) do out[#out + 1] = string.format("int\t%d\t%.3f", i, v) end
+  love.filesystem.write("trailer_" .. mode .. "_audio.txt", table.concat(out, "\n"))
+  log("audio events", #audio.ev)
+end
+
 -- record `seconds` of play at the trailer frame rate with a caption; `each(i)` can stage things
 local function scene(text, seconds, each, opts)
   opts = opts or {}
   caption, capT, capY = text, 0, opts.capY
   local n = math.floor(seconds * FPS)
+  recording = true
   for i = 1, n do
     if not opts.still then game:update(1 / FPS * (opts.speed or 1)) end
+    -- how heavy the fighting is on screen, for the music mix
+    local k = 0
+    local cx, cy = game.cam.x, game.cam.y
+    for _, p in ipairs(game.world.projectiles) do if (p.x - cx) ^ 2 + (p.y - cy) ^ 2 < 700 * 700 then k = k + 1 end end
+    audio.int[frameNo + 1] = math.min(1, k / 10)
     if each then each(i, n) end
     if cleanNotices then game.notices = {} end
     capT = i / n
@@ -51,6 +106,7 @@ local function scene(text, seconds, each, opts)
     pending = string.format("trailer_%s_%05d.png", mode, frameNo)
     frame()
   end
+  recording = false
   caption = nil
 end
 
@@ -588,6 +644,7 @@ end
 -- War is Hell: deep fog, named crews, bunkers, blood (both sides played by the computer)
 local function wihScript()
   frame()
+  hookAudio()
   local SQ = require("src.squads")
   game = startFn({ mode = "rts", coh = true, size = 128, water = 0.12, seed = 1944, mods = { squads = true },
     squadSetup = SQ.defaults(), cohMode = "wih", hillFrac = 0.22, rockFrac = 0.06,
@@ -620,12 +677,35 @@ local function wihScript()
   scene("Deep fog. Find them before they find you.", 4.5, function(i) game.notices = {}; if i % 8 == 0 then focusFight(3) end end)
   scene("Take the high ground - or dig into a bunker.", 4.5, function(i) if i % 8 == 0 then focusFight(3) end end)
   scene("When they die, they die.", 4.5, function(i) if i % 8 == 0 then focusFight(2) end end)
+  -- a barrage from our battery onto whatever it can reach
+  local bat
+  for _, sq in ipairs(mine) do if sq.type == "battery" and sq.leader and sq.leader.alive then bat = sq end end
+  local foe
+  if bat then
+    for _ = 1, 30 do
+      for _, o in ipairs(w.entities) do
+        if o.alive and o.team == 2 and o.squad and U.dist(o.x, o.y, bat.leader.x, bat.leader.y) < 900 then foe = o; break end
+      end
+      if foe then break end
+      simFast(1)
+    end
+  end
+  if foe and bat and bat.leader.alive then
+    bat.skills[1].readyAt = 0
+    w.visionSources[#w.visionSources + 1] = { x = foe.x, y = foe.y, r = 220, untilT = w.time + 8, ally = w.ally[1] }
+    game:select({ bat.leader }); game.activeSq = bat
+    SQ.cast(w, bat, 1, foe.x, foe.y)
+    local fx2, fy2 = foe.x, foe.y
+    game.cam.zoom = 0.9
+    scene("Every squad has a veteran leader and two skills: Barrage!", 5, function() center(fx2, fy2) end)
+  end
   -- 3. the aftermath
   simFast(25)
   game.cam.zoom = 0.85
   pickAll()
   local x, y = mid(mine)
   scene("Commander of Heroes: War is Hell - Partial Annihilation", 4, function() local a, b = mid(mine); center(a, b) end)
+  saveAudio()
 end
 
 function S.start(fn, m)
