@@ -1288,7 +1288,7 @@ Camera
 
 Game  (icons: game-icons.net, CC BY 3.0)
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
-  F11 = fullscreen,  F1 = this help
+  F11 or Ctrl+Cmd+F = fullscreen / windowed (also in the Esc menu),  F1 = this help
 
 Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20
   (Z / X or click a card). Level 5 = NUKE (N): destroys every building in the circle,
@@ -1397,13 +1397,15 @@ function UI.menuRects()
   local w, h = lg.getDimensions()
   local bw = 280
   local x = (w - bw) / 2
-  local y = h / 2 - 110
+  local y = h / 2 - 138
+  local fs = love.window.getFullscreen()
   return {
     { x = x, y = y, w = bw, h = 44, label = "Resume", action = "resume" },
     { x = x, y = y + 56, w = bw, h = 44, label = "Controls (F1)", action = "help" },
-    { x = x, y = y + 112, w = bw, h = 44, label = "Save this map...", action = "savemap" },
-    { x = x, y = y + 168, w = bw, h = 44, label = "Surrender & return to title", action = "quit" },
-    { x = x, y = y + 224, w = bw, h = 44, label = "Exit game", action = "exit" },
+    { x = x, y = y + 112, w = bw, h = 44, label = fs and "Windowed (Ctrl+Cmd+F)" or "Fullscreen (Ctrl+Cmd+F)", action = "fullscreen" },
+    { x = x, y = y + 168, w = bw, h = 44, label = "Save this map...", action = "savemap" },
+    { x = x, y = y + 224, w = bw, h = 44, label = "Surrender & return to title", action = "quit" },
+    { x = x, y = y + 280, w = bw, h = 44, label = "Exit game", action = "exit" },
   }
 end
 
@@ -1412,7 +1414,7 @@ function UI.drawMenu()
   lg.setColor(0, 0, 0, 0.55)
   lg.rectangle("fill", 0, 0, w, h)
   local rects = UI.menuRects()
-  panelBox(rects[1].x - 30, rects[1].y - 70, rects[1].w + 60, 366, 0.97)
+  panelBox(rects[1].x - 30, rects[1].y - 70, rects[1].w + 60, 422, 0.97)
   lg.setFont(font(22))
   lg.setColor(1, 1, 1)
   lg.print("Paused", w / 2 - font(22):getWidth("Paused") / 2, rects[1].y - 52)
@@ -1425,6 +1427,9 @@ function UI.menuClick(game, x, y, button_)
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "resume" then game.menuOpen = false
       elseif r.action == "help" then game.menuOpen = false; game.showHelp = true
+      elseif r.action == "fullscreen" then
+        love.window.setFullscreen(not love.window.getFullscreen(), "desktop")
+        game:clampCam()
       elseif r.action == "savemap" then if game.arena then game:notice("Arena maps can't be saved", 1.5) else game:startNaming() end
       elseif r.action == "quit" then game.quitToTitle = true
       elseif r.action == "exit" then love.event.quit() end
@@ -1787,7 +1792,13 @@ function UI.draw(game)
     local ox = w / 2 - total / 2
     local oy = L.panelY - ch - 34 - UI.ORDERS_H
     lg.setFont(font(15))
-    local head = string.format("Commander level %d!  Choose an upgrade%s", myc.clevel - #myc.offers + 1,
+    -- heroes go by their class name (Ranger level 3!), the RTS Commander by his title
+    local who = "Commander"
+    if myc.class and game.world.heroes then
+      local cls = require("src.arena").byClass[myc.class]
+      who = cls and cls.name or who
+    end
+    local head = string.format("%s level %d!  Choose an upgrade%s", who, myc.clevel - #myc.offers + 1,
       #myc.offers > 1 and string.format("  (%d more waiting)", #myc.offers - 1) or "")
     lg.setColor(0, 0, 0, 0.6)
     lg.rectangle("fill", w / 2 - font(15):getWidth(head) / 2 - 10, oy - 28, font(15):getWidth(head) + 20, 24, 5)

@@ -68,6 +68,7 @@ function W.new(opts)
   self.nukes = {}
   self.rngCmd = love.math.newRandomGenerator((opts.seed or 1) + 777)
   MODS.init(self, opts.mods)
+  if opts.experimental then self.official = false end -- odd map / format mixes don't score
   -- random starting corners. On four-corner maps every player gets a random corner, so
   -- the enemy may be next to you or across the map; teammates get neighbouring corners.
   -- heroes with skills and level-up cards: the Arena and Commander Craft

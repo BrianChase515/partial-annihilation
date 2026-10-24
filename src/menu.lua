@@ -26,6 +26,27 @@ local ATEMPLATES = {
   { "battlefield", "Battlefield", "Battlefield (DOTA style): three lanes, a river, jungle camps in every quarter, two shrines and a Colossus that alternates between two pits. Randomized every match." },
 }
 local ASIZES = { { "Small", 64 }, { "Medium", 80 }, { "Large", 96 }, { "Huge", 112 } }
+-- which formats each map is built for; the size follows from map and format. "Experimental" on
+-- the title screen unlocks any mix (and makes the game unofficial)
+local AMAP_FORMATS = {
+  classic = { "1v1", "1v2", "2v1", "2v2", "FFA 3", "FFA 4" },
+  longroad = { "1v1", "2v2", "3v3" },
+  gauntlet = { "1v1", "1v2", "2v1", "2v2" },
+  open = { "1v1", "2v2", "3v3", "FFA 4" },
+  treeline = { "2v2", "3v3" },
+  battlefield = { "3v3", "5v5" },
+}
+local function aformatOK(tmpl, fname)
+  for _, f in ipairs(AMAP_FORMATS[tmpl] or {}) do if f == fname then return true end end
+  return false
+end
+local function aautoSize(tmpl, fmt)
+  local n = fmt.ffa or (fmt[2] + fmt[3])
+  if n >= 10 then return 4 end
+  if tmpl == "treeline" or tmpl == "battlefield" then return n >= 6 and 3 or 3 end
+  if n <= 2 then return 2 end
+  return 3
+end
 local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2, 1 }, { "3v3", 3, 3 }, { "5v5", 5, 5 }, { "FFA 3", 1, 0, ffa = 3 }, { "FFA 4", 1, 0, ffa = 4 } }
 -- arena slots: 1 you, 2 ally, 3 enemy, 4 enemy 2, 5 ally 2, 6 enemy 3
 local ASLOT_NAMES = { "You", "Ally", "Enemy", "Enemy 2", "Ally 2", "Enemy 3", "Ally 3", "Enemy 4", "Ally 4", "Enemy 5" }
@@ -108,17 +129,31 @@ function Menu:arenaRects()
   local r = {}
   self:tabRects(r)
   local A = self.arena
-  for i, o in ipairs(ASIZES) do
-    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y, w = 110, h = 34, label = o[1], afield = "size", value = i, active = A.size == i, rowLabel = i == 1 and "Arena size" or nil }
-  end
-  for i, o in ipairs(AFORMATS) do
-    r[#r + 1] = { x = x0 + (i - 1) * 70, y = y + 44, w = 66, h = 34, label = o[1], afield = "format", value = i, active = A.format == i, rowLabel = i == 1 and "Format" or nil }
-  end
+  local tkey = ATEMPLATES[A.template or 1][1]
+  -- 1. the map; 2. the formats it was built for; 3. size (automatic unless Experimental)
   for i, o in ipairs(ATEMPLATES) do
     -- two groups: simple lane maps, then the jungle maps (camps, shrines, the Colossus)
-    r[#r + 1] = { x = x0 + (i - 1) * 92 + (i >= 5 and 18 or 0), y = y + 88, w = 88, h = 34, jungle = i >= 5, label = o[2], afield = "template", value = i,
+    r[#r + 1] = { x = x0 + (i - 1) * 92 + (i >= 5 and 18 or 0), y = y, w = 88, h = 34, jungle = i >= 5, label = o[2], afield = "template", value = i,
       active = (A.template or 1) == i, rowLabel = i == 1 and "Map" or nil, tmpl = i }
   end
+  local fx = 0
+  for i, o in ipairs(AFORMATS) do
+    if A.experimental or aformatOK(tkey, o[1]) then
+      r[#r + 1] = { x = x0 + fx * 70, y = y + 44, w = 66, h = 34, label = o[1], afield = "format", value = i, active = A.format == i,
+        rowLabel = fx == 0 and "Format" or nil }
+      fx = fx + 1
+    end
+  end
+  if A.experimental then
+    for i, o in ipairs(ASIZES) do
+      r[#r + 1] = { x = x0 + (i - 1) * 92, y = y + 88, w = 88, h = 34, label = o[1], afield = "size", value = i, active = A.size == i, rowLabel = i == 1 and "Arena size" or nil }
+    end
+  else
+    local si = aautoSize(tkey, AFORMATS[A.format])
+    r[#r + 1] = { x = x0, y = y + 88, w = 200, h = 34, label = "Size: " .. ASIZES[si][1] .. " (automatic)", kind = "info", rowLabel = "Arena size", small = true }
+  end
+  r[#r + 1] = { x = x0 + 376, y = y + 88, w = 144, h = 34, label = A.experimental and "Experimental: ON" or "Experimental", kind = "aexp",
+    active = A.experimental, small = true }
   local ty = y + 160
   local ffa = AFORMATS[A.format].ffa
   local names = ffa and { "You", "Rival 3", "Rival 1", "Rival 2" } or ASLOT_NAMES
@@ -566,12 +601,12 @@ function Menu:draw()
     -- captions under the two map groups
     lg.setFont(R.font(11))
     lg.setColor(0.62, 0.66, 0.74)
-    lg.print("simple: lanes, towers, creeps", x0 + 4, y + 124)
+    lg.print("simple: lanes, towers, creeps", x0 + 4, y - 16)
     lg.setColor(0.78, 0.6, 1)
-    lg.print("jungle: camps, shrines, Colossus", x0 + 4 * 92 + 18 + 4, y + 124)
+    lg.print("jungle: camps, shrines, Colossus", x0 + 4 * 92 + 18 + 4, y - 16)
     lg.setColor(0.72, 0.42, 1, 0.5)
     lg.setLineWidth(1)
-    lg.line(x0 + 4 * 92 + 7, y + 90, x0 + 4 * 92 + 7, y + 136)
+    lg.line(x0 + 4 * 92 + 7, y - 14, x0 + 4 * 92 + 7, y + 34)
     self:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   else
   -- personality description
@@ -791,8 +826,23 @@ function Menu:mousepressed(x, y, b)
       elseif r.kind == "clvup" then self.craft.level = math.min(10, self.craft.level + 1)
       elseif r.kind == "lvlabel" and r.clevel then self.craft.level = (self.craft.level - 1 + dir) % 10 + 1
       elseif r.afield then self.arena[r.afield] = r.value
+        -- a map change keeps the format only if the map was built for it
+        if r.afield == "template" and not self.arena.experimental then
+          local tk = ATEMPLATES[r.value][1]
+          if not aformatOK(tk, AFORMATS[self.arena.format][1]) then
+            for i, o in ipairs(AFORMATS) do if o[1] == AMAP_FORMATS[tk][1] then self.arena.format = i; break end end
+          end
+        end
         -- ten Commanders need room: 5v5 starts on a Huge map (you can still pick another)
         if r.afield == "format" and AFORMATS[r.value][1] == "5v5" then self.arena.size = #ASIZES end
+      elseif r.kind == "aexp" then
+        self.arena.experimental = not self.arena.experimental
+        if not self.arena.experimental then
+          local tk = ATEMPLATES[self.arena.template or 1][1]
+          if not aformatOK(tk, AFORMATS[self.arena.format][1]) then
+            for i, o in ipairs(AFORMATS) do if o[1] == AMAP_FORMATS[tk][1] then self.arena.format = i; break end end
+          end
+        end
       elseif r.kind == "aclass" then as.class = (as.class + dir) % (#ARENA.CLASSES + 1)
       elseif r.kind == "alvdown" then as.level = math.max(1, as.level - 1)
       elseif r.kind == "alvup" then as.level = math.min(10, as.level + 1)
@@ -878,7 +928,9 @@ function Menu:options()
           class = sl.class > 0 and ARENA.CLASSES[sl.class].key or nil }
       end
     end
-    return { mode = "arena", size = ASIZES[A.size][2], players = players, menuMode = "arena", arenaSetup = A, craftSetup = self.craft,
+    local sizeI = A.experimental and A.size or aautoSize(ATEMPLATES[A.template or 1][1], AFORMATS[A.format])
+    return { mode = "arena", size = ASIZES[sizeI][2], players = players, menuMode = "arena", arenaSetup = A, craftSetup = self.craft,
+      experimental = A.experimental,
       template = ATEMPLATES[A.template or 1][1],
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end
