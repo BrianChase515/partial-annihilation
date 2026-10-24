@@ -1038,6 +1038,10 @@ end
 
 function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
+  -- Commander of Heroes: an HQ can't be hurt while its side still holds a capture point
+  if o.key == "hq" and self.squads and self.capPoints then
+    for _, p in ipairs(self.capPoints) do if p.owner == self.ally[o.team] then return end end
+  end
   if o.sqTaken then amount = amount * o.sqTaken end -- Squad Tactics: Entrench
   if self.craft then amount = amount * CRAFT.armorMul(self, o, attacker) end
   if self.heroes then

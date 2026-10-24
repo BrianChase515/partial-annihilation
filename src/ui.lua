@@ -1758,7 +1758,7 @@ HOW TO WIN
   Squad units are 60% tougher than in Annihilation: fights last long enough to use skills.
   Five capture points. Ground units standing on a point take it - aircraft can't.
   Hold more points than the enemy and their tickets drain; every unit lost costs tickets.
-  Run them out of tickets, or destroy their HQ.
+  Run them out of tickets, or destroy their HQ (it can't be hurt while they hold a point).
   Units heal fast at your HQ. Fallen members are replaced there - faster the more points
   you hold. A fallen leader returns after 45 seconds (his squad has no skills meanwhile).
 

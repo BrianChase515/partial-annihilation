@@ -63,6 +63,12 @@ S.FIELD_HEAL = 0.006    -- per second anywhere, after 6 s without being hit
 S.LEADER_RESPAWN = 45
 S.REINFORCE = 30        -- a fallen member is replaced at the HQ this long after (less when holding points)
 S.TICKETS = 1000
+-- match lengths: tickets per side (and par) for a quick, standard or long game
+S.LENGTHS = {
+  quick = { tickets = 280, par = 6, name = "Quick" },
+  standard = { tickets = 620, par = 11, name = "Standard" },
+  long = { tickets = 1000, par = 18, name = "Long" },
+}
 S.DRAIN = 0.4         -- tickets a second per point of difference
 S.CAP_R = 160           -- capture radius
 S.CAP_TIME = 14         -- seconds for one unit to take a neutral point
@@ -195,7 +201,9 @@ function S.setup(world, opts)
     -- each side's pool grows with its size (2v2: twice the squads, half again the tickets)
     local size = 0
     for t2 = 1, world.np do if world.ally[t2] == world.ally[t] then size = size + 1 end end
-    world.squads.tickets[world.ally[t]] = S.TICKETS * (1 + 0.5 * (size - 1))
+    local len = S.LENGTHS[opts.cohLength or (os.getenv("PA_COHLEN") or "standard")] or S.LENGTHS.standard
+    world.squads.tickets[world.ally[t]] = len.tickets * (1 + 0.5 * (size - 1))
+    world.parTime = len.par * 60
     -- the HQ where the Commander would stand
     local tx, ty = map:tileAt(tm.startX, tm.startY)
     local hq
@@ -254,7 +262,6 @@ function S.setup(world, opts)
     end
   end
   setupPoints(world)
-  world.parTime = 18 * 60
   -- no economy here: no metal deposits on the map or the minimap
   map.deposits = {}
 end
