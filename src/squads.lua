@@ -17,8 +17,8 @@ S.MAX_AIR = 1
 S.TYPES = {
   { key = "armor", name = "Armor", unit = "tank", size = 4, skills = { "hulldown", "smoke" },
     desc = "Four Tanks. Holds ground, soaks fire, takes points." },
-  { key = "battery", name = "Battery", unit = "artillery", size = 3, skills = { "barrage", "spotter" },
-    desc = "Three Artillery pieces. Breaks up anything your side can see - keep them behind the tanks." },
+  { key = "battery", name = "Battery", unit = "artillery", size = 3, skills = { "barrage", "rapidfire" },
+    desc = "Three Artillery pieces. Breaks up anything your side can see - pair them with Recon (Flare) and keep them behind the tanks." },
   { key = "recon", name = "Recon", unit = "scout", size = 5, skills = { "flare", "sprint" },
     desc = "Five Scouts. Fast, sees far, and carries light anti-air guns: spotting, flanking and grabbing empty points." },
   { key = "aa", name = "Air Defense", unit = "flak", size = 3, skills = { "flakburst", "repair" },
@@ -37,9 +37,11 @@ S.SKILLS = {
   smoke = { name = "Smoke Screen", aim = "self", dur = 8, cd = 40,
     desc = "8 s: smoke hides the squad - nothing further than 90 away can target it, and whatever was shooting at it loses it." },
   barrage = { name = "Barrage", aim = "point", range = 950, cd = 45, needSight = true,
-    desc = "Six shells on a spot your side can see (within 950 of the leader)." },
+    desc = "Six heavy shells (95 damage each, splash) on a spot your side can see, within 950 of the leader. A red marker shows where they'll land." },
   spotter = { name = "Spotter Drone", aim = "self", dur = 15, cd = 35,
     desc = "15 s: the squad sees 60% further - artillery reaches everything it sees." },
+  rapidfire = { name = "Rapid Fire", aim = "self", dur = 8, cd = 40,
+    desc = "8 s: the battery's guns reload 80% faster. Best when Recon has lit up a target." },
   flare = { name = "Flare", aim = "point", range = 1200, dur = 10, cd = 30,
     desc = "10 s: lights up a wide area anywhere within 1200 - fog lifted for your side." },
   sprint = { name = "Sprint", aim = "self", dur = 6, cd = 30,
@@ -330,16 +332,24 @@ function S.cast(world, sq, slot, tx, ty)
   if def.dur then s.untilT = t + def.dur end
   local fx = world.effects
   if s.key == "barrage" then
+    fx[#fx + 1] = { kind = "reticle", x = tx, y = ty, t = 0, life = 4.0, size = 130 }
+    if world.onSquadSound then world.onSquadSound("artillery", L.x, L.y, 1) end
     for i = 1, 6 do
-      later(world, 0.9 + i * 0.45, function()
-        local a, r = math.random() * math.pi * 2, math.sqrt(math.random()) * 120
-        local x, y = tx + math.cos(a) * r, ty + math.sin(a) * r
+      local land = 0.9 + i * 0.45
+      local a, r = math.random() * math.pi * 2, math.sqrt(math.random()) * 120
+      local x, y = tx + math.cos(a) * r, ty + math.sin(a) * r
+      later(world, land - 0.45, function()
+        fx[#fx + 1] = { kind = "shell", x = x, y = y, t = 0, life = 0.45 }
+      end)
+      later(world, land, function()
         hurt(world, L, x, y, 70, 95, function(o) return o.def.domain ~= "air" end)
-        fx[#fx + 1] = { kind = "boom", x = x, y = y, t = 0, life = 0.6, size = 60 }
+        fx[#fx + 1] = { kind = "boom", x = x, y = y, t = 0, life = 0.8, size = 85 }
+        fx[#fx + 1] = { kind = "boom", x = x + math.random(-20, 20), y = y + math.random(-20, 20), t = 0, life = 0.5, size = 45 }
+        if world.onSquadSound then world.onSquadSound(i % 2 == 0 and "bigboom" or "boom", x, y, 1) end
       end)
     end
-    fx[#fx + 1] = { kind = "ping", x = tx, y = ty, t = 0, life = 1.6, r = 1, g = 0.5, b = 0.2 }
   elseif s.key == "flare" then
+    if world.onSquadSound then world.onSquadSound("skill", L.x, L.y, 0.8) end
     world.visionSources[#world.visionSources + 1] = { x = tx, y = ty, r = 480, untilT = t + def.dur, ally = world.ally[sq.team], flare = true }
     world.fogDirty = true
     fx[#fx + 1] = { kind = "ping", x = tx, y = ty, t = 0, life = 1.2, r = 1, g = 0.95, b = 0.5 }
@@ -439,15 +449,27 @@ function S.update(world, dt)
         if world.onSquadReinforced then world.onSquadReinforced(sq, u) end
       end
     end
-    -- replacements walk out to wherever the leader is now, then they're back in the squad
+    -- replacements head for the leader - or, if he's fleeing, straight to where he's fleeing to
+    -- and wait for him there. Once with him they take up his current order and go on together
     if sq.leader and sq.leader.alive then
       local L = sq.leader
+      local lo = L.orders[1]
+      local fleeing = lo and lo.type == "retreat"
+      local gx, gy = L.x, L.y
+      if fleeing then gx, gy = lo.x, lo.y end
+      -- a squad that pulls back stops digging in (Hull Down would halve its speed)
+      if fleeing then for _, sk in ipairs(sq.skills) do if sk.key == "hulldown" and t < sk.untilT then sk.untilT = t end end end
       for _, u in ipairs(sq.members) do
         if u.alive and u.rejoining then
           if U.dist2(u.x, u.y, L.x, L.y) < 260 * 260 then
             u.rejoining = nil
-          elseif #u.orders == 0 or (u.orders[1].type == "move" and U.dist2(u.orders[1].x, u.orders[1].y, L.x, L.y) > 250 * 250) then
-            world:issue(u, { type = "move", x = L.x, y = L.y, arrive = 120 })
+            if lo and (lo.type == "move" or lo.type == "amove") then
+              world:issue(u, { type = lo.type, x = lo.x + (u.x - L.x) * 0.5, y = lo.y + (u.y - L.y) * 0.5, march = lo.march })
+            end
+          elseif fleeing and U.dist2(u.x, u.y, gx, gy) < 150 * 150 then
+            if #u.orders > 0 then u.orders = {}; u.path = nil end -- at the rally point: wait for him
+          elseif #u.orders == 0 or (u.orders[1].type == "move" and U.dist2(u.orders[1].x, u.orders[1].y, gx, gy) > 120 * 120) then
+            world:issue(u, { type = "move", x = gx, y = gy, arrive = 100 })
           end
         end
       end
@@ -460,6 +482,7 @@ function S.update(world, dt)
     local spot = alive and S.active(sq, "spotter", t)
     local sprint = alive and S.active(sq, "sprint", t)
     local burn = alive and S.active(sq, "afterburner", t)
+    local rapid = alive and S.active(sq, "rapidfire", t)
     local rep = alive and S.active(sq, "repair", t)
     for _, u in ipairs(sq.members) do
       if u.alive then
@@ -472,7 +495,7 @@ function S.update(world, dt)
         if on and burn then sp = sp * 1.6 end
         u.sqSpeed = sp ~= 1 and sp or nil
         u.sqSight = (on and spot) and 1.6 or nil
-        u.sqRof = (on and burn) and 1.3 or nil
+        u.sqRof = (on and rapid) and 1.8 or ((on and burn) and 1.3 or nil)
         u.smoked = (on and smoke) or nil
         if on and rep and u.hp < u.maxhp then
           u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.03 * dt); u.healing = 0.3
@@ -707,6 +730,7 @@ function AI:useSkills(sq, foe, fd, fighting, frac, goal)
       if k == "hulldown" then go = fighting and frac > 0.3 and fd and fd < 380
       elseif k == "smoke" then go = (sq.healing and foe and fd < 450) or (fighting and frac < 0.55)
       elseif k == "spotter" then go = foe and fd < 1000
+      elseif k == "rapidfire" then go = foe and fd < 900 and S.sees(w, self.team, foe.x, foe.y)
       elseif k == "sprint" then go = sq.healing or (goal and not fighting and U.dist(L.x, L.y, goal.x, goal.y) > 700)
       elseif k == "afterburner" then go = fighting
       elseif k == "repair" then go = (not fighting) and frac < 0.8 and not sq.healing

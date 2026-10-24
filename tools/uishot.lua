@@ -174,6 +174,24 @@ local function script(mode, secs)
       print("SQUADS", t, table.concat(l, ","))
     end
     local nextOrder, nextLog = 0, 0
+    if os.getenv("PA_BARRAGE") then
+      -- three enemy tanks parked 500 from our Battery's leader, spotted by a scout of ours; barrage them
+      game.ais = {}
+      for _, e in ipairs(w.entities) do if e.team == 2 and not e.def.building then e.alive = false end end
+      local sq = SQ.squadsOf(w, 1)[3]
+      local L = sq.leader
+      local tx, ty = L.x + 500, L.y
+      local foes = {}
+      for i = 1, 3 do local f = w:spawn("tank", 2, tx + i * 25, ty + (i - 2) * 30); f.maxhp, f.hp = 5000, 5000; foes[i] = f end
+      local eye = w:spawn("scout", 1, tx - 150, ty)
+      for _ = 1, 10 do game:update(1 / 30) end
+      print("BARRAGE cast", SQ.cast(w, sq, 1, tx + 50, ty))
+      for _ = 1, 150 do game:update(1 / 30); for _, f in ipairs(foes) do f.orders = {} end end
+      local lost = 0
+      for _, f in ipairs(foes) do lost = lost + (5000 - f.hp) end
+      print("BARRAGE damage to 3 tanks", math.floor(lost))
+      return
+    end
     if os.getenv("PA_SMOKE") then
       -- an enemy tank parks 230 away from our Armor squad; does Smoke Screen stop it shooting?
       for _ = 1, 30 do game:update(1 / 30) end

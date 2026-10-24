@@ -557,7 +557,9 @@ function W:separate(dt)
       local r1 = e.def.radius
       local px, py = 0, 0
       self:query(e.x, e.y, r1 + 20, function(o)
-        if o ~= e and o.alive and not o.def.building and (o.def.domain == "air") == air then
+        -- (a unit fleeing slips past enemies instead of shoving through them)
+        if o ~= e and o.alive and not o.def.building and (o.def.domain == "air") == air
+          and not ((e.retreating or o.retreating) and o.team and e.team and self.ally[o.team] ~= self.ally[e.team]) then
           local dx, dy = e.x - o.x, e.y - o.y
           local d2 = dx * dx + dy * dy
           local rr = r1 + o.def.radius

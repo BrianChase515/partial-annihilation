@@ -747,6 +747,30 @@ function R.drawWorld(cam, game)
       lg.setColor(1, 0.85, 0.3, 1 - k)
       lg.setLineWidth(2.5)
       lg.circle("line", fx.x, fx.y, fx.size * (0.8 + k * 0.8))
+    elseif fx.kind == "reticle" then
+      -- a barrage on its way: a red target zone that tightens until the shells land
+      local a = math.min(1, k * 6) * (1 - k * k)
+      lg.setColor(1, 0.3, 0.15, 0.10 * a)
+      lg.circle("fill", fx.x, fx.y, fx.size)
+      lg.setColor(1, 0.35, 0.2, 0.85 * a)
+      lg.setLineWidth(3)
+      local r = fx.size * (1.15 - 0.15 * math.min(1, k * 3))
+      for i = 0, 11 do
+        local a1 = i * math.pi / 6 + k * 2
+        lg.arc("line", "open", fx.x, fx.y, r, a1, a1 + math.pi / 12)
+      end
+      lg.line(fx.x - 14, fx.y, fx.x + 14, fx.y)
+      lg.line(fx.x, fx.y - 14, fx.x, fx.y + 14)
+    elseif fx.kind == "shell" then
+      -- a shell dropping out of the sky onto its spot
+      local h = 260 * (1 - k)
+      lg.setColor(1, 0.85, 0.5, 0.25 + 0.6 * k)
+      lg.setLineWidth(3)
+      lg.line(fx.x + h * 0.35, fx.y - h, fx.x + h * 0.35 + 10, fx.y - h - 40)
+      lg.setColor(1, 0.95, 0.75, 0.9)
+      lg.circle("fill", fx.x + h * 0.35, fx.y - h, 4)
+      lg.setColor(0, 0, 0, 0.25 * k)
+      lg.circle("fill", fx.x, fx.y, 6 + 10 * k)
     elseif fx.kind == "ping" then
       lg.setColor(fx.r or 0.3, fx.g or 1, fx.b or 0.4, 1 - k)
       lg.setLineWidth(2)

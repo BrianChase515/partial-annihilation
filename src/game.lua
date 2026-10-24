@@ -293,6 +293,7 @@ function G.new(opts)
         self:notice(string.format("%s: %s", SQ.byType[sq.type].name, sk.name), 1.4)
       end
     end
+    world.onSquadSound = function(name, x, y, v) SFX.at(name, x, y, self:soundView(), v) end
     world.onSquadReinforced = function(sq, u)
       if sq.team == 1 and world.time - (sq.lastReinfNote or -99) > 12 then
         sq.lastReinfNote = world.time

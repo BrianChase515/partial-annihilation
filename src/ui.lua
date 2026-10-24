@@ -1764,7 +1764,7 @@ HOW TO WIN
 
 SQUAD TYPES (each squad is one kind of unit; the leader is a veteran of it)
   Armor - 4 Tanks .............. Hull Down, Smoke Screen
-  Battery - 3 Artillery ........ Barrage, Spotter Drone
+  Battery - 3 Artillery ........ Barrage, Rapid Fire
   Recon - 5 Scouts (light AA) .. Flare, Sprint
   Air Defense - 3 Flak Trucks .. Flak Barrage, Field Repair
   Gunships - 3 (one a side) .... Strafing Run, Afterburner
