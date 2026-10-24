@@ -29,6 +29,7 @@ end
 -- quieter the further it is from the view (a little bleed from just off-screen)
 -- view = { x, y, cx, cy, halfW }  (sound position, camera center, half view width in world units)
 function S.at(name, x, y, view, vol)
+  if S.recorder then S.recorder(name, x, y, view, vol) end -- (trailer tool: log the sound)
   if S.muted or not S.ok or S.combatOff then return end
   local set = files[name]
   if not set then return end

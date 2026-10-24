@@ -19,6 +19,7 @@ local function src(key)
 end
 
 function V.say(key)
+  if V.recorder then return V.recorder(key) end -- (trailer tool)
   if V.muted or not love.audio then return end
   local now = love.timer.getTime()
   if lastSaid[key] and now - lastSaid[key] < (COOLDOWN[key] or 6) then return end

@@ -28,6 +28,7 @@ local function busy()
 end
 
 local function play(key, u, view, vol, urgent)
+  if C.recorder then return C.recorder(key, u, view, vol, urgent) end -- (trailer tool)
   local SFX = require("src.sfx")
   if SFX.muted or not love.audio then return end
   if busy() then
