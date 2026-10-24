@@ -1071,6 +1071,18 @@ function UI.drawSquadInfo(game, L)
     lg.setFont(font(14))
     lg.setColor(isA and 1 or 0.92, isA and 0.85 or 0.92, isA and 0.4 or 0.95)
     lg.print(string.format("%d  %s", i, ty.name), cx + 8, y + 6)
+    -- flee just this squad (Alt+number does the same)
+    if alive > 0 then
+      local fb = { x = cx + cw - 50, y = y + 5, w = 44, h = 20 }
+      local fh = mx >= fb.x and mx <= fb.x + fb.w and my >= fb.y and my <= fb.y + fb.h
+      lg.setColor(fh and 0.5 or 0.3, fh and 0.22 or 0.14, 0.12)
+      lg.rectangle("fill", fb.x, fb.y, fb.w, fb.h, 4)
+      lg.setFont(font(11))
+      lg.setColor(1, 0.85, 0.75)
+      lg.print("Flee", fb.x + fb.w / 2 - font(11):getWidth("Flee") / 2, fb.y + 3)
+      game.sqInfoBtns[#game.sqInfoBtns + 1] = { x = fb.x, y = fb.y, w = fb.w, h = fb.h, sq = sq, flee = true }
+      if fh then tip = { text = string.format("Flee: squad %d falls back to the HQ (heals there); weapons off until repaired. Alt+%d does the same. Your selection stays as it is.", i, i), x = fb.x } end
+    end
     lg.setFont(font(11))
     lg.setColor(0.75, 0.8, 0.88)
     local un = D.units[ty.unit].name
@@ -1117,8 +1129,8 @@ function UI.drawSquadInfo(game, L)
   -- a skill's tooltip, above the panel
   if tip then
     local d = tip.def
-    local text = d.name .. (d.aim == "point" and "  (aimed: click the map, or Q/W at the mouse)" or "  (around the leader)")
-      .. "\n" .. d.desc .. string.format("\nCooldown %ds", d.cd)
+    local text = tip.text or (d.name .. (d.aim == "point" and "  (aimed: click the map, or Q/W at the mouse)" or "  (around the leader)")
+      .. "\n" .. d.desc .. string.format("\nCooldown %ds", d.cd))
     lg.setFont(font(12))
     local tw = 300
     local _, lines = font(12):getWrap(text, tw - 16)
@@ -1752,6 +1764,7 @@ COMMANDER OF HEROES - CONTROLS
   A then click .............. attack-move: the squad forms ranks, marches, then fights and kites
   Q / W ..................... the ACTIVE squad's two skills, aimed at the mouse
   F ......................... flee: back to your HQ, weapons off until repaired
+  Alt+1-5 / card's Flee ..... just that squad flees (your selection stays as it is)
   S / D ..................... stop / hold fire       + / - ... game speed
 
 HOW TO WIN
@@ -2442,7 +2455,13 @@ function UI.click(game, x, y, b)
   end
   -- Commander of Heroes: skill buttons and squad cards in the bottom panel
   for _, sb in ipairs(game.sqInfoBtns or {}) do
-    if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+    if sb.flee and x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+      game:fleeSquad(sb.sq)
+      return true
+    end
+  end
+  for _, sb in ipairs(game.sqInfoBtns or {}) do
+    if not sb.flee and x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
       local def = require("src.squads").SKILLS[sb.sq.skills[sb.slot].key]
       if def.aim == "point" then
         game.mode, game.sqAim = "sqskill", { sq = sb.sq, slot = sb.slot }

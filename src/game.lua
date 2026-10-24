@@ -1912,6 +1912,12 @@ function G:keypressed(key)
 
   local n = tonumber(key)
   local alt = love.keyboard.isDown("lalt", "ralt")
+  if n and n >= 1 and n <= 9 and alt and self.world.squads then
+    -- Commander of Heroes: Alt+number pulls just that squad back to the HQ (your selection stays)
+    local sq = require("src.squads").squadsOf(self.world, 1)[n]
+    if sq then self:fleeSquad(sq) end
+    return
+  end
   if n and n >= 0 and n <= 9 and alt then
     -- Option/Alt+number: new units from the selected factories join that group (0 = none)
     local facs = self:selectedFactories()
@@ -2250,6 +2256,19 @@ function G:stepSpeed(dir)
 end
 
 -- Pull the selected units back (weapons off, +25% speed) to the flag or the Commander
+-- Commander of Heroes: one squad falls back to the HQ, whatever else is selected
+function G:fleeSquad(sq)
+  local keep = self.selected
+  local alive = {}
+  for _, u in ipairs(sq.members) do if u.alive then alive[#alive + 1] = u end end
+  if #alive == 0 then return end
+  self.selected = {}
+  for _, u in ipairs(alive) do self.selected[u] = true end
+  self:retreat("flag")
+  self.selected = keep
+  self:notice(string.format("Squad %d (%s) falling back to the HQ", sq.idx, require("src.squads").byType[sq.type].name), 1.5)
+end
+
 function G:retreat(where)
   local units = self:selectedMobile()
   local list = {}
