@@ -824,6 +824,7 @@ function G:orderAction(action, shift)
   elseif action == "half" then if shift then self:selectOtherHalf() else self:selectHalf() end
   elseif action == "builder" and self.craft then CG.idleWorker(self)
   elseif action == "cmd" and self.craft then CG.cycleHero(self)
+  elseif action == "cmd" and self.world.squads then self:keypressed("c")
   elseif action == "builder" then self:selectIdleBuilder()
   elseif action == "cmd" then
     local c = self.world.teams[1].commander

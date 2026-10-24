@@ -1443,8 +1443,19 @@ function UI.orderButtons(game)
   }
   local bw, gap = 66, 4
   local list = {}
+  -- Commander of Heroes: no building, no Commander - just the squad orders
+  local cohSkip = { fleecmd = true, destroy = true, half = true, builder = true, ["repeat"] = true, nuke = true }
+  local cohText = {
+    flee = { "Flee", "Pull the selection back to your HQ (or your flag, if planted) at +25% speed. Weapons stay off until repaired - the HQ heals fast." },
+    cmd = { "Squad", "C: with several squads selected, the next one becomes ACTIVE (gold - Q / W fire its skills). Otherwise: jump to the next squad." },
+  }
   for _, o in ipairs(ORDERS) do
-    if o[1] ~= "nuke" or (myc and (myc.clevel or 0) >= 5) then list[#list + 1] = o end
+    if game.world.squads then
+      if not cohSkip[o[1]] then
+        local t = cohText[o[1]]
+        list[#list + 1] = t and { o[1], t[1], o[3], t[2] } or o
+      end
+    elseif o[1] ~= "nuke" or (myc and (myc.clevel or 0) >= 5) then list[#list + 1] = o end
   end
   local total = #list * bw + (#list - 1) * gap
   local x0 = math.floor(w / 2 - total / 2)
@@ -1797,7 +1808,12 @@ local function button(x, y, w, h, label, hot)
 end
 UI.button = button
 
-function UI.menuRects()
+-- only Annihilation's own maps can be saved (Arena, Craft and Commander of Heroes build theirs)
+local function canSaveMap(game)
+  return game and not game.arena and not game.craft and not game.world.squads
+end
+
+function UI.menuRects(game)
   local w, h = lg.getDimensions()
   local bw = 280
   local x = (w - bw) / 2
@@ -1809,21 +1825,22 @@ function UI.menuRects()
     { label = "Controls (F1)", action = "help" },
     { label = "Settings", action = "settings" },
     { label = fs and "Windowed (Ctrl+Cmd+F)" or "Fullscreen (Ctrl+Cmd+F)", action = "fullscreen" },
-    { label = "Save this map...", action = "savemap" },
+    canSaveMap(game) and { label = "Save this map...", action = "savemap" } or false,
     { label = "Surrender & return to title", action = "quit" },
     { label = "Exit game", action = "exit" },
   }
+  for i = #items, 1, -1 do if not items[i] then table.remove(items, i) end end
   local gap = h < 760 and 48 or 54
   y = h / 2 - (#items * gap) / 2 + 30
   for i, it in ipairs(items) do it.x, it.y, it.w, it.h = x, y + (i - 1) * gap, bw, gap - 10 end
   return items
 end
 
-function UI.drawMenu()
+function UI.drawMenu(game)
   local w, h = lg.getDimensions()
   lg.setColor(0, 0, 0, 0.55)
   lg.rectangle("fill", 0, 0, w, h)
-  local rects = UI.menuRects()
+  local rects = UI.menuRects(game)
   local last = rects[#rects]
   panelBox(rects[1].x - 30, rects[1].y - 70, rects[1].w + 60, last.y + last.h - rects[1].y + 94, 0.97)
   lg.setFont(font(22))
@@ -1834,7 +1851,7 @@ end
 
 function UI.menuClick(game, x, y, button_)
   if button_ ~= 1 then return end
-  for _, r in ipairs(UI.menuRects()) do
+  for _, r in ipairs(UI.menuRects(game)) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "resume" then game.menuOpen = false
       elseif r.action == "help" then game.menuOpen = false; game.showHelp = true
@@ -1858,7 +1875,7 @@ function UI.overRects(game)
   local list = {
     { label = "Play again", action = "again" },
   }
-  if not (game and game.arena) then list[#list + 1] = { label = "Save this map...", action = "savemap" } end
+  if canSaveMap(game) then list[#list + 1] = { label = "Save this map...", action = "savemap" } end
   local f = game and game.finalScore
   if f and f.official and require("src.online").enabled() then
     list[#list + 1] = { label = game.submitted and "Score submitted" or "Submit score online", action = "submit" }
@@ -2303,7 +2320,7 @@ function UI.draw(game)
 
   if not game.showHelp and not game.menuOpen then UI.drawPendingTip(game) else game.pendingTip = nil end
   if game.showHelp then UI.drawHelp(game.craft and "craft" or (game.world.squads and "coh") or game.arena) end
-  if game.menuOpen then UI.drawMenu() end
+  if game.menuOpen then UI.drawMenu(game) end
   if require("src.settings").open then require("src.settings").draw() end
   if game.world.over and game.overShown then UI.drawOver(game) end
   if game.naming then

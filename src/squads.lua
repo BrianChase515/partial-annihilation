@@ -253,6 +253,8 @@ function S.setup(world, opts)
   end
   setupPoints(world)
   world.parTime = 18 * 60
+  -- no economy here: no metal deposits on the map or the minimap
+  map.deposits = {}
 end
 
 function S.squadsOf(world, team)
