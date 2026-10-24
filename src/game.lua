@@ -46,7 +46,7 @@ function G.new(opts)
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
     playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, craft = self.craft, template = opts.template,
-    experimental = opts.experimental, sandbox = opts.sandbox, squads = opts.squads,
+    experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup,
   })
   local world = self.world
   world.humanTeams = {}
@@ -54,7 +54,13 @@ function G.new(opts)
   R.init(world)
   self.ais = {}
   for i, p in ipairs(players) do
-    if self.craft then
+    if world.squads then
+      if not p.human then
+        local ai = require("src.squads").newAI(world, i, p.level)
+        self.ais[#self.ais + 1] = ai
+        p.profileName = "Squads"
+      end
+    elseif self.craft then
       if not p.human then
         local ai = require("src.craft_ai").new(world, i, p.level, { bench = p.bench, legacy = p.legacy })
         self.ais[#self.ais + 1] = ai
@@ -273,6 +279,21 @@ function G.new(opts)
   world.onTruckLost = function(o)
     if o.team == 1 then self:notice("Ore truck destroyed! That extractor rolls out a new one in 60s", 3) end
   end
+  if world.squads then
+    -- your squads start on control groups 1, 2, 3
+    local SQ = require("src.squads")
+    for i, sq in ipairs(SQ.squadsOf(world, 1)) do
+      local g = {}
+      for _, u in ipairs(sq.members) do g[#g + 1] = u end
+      self.groups[i] = g
+    end
+    world.onSquadAbility = function(sq)
+      if sq.team == 1 then
+        local ab = SQ.byAbility[sq.ability]
+        self:notice(string.format("Squad %d: %s %s", sq.idx, ab and ab.name or sq.ability, sq.on and "ON" or "off"), 1.5)
+      end
+    end
+  end
   world.onApocFog = function()
     self:notice("10:00 - the fog has lifted. Everything is in plain sight.", 5)
   end
@@ -292,6 +313,8 @@ function G.new(opts)
         VOICE.say("enemy_cmd_down")
       else
         self:notice("Your ally's Commander is down", 3)
+        -- flash the spot on the minimap so you can see which lane it was
+        self:minimapPing(c.x, c.y, { R.teamColor(c.team) })
       end
       MUSIC.bump(0.5)
       if self.log then self.log:event(string.format("%s Commander (%s, L%d) down%s", D.teamName[c.team], c.class, c.clevel or 0,
@@ -607,6 +630,11 @@ end
 function G:rightClick(wx, wy, queue)
   local world = self.world
   if self:groupHeld() then self:commandMove(wx, wy, "gmove", queue); return end
+  -- constructors right-clicking the retreat flag: they repair everything within 350 of it
+  if self.flag and not self.craft and not self.arena and U.dist(wx, wy, self.flag.x, self.flag.y) < 50 and self:hasSelectedConstructor() then
+    self:placeRepairZone(self.flag.x, self.flag.y, 350, queue)
+    return
+  end
   local target = world:entityAt(wx, wy, function(e)
     if e.team == 1 then return true end
     if e.def.domain == "sub" and not self:subRevealed(e) then return false end
@@ -1556,19 +1584,22 @@ function G:zoneDraft()
   return self.zoneStart[1], self.zoneStart[2], d
 end
 
-function G:placeRepairZone(x, y, r)
+function G:placeRepairZone(x, y, r, queue)
   r = math.max(140, math.min(900, r))
   local others = {}
   local n = 0
   for _, e in ipairs(self:selectedMobile()) do
     if e.def.builds and not e.def.factory then
-      self.world:issue(e, { type = "repairzone", x = x, y = y, r = r })
+      self.world:issue(e, { type = "repairzone", x = x, y = y, r = r }, queue) -- Shift: after what's queued
       n = n + 1
     else
       others[#others + 1] = e
     end
   end
-  for _, e in ipairs(others) do self.world:issue(e, { type = "patrol", x = x, y = y, fromX = e.x, fromY = e.y }) end
+  for _, e in ipairs(others) do
+    local last = queue and e.orders[#e.orders]
+    self.world:issue(e, { type = "patrol", x = x, y = y, fromX = last and last.x or e.x, fromY = last and last.y or e.y }, queue)
+  end
   self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.6, r = 0.3, g = 1, b = 0.6 }
   self:notice(string.format("Repair zone: %d constructor%s on duty", n, n == 1 and "" or "s"), 1.5)
 end
@@ -1581,7 +1612,7 @@ function G:mousereleased(x, y, button)
     if d < 40 then
       self:commandMove(cx, cy, "patrol", shift)
     else
-      self:placeRepairZone(cx, cy, d)
+      self:placeRepairZone(cx, cy, d, shift)
     end
     if not shift then self.mode = nil end
     return
@@ -1829,6 +1860,7 @@ function G:keypressed(key)
     return
   end
   if key == "d" and self.holdToggle then self.holdToggle = false end
+  if self.world.squads and key == "v" then self:toggleSquads(); return end
   if self.craft then
     if key == "q" and shift and CG.trainWorker(self) then return end
     if CG.heroKey(self, key) then return end
@@ -1969,6 +2001,32 @@ function G:namingKey(key)
   if not self.naming then love.keyboard.setTextInput(false) end
 end
 
+-- Squad Tactics: V toggles the ability of every squad that has a unit selected
+function G:selectedSquads()
+  local seen, out = {}, {}
+  for _, e in ipairs(self:selectedList()) do
+    if e.squad and e.squad.team == 1 and not seen[e.squad] then seen[e.squad] = true; out[#out + 1] = e.squad end
+  end
+  table.sort(out, function(a, b) return a.idx < b.idx end)
+  return out
+end
+
+function G:toggleSquads()
+  local SQ = require("src.squads")
+  local list = self:selectedSquads()
+  if #list == 0 then self:notice("Select a squad first (1, 2, 3)", 1.2); return end
+  -- all on if any is off, else all off
+  local anyOff = false
+  for _, sq in ipairs(list) do if not sq.on then anyOff = true end end
+  for _, sq in ipairs(list) do SQ.toggle(self.world, sq, anyOff) end
+end
+
+-- a flashing marker on the minimap for a few seconds (e.g. where an ally's Commander fell)
+function G:minimapPing(x, y, col)
+  self.mmPings = self.mmPings or {}
+  self.mmPings[#self.mmPings + 1] = { x = x, y = y, t0 = love.timer.getTime(), col = col or { 1, 1, 1 } }
+end
+
 function G:myCommander()
   if self.craft then return CG.offerHero(self) end
   local c = self.world.teams[1].commander
@@ -2012,7 +2070,7 @@ function G:retreat(where)
       -- the Commander flees home (+50% speed), powered down until he's fully repaired there
       local tm = self.world.teams[1]
       self.world:issue(u, { type = "retreat", x = tm.startX, y = tm.startY })
-      self:notice("Commander retreating home: weapons off until fully repaired at base", 2.5)
+      self:notice("Commander retreating home: he stays there, weapons off, until fully repaired", 2.5)
     else list[#list + 1] = u end
   end
   if #list == 0 then return end

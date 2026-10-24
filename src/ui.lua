@@ -29,6 +29,9 @@ end
 function UI.overPanel(game, x, y)
   local w, h = love.graphics.getDimensions()
   if y >= h - UI.PANEL_H or y <= UI.TOP_H then return true end
+  for _, r in ipairs(game.world.squads and game.squadRows or {}) do
+    if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then return true end
+  end
   local hb = game.craft and game.heroBar
   if hb and x >= hb.x and x <= hb.x + hb.w and y >= hb.y and y <= hb.y + hb.h then return true end
   if game.orderBtns and y >= h - UI.PANEL_H - UI.ORDERS_H then
@@ -375,8 +378,70 @@ end
 -- Commander card (top right, under the scoreboard): health, level, XP, status.
 -- Click it to jump to him.
 
+-- Squad Tactics: one row per squad - its ability (click to toggle), health and who's left;
+-- click the name to select the squad
+function UI.drawSquadPanel(game)
+  local world = game.world
+  local SQ = require("src.squads")
+  local list = SQ.squadsOf(world, 1)
+  local w = lg.getWidth()
+  local bw = UI.SCORE_W
+  local rh = 46
+  local x, y = w - bw - 10, (world.score and game.scoreBottom or UI.TOP_H) + 6
+  local bh = #list * rh + 8
+  panelBox(x, y, bw, bh, 0.88)
+  game.squadRows = {}
+  local mx, my = love.mouse.getPosition()
+  for i, sq in ipairs(list) do
+    local ry = y + 4 + (i - 1) * rh
+    local alive, hp, max = 0, 0, 0
+    for _, u in ipairs(sq.members) do
+      max = max + u.maxhp
+      if u.alive then alive = alive + 1; hp = hp + u.hp end
+    end
+    local L = sq.leader
+    lg.setFont(font(12))
+    lg.setColor(L and L.alive and 1 or 0.5, L and L.alive and 1 or 0.5, L and L.alive and 1 or 0.5)
+    lg.print(string.format("%d  Squad %d  (%d)", i, sq.idx, alive), x + 10, ry + 3)
+    local ab = SQ.byAbility[sq.ability]
+    local bx, bwid = x + bw - 122, 112
+    local hov = mx >= bx and mx <= bx + bwid and my >= ry + 2 and my <= ry + 24
+    if sq.on then lg.setColor(0.2, 0.55, 0.3) else lg.setColor(hov and 0.2 or 0.13, hov and 0.24 or 0.16, hov and 0.3 or 0.2) end
+    lg.rectangle("fill", bx, ry + 2, bwid, 22, 4)
+    lg.setColor(1, 1, 1, L and L.alive and 1 or 0.4)
+    local t = (ab and ab.name or "?") .. (sq.on and "  ON" or "")
+    lg.setFont(font(11))
+    lg.print(t, bx + bwid / 2 - font(11):getWidth(t) / 2, ry + 6)
+    local frac = max > 0 and hp / max or 0
+    lg.setColor(0.12, 0.14, 0.18)
+    lg.rectangle("fill", x + 10, ry + 30, bw - 20, 8, 2)
+    lg.setColor(0.2 + (1 - frac) * 0.8, 0.3 + frac * 0.6, 0.15)
+    lg.rectangle("fill", x + 10, ry + 30, (bw - 20) * frac, 8, 2)
+    game.squadRows[#game.squadRows + 1] = { sq = sq, x = x, y = ry, w = bw, h = rh, ab = { x = bx, y = ry + 2, w = bwid, h = 22 } }
+  end
+  game.cardBottom = y + bh
+end
+
+function UI.squadPanelClick(game, x, y)
+  for _, r in ipairs(game.squadRows or {}) do
+    if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
+      if x >= r.ab.x and x <= r.ab.x + r.ab.w and y >= r.ab.y and y <= r.ab.y + r.ab.h then
+        require("src.squads").toggle(game.world, r.sq)
+      else
+        local g = {}
+        for _, u in ipairs(r.sq.members) do if u.alive then g[#g + 1] = u end end
+        game:select(g)
+        if r.sq.leader and r.sq.leader.alive then game:centerOn(r.sq.leader.x, r.sq.leader.y) end
+      end
+      return true
+    end
+  end
+  return false
+end
+
 function UI.drawCommanderCard(game)
   if game.craft then return craftUI().drawHeroBar(game) end
+  if game.world.squads then return UI.drawSquadPanel(game) end
   local world = game.world
   local c = world.teams[1].commander
   if not c or c.key ~= "commander" then return end -- (Post-Apocalypse has no Commander)
@@ -556,6 +621,7 @@ end
 
 function UI.cmdCardClick(game, x, y)
   if game.craft then return craftUI().heroBarClick(game, x, y) end
+  if game.world.squads then return UI.squadPanelClick(game, x, y) end
   local r = game.cmdCard
   if r and x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
     local c = game.world.teams[1].commander
@@ -767,6 +833,31 @@ function UI.drawMinimap(game, L)
   for _, n in ipairs(world.nukes or {}) do
     lg.setColor(1, 0.2, 0.1, 0.9)
     lg.circle("line", mm.x + n.tx / T * s, mm.y + n.ty / T * s, 7)
+  end
+  -- pings: expanding rings and a blinking cross for ~5 seconds
+  if game.mmPings then
+    local now = love.timer.getTime()
+    local keep = {}
+    for _, p in ipairs(game.mmPings) do
+      local age = now - p.t0
+      if age < 5 then
+        keep[#keep + 1] = p
+        local px, py = mm.x + p.x / T * s, mm.y + p.y / T * s
+        local c = p.col
+        lg.setLineWidth(2)
+        for k = 0, 1 do
+          local f = ((age + k * 0.5) % 1)
+          lg.setColor(c[1], c[2], c[3], (1 - f) * (1 - age / 5))
+          lg.circle("line", px, py, 4 + f * 16)
+        end
+        if math.floor(age * 4) % 2 == 0 then
+          lg.setColor(1, 1, 1, 0.95)
+          lg.line(px - 5, py - 5, px + 5, py + 5)
+          lg.line(px - 5, py + 5, px + 5, py - 5)
+        end
+      end
+    end
+    game.mmPings = keep
   end
   -- camera rectangle
   local cam = game.cam
@@ -1318,6 +1409,7 @@ Orders (hold Shift to queue)
   Delete .................... SELF-DESTRUCT selected units/buildings (unfinished ones refund)
                               Commander alone: press twice (you lose the game)
   Shift+Delete .............. drop the last queued order
+  Constructors: right-click the retreat flag ... repair everything within 350 of it (fleeing units rearm faster there)
 
 Building
   Select a constructor, press Q W E R T Y U I (or click), then click the map

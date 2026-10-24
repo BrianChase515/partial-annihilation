@@ -1113,6 +1113,8 @@ function A.useSkill(w, c, slot, tx, ty)
   if not c or not c.alive or not c.skills then return false, "no commander" end
   local s = c.skills[slot]
   if not s then return false, "No skill in that slot yet" end
+  -- fleeing means running, not fighting (Commander Arena)
+  if w.arena and w:isFleeing(c) then return false, "Can't use skills while fleeing" end
   if w.time < s.readyAt then return false, string.format("%s recharging (%ds)", A.SKILLS[s.key].name, math.ceil(s.readyAt - w.time)) end
   if c.stunUntil and w.time < c.stunUntil then return false, "Stunned" end
   local def = A.SKILLS[s.key]
@@ -1212,6 +1214,12 @@ function A.update(w, dt)
   end
   local tick = A.tickHeroes(w, dt, st)
   if tick and st.jungle then require("src.jungle").update(w, dt) end
+  -- towers knit back slowly (about 0.1% a second) once nobody has hit them for 10 seconds
+  for _, s in ipairs(st.structures) do
+    if s.alive and s.arenaTower and s.hp < s.maxhp and t - (s.lastHit or -99) > 10 then
+      s.hp = math.min(s.maxhp, s.hp + s.maxhp * 0.001 * dt)
+    end
+  end
   if tick then
     -- fountain: heal friendly Commanders at their Core
     for side = 1, st.nSides do

@@ -500,9 +500,22 @@ function M.afterSpawn(world, opts)
     end
   end
   if world.mods.squads then M.setupSquads(world, opts) end
+  return world.mods.sandbox or world.mods.squads
 end
 
-function M.setupSquads(world, opts) end -- Squad Tactics: filled in by src/squads.lua
+function M.setupSquads(world, opts)
+  local S = require("src.squads")
+  S.setup(world, opts)
+  -- a stand-in "leader" per side for the camera and HUD: the first squad's leader
+  for t = 1, world.np do
+    local first = S.squadsOf(world, t)[1]
+    if first then
+      local L = first.leader
+      L.mods, L.taken, L.upgrades, L.offers, L.cxp, L.clevel = L.mods or {}, {}, {}, {}, 0, 0
+      world.teams[t].commander = L
+    end
+  end
+end
 
 -- Post-Apocalypse: a side is out when nothing of it is left standing; the fog lifts at 10:00
 M.APOC_FOG = 600

@@ -156,6 +156,19 @@ function L:snapshot()
     for _, s in ipairs(st.structures) do if s.alive and s.key ~= "core" then towers[s.side] = towers[s.side] + 1 end end
     self:raw(string.format("  wave %d   Commander kills by side %s   towers standing by side %s   actions/min %d",
       st.wave, table.concat(kills, "/"), table.concat(towers, "/"), g.stats.actions or 0))
+    -- creep levels (side-wide) and denies
+    do
+      local A = require("src.arena")
+      local parts = {}
+      for sd = 1, st.nSides do
+        local L = st.creepLvl and st.creepLvl[sd] or 0
+        local bar = st.creepBar and st.creepBar[sd] or 0
+        local pct = L >= A.CREEP_MAX and 100 or math.floor(100 * bar / A.creepNeed(L))
+        local d = st.denies and st.denies[sd]
+        parts[#parts + 1] = string.format("side %d L%d (%d%%) denies %d", sd, L, pct, d and d.n or 0)
+      end
+      self:raw("  creeps: " .. table.concat(parts, "   "))
+    end
     g.stats.actions = 0
     for t = 1, w.np do
       local c = w.teams[t].commander

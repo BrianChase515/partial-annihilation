@@ -53,9 +53,14 @@ local ASLOT_NAMES = { "You", "Ally", "Enemy", "Enemy 2", "Ally 2", "Enemy 3", "A
 
 local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
 -- Annihilation game types, and the Sandbox armies (kept for the whole session)
-local GAMETYPES = { { "standard", "Standard" }, { "sandbox", "Sandbox" } }
+local GAMETYPES = { { "standard", "Standard" }, { "sandbox", "Sandbox" }, { "squads", "Squad Tactics" } }
 local SANDBOX_UNITS = { "scout", "tank", "artillery", "flak", "fighter", "bomber", "gunship", "boat", "destroyer", "sub", "battleship", "walker" }
-local RTS_SETUP = { game = "standard",
+local RTS_SETUP = { game = "standard", squadTab = 1,
+  squads = {
+    { on = true, leader = "entrench", units = { tank = 3, artillery = 1, flak = 1, scout = 1 } },
+    { on = true, leader = "spotter", units = { scout = 2, artillery = 2, tank = 2 } },
+    { on = false, leader = "overdrive", units = { tank = 2, gunship = 2, scout = 2 } },
+  },
   sandbox = { you = { tank = 20, artillery = 6, flak = 4 }, enemy = { tank = 20, artillery = 6, gunship = 4 } } }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
@@ -106,6 +111,7 @@ function Menu.new(prev)
       for _, g in ipairs(GAMETYPES) do if g[1] == RTS_SETUP.game then known = true end end
       if not known then RTS_SETUP.game = "standard" end
       if mem.rts.sandbox then RTS_SETUP.sandbox = mem.rts.sandbox end
+      if mem.rts.squads and #mem.rts.squads == 3 then RTS_SETUP.squads = mem.rts.squads end
     end
   end
   self.size = prev and prev.sizeI or 2
@@ -466,6 +472,28 @@ function Menu:rects()
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
   local px = x0 + 580
+  if RTS_SETUP.game == "squads" then
+    local SQ = require("src.squads")
+    local cur = RTS_SETUP.squads[RTS_SETUP.squadTab] or RTS_SETUP.squads[1]
+    for i = 1, 3 do
+      local sq = RTS_SETUP.squads[i]
+      r[#r + 1] = { x = px + (i - 1) * 104, y = y, w = 100, h = 30, label = "Squad " .. i .. (sq.on and "" or " (off)"), kind = "sqtab", sqi = i,
+        active = RTS_SETUP.squadTab == i, small = true }
+    end
+    if RTS_SETUP.squadTab > 1 then
+      r[#r + 1] = { x = px, y = y + 38, w = 100, h = 28, label = cur.on and "In the game" or "Not used", kind = "sqon", active = cur.on, small = true }
+    end
+    local ab = SQ.byAbility[cur.leader] or SQ.ABILITIES[1]
+    r[#r + 1] = { x = px + 108, y = y + 38, w = 204, h = 28, label = "Leader: " .. ab.name .. "  v", kind = "sqleader", small = true }
+    for i, k in ipairs(SQ.UNITS) do
+      local yy = y + 76 + (i - 1) * 30
+      r[#r + 1] = { x = px + 150, y = yy, w = 26, h = 26, label = "-", kind = "squ", sqkey = k, sqd = -1, small = true }
+      r[#r + 1] = { x = px + 178, y = yy, w = 40, h = 26, label = tostring(cur.units[k] or 0), kind = "squ", sqkey = k, sqd = 0, small = true }
+      r[#r + 1] = { x = px + 220, y = yy, w = 26, h = 26, label = "+", kind = "squ", sqkey = k, sqd = 1, small = true }
+    end
+    self:updateRect(r, w)
+    return r
+  end
   if RTS_SETUP.game == "sandbox" then
     -- the two armies: a count per unit type (click +/-, Shift for 10, right-click lowers)
     for i, k in ipairs(SANDBOX_UNITS) do
@@ -583,7 +611,28 @@ function Menu:draw()
     lg.print("Team", x0 + 78, ty - 22)
     lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
     lg.print("Personality (click to choose)", x0 + 388, ty - 22)
-    if RTS_SETUP.game == "sandbox" then
+    if RTS_SETUP.game == "squads" then
+      local SQ = require("src.squads")
+      local cur = RTS_SETUP.squads[RTS_SETUP.squadTab]
+      lg.print("YOUR SQUADS", x0 + 580, y - 22)
+      lg.setFont(R.font(13))
+      for i, k in ipairs(SQ.UNITS) do
+        lg.setColor(0.8, 0.85, 0.92)
+        lg.print(D.units[k].name .. "  (" .. SQ.COST[k] .. ")", x0 + 580, y + 76 + (i - 1) * 30 + 5)
+      end
+      local used = SQ.cost(cur.units)
+      lg.setColor(used <= SQ.BUDGET and 0.6 or 1, 0.85, 0.6)
+      lg.print(string.format("Points: %d / %d", used, SQ.BUDGET), x0 + 580 + 260, y + 76 + 5)
+      local ab = SQ.byAbility[cur.leader] or SQ.ABILITIES[1]
+      lg.setColor(0.95, 0.85, 0.5)
+      lg.printf(ab.name .. ": " .. ab.desc, x0 + 580, y + 76 + #SQ.UNITS * 30 + 6, 380)
+      lg.setColor(0.5, 0.56, 0.64)
+      lg.printf("Small map, no economy. Units heal slowly anywhere and fast at your HQ - flee (F) and come back. "
+        .. "Each squad follows its leader: V toggles the ability of the selected squad. A fallen leader returns at the HQ after 45s. Destroy the enemy HQ to win. Never scored.",
+        x0 + 580, y + 76 + #SQ.UNITS * 30 + 52, 380)
+      lg.setFont(R.font(13))
+      lg.setColor(0.55, 0.62, 0.7)
+    elseif RTS_SETUP.game == "sandbox" then
       lg.print("SANDBOX ARMIES", x0 + 580, y - 22)
       lg.setColor(0.6, 0.85, 1); lg.print("Your side", x0 + 580 + 150 + 22, y - 22)
       lg.setColor(1, 0.55, 0.5); lg.print("Enemies", x0 + 580 + 270 + 26, y - 22)
@@ -712,7 +761,7 @@ function Menu:draw()
   elseif hoverProf then desc = D.profiles[hoverProf.prof].key .. ": " .. D.profiles[hoverProf.prof].desc
   else desc = "Same team number = allies. Hover a personality to see what it does." end
   lg.printf(desc, x0, ty + 4 * 46 + 4, 520)
-  if RTS_SETUP.game ~= "sandbox" then
+  if RTS_SETUP.game == "standard" then
   if self.savedMap then
     lg.setColor(0.6, 0.85, 0.65)
     lg.printf("Playing saved map: " .. self.savedMap.name .. "  (seed " .. self.savedMap.seed .. ")", x0 + 580, y + 44 + math.min(5, #self.maps) * 40 + 2, 300)
@@ -943,6 +992,25 @@ function Menu:mousepressed(x, y, b)
         you.class = (you.class == r.roster) and 0 or r.roster
       elseif r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
       elseif r.gametype then RTS_SETUP.game = r.gametype
+      elseif r.kind == "sqtab" then RTS_SETUP.squadTab = r.sqi
+      elseif r.kind == "sqon" then
+        local sq = RTS_SETUP.squads[RTS_SETUP.squadTab]
+        sq.on = not sq.on
+      elseif r.kind == "sqleader" then
+        local SQ = require("src.squads")
+        local sq = RTS_SETUP.squads[RTS_SETUP.squadTab]
+        local idx = 1
+        for i, a in ipairs(SQ.ABILITIES) do if a.key == sq.leader then idx = i end end
+        sq.leader = SQ.ABILITIES[(idx - 1 + dir) % #SQ.ABILITIES + 1].key
+      elseif r.kind == "squ" then
+        local SQ = require("src.squads")
+        local sq = RTS_SETUP.squads[RTS_SETUP.squadTab]
+        local d = r.sqd ~= 0 and r.sqd or dir
+        local n = math.max(0, (sq.units[r.sqkey] or 0) + d)
+        local test = {}
+        for k, v in pairs(sq.units) do test[k] = v end
+        test[r.sqkey] = n
+        if SQ.cost(test) <= SQ.BUDGET then sq.units[r.sqkey] = n end
       elseif r.kind == "sbdown" or r.kind == "sbup" or r.kind == "sbcount" then
         local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
         local d = (r.kind == "sbdown" or (r.kind == "sbcount" and b == 2)) and -step or step
@@ -1046,9 +1114,13 @@ function Menu:options()
     mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy, convoy = self.mods.convoy, apoc = self.mods.apoc,
       sandbox = RTS_SETUP.game == "sandbox" or nil, squads = RTS_SETUP.game == "squads" or nil },
     sandbox = RTS_SETUP.game == "sandbox" and RTS_SETUP.sandbox or nil,
+    squadSetup = RTS_SETUP.game == "squads" and RTS_SETUP.squads or nil,
     menuMode = "rts", arenaSetup = self.arena, craftSetup = self.craft,
   }
-  if self.savedMap then
+  if RTS_SETUP.game == "squads" then
+    -- squad fights want a small, mostly dry map
+    o.size, o.water, o.savedMap = SIZES[1][2], WATER[1][2], nil
+  elseif self.savedMap then
     o.seed = self.savedMap.seed
     o.size = self.savedMap.size
     o.water = self.savedMap.water

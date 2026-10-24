@@ -131,6 +131,11 @@ function W.new(opts)
   for t = 1, self.np do
     local s = self.map.starts[t]
     local x, y = self.map:center(s.x, s.y)
+    if self.mods.squads and not opts.arena and not opts.craft then
+      -- Squad Tactics: no Commander - the HQ and the squads are placed after this loop
+      self.teams[t].startX, self.teams[t].startY = x, y
+      goto continue
+    end
     if self.mods.apoc and not opts.arena and not opts.craft then
       -- Post-Apocalypse: no Commander, just one Constructor to rebuild from
       local b = self:spawn("builder", t, x, y)
@@ -152,7 +157,6 @@ function W.new(opts)
     end
     ::continue::
   end
-  MODS.afterSpawn(self, opts)
   if opts.arena then
     ARENA.setup(self, opts)
     self.parTime = ARENA.par(self)
@@ -163,6 +167,9 @@ function W.new(opts)
   self:recomputeEconomy()
   self.grid = {}
   self:rebuildGrid()
+  -- Sandbox armies, Squad Tactics HQs and squads (need the grid to place buildings)
+  if MODS.afterSpawn(self, opts) then self:rebuildGrid() end
+  self:recomputeEconomy()
   self:updateFog(true)
   return self
 end
@@ -419,8 +426,16 @@ function W:issue(e, order, queue)
   end
   -- a flee can't be cancelled: the speed boost has to be paid for by actually leaving
   local cur = e.orders[1]
-  if cur and cur.type == "retreat" and self.time - (cur.issued or self.time) < 45 then return end
-  if order.type == "retreat" then order.issued = self.time end
+  -- Annihilation: a Commander who fled stays at his drop point until fully repaired
+  if cur and cur.type == "retreat" and cur.holdHome and e.hp < e.maxhp - 0.5 then return end
+  if cur and cur.type == "retreat" and self.time - (cur.issued or self.time) < 45
+    and not (self.arena and e.hp >= e.maxhp - 0.5) then return end -- (Arena: healed up on the way? back to the fight)
+  if order.type == "retreat" then
+    order.issued = self.time
+    local tm = self.teams[e.team]
+    if e.key == "commander" and not self.arena and not self.craft and tm and tm.startX
+      and U.dist2(order.x, order.y, tm.startX, tm.startY) < 250 * 250 then order.holdHome = true end
+  end
   if not queue then
     e.orders = {}
     e.path = nil
@@ -431,6 +446,8 @@ end
 
 function W:isFleeing(e)
   local o = e.orders and e.orders[1]
+  if o and o.type == "retreat" and o.holdHome then return e.hp < e.maxhp - 0.5 end
+  if o and o.type == "retreat" and self.arena and e.hp >= e.maxhp - 0.5 then return false end
   return o and o.type == "retreat" and self.time - (o.issued or self.time) < 45
 end
 
@@ -739,7 +756,7 @@ function W:rangeOf(e)
 end
 function W:buildRangeOf(e) return (e.def.buildRange or 0) * (self:modsOf(e).buildRange or 1) end
 function W:buildPowerOf(e) return (e.def.buildPower or 0) * (self:modsOf(e).build or 1) end
-function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) end
+function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) * (e.sqSight or 1) end
 -- how far a unit hunts for targets: its sight, or for artillery (spotted fire) its range
 function W:lookOf(e)
   if e.def.needsSpotter then return math.max(self:sightOf(e), self:rangeOf(e)) end
@@ -748,7 +765,7 @@ end
 
 function W:speedOf(e)
   local flee = e.retreating and (e.key == "commander" and 1.5 or 1.25) or 1
-  local sp = e.def.speed * (1 + 0.04 * (e.level or 0)) * flee * (self:modsOf(e).speed or 1)
+  local sp = e.def.speed * (1 + 0.04 * (e.level or 0)) * flee * (self:modsOf(e).speed or 1) * (e.sqSpeed or 1)
   if self.heroes then
     sp = sp * (self:bv(e, "speed") or 1)
     if e.slowUntil and self.time < e.slowUntil then sp = sp * 0.6 end
@@ -803,7 +820,11 @@ function W:gainXP(e, amount)
     L = L + 1
     local oldMax = e.maxhp
     e.maxhp = math.floor(e.def.hp * (1 + 0.10 * L))
-    e.hp = math.min(e.maxhp, e.hp + (e.maxhp - oldMax) + e.maxhp * 0.25) -- level-up heals a bit
+    if e.arenaTower then
+      e.hp = e.hp + (e.maxhp - oldMax) -- towers just grow; ranking up never repairs them
+    else
+      e.hp = math.min(e.maxhp, e.hp + (e.maxhp - oldMax) + e.maxhp * 0.25) -- level-up heals a bit
+    end
     e.level = L
     self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 0.9, size = e.def.radius + 10 }
     if self.onLevel then self.onLevel(e) end
@@ -884,6 +905,8 @@ function W:canTarget(e, o)
   if o.passive and (e.creep or e.arenaTower) then return false end
   if e.passive and not (e.aggro and e.aggro[o] and self.time < e.aggro[o]) then return false end
   if o.fadeUntil and self.time < o.fadeUntil then return false end
+  -- Squad Tactics smoke: hidden from anything further than point-blank
+  if o.smoked and U.dist2(e.x, e.y, o.x, o.y) > 170 * 170 then return false end
   if o.def.domain == "air" and e.mods and e.mods.hitsAir then return true end
   return D.canHit(e.def.weapon, o.def.domain)
 end
@@ -959,7 +982,7 @@ function W:fire(e, o)
     speed = w.speed, damage = dmg, splash = math.max(w.splash, m.splash or 0), team = e.team,
     weapon = wpn, sx = e.x, sy = e.y, source = e, hitsAir = m.hitsAir,
   }
-  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.heroes and (self:bv(e, "rof") or 1) or 1)
+  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.heroes and (self:bv(e, "rof") or 1) or 1) / (e.sqRof or 1)
   if self.heroes and (m.chill or e.stanceChill) then self.projectiles[#self.projectiles].chill = true end
   if self.heroes and e.stancePoison then self.projectiles[#self.projectiles].poison = e.stancePoison end
   -- melee fighters (Ascetic) strike instead of shoot: the blow lands at once and leaves no trail
@@ -999,6 +1022,7 @@ end
 
 function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
+  if o.sqTaken then amount = amount * o.sqTaken end -- Squad Tactics: Entrench
   if self.craft then amount = amount * CRAFT.armorMul(self, o, attacker) end
   if self.heroes then
     if o.protected then return end
@@ -1044,6 +1068,9 @@ function W:damage(o, amount, attacker)
       local dealt = math.min(amount, math.max(0, o.hp))
       local xp = dealt * (o.def.building and 0.5 or 1)
       if o.hp - amount <= 0 then xp = xp + o.maxhp * 0.3 end -- kill bonus
+      -- Arena towers learn from fighting Commanders; shooting creeps barely counts, so an
+      -- undefended tower doesn't rank up in the middle of your push
+      if attacker.arenaTower and o.key ~= "commander" then xp = xp * 0.12 end
       self:gainXP(attacker, xp)
     end
   end
@@ -1380,6 +1407,19 @@ function W:updateUnit(e, dt)
     -- weapons off, +25% speed, straight home; stays disarmed until fully repaired
     e.retreating = true
     if e.def.weapon then e.disarmed = true end
+    if o.holdHome then
+      -- the Commander: home, then he waits there (powered down) until he's whole again
+      if o.home or U.dist2(e.x, e.y, o.x, o.y) < 60 * 60 then
+        o.home = true
+        e.path = nil
+        e.retreating = false
+        if e.hp >= e.maxhp - 0.5 then e.disarmed = nil; self:popOrder(e) end
+        return
+      end
+      if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
+      if self:followPath(e, dt, 40) then o.home = true end
+      return
+    end
     if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
     if self:followPath(e, dt, 40) or self.time - (o.issued or self.time) > 45 then
       e.retreating = false
@@ -1717,6 +1757,7 @@ function W:update(dt)
   if self.arena then ARENA.update(self, dt) end
   if self.craft then CRAFT.update(self, dt) end
   MODS.updateConvoy(self, dt)
+  if self.squads then require("src.squads").update(self, dt) end
   MODS.updateApoc(self, dt)
   MODS.updateAlien(self, dt)
   MODS.updateDrops(self, dt)
