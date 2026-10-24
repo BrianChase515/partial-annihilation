@@ -226,7 +226,7 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 ## Kiting, attack-move and sight
 
 - **Kiting:** a ranged unit that is fighting (attack, attack-move, patrol, guard or idle) steps back from a shorter-ranged enemy closing in and keeps shooting. It won't run from something it can't shoot or from something much faster than itself (a Scout swarm on artillery). Plain moves and group moves never kite. In Commander Arena, Commanders kite enemy Commanders only, never the creep wave. Computer players kite from level 4 up; level 8+ do it every time.
-- **Attack-move marches:** a group attack-move forms ranks (short reach in front, long guns behind) and walks at the slowest unit's pace until anyone makes contact; then everyone fights freely. Level 5+ computer armies march too.
+- **Attack-move marches:** a group attack-move first forms ranks where it stands (short reach in front, long guns behind, up to 6 s), then walks at the slowest unit's pace until anyone makes contact; then everyone fights freely. Level 5+ computer armies march too.
 - **No shooting into the fog:** a target beyond a unit's own sight must be seen by a friendly unit or building. Artillery and battleships rely on spotters.
 
 ## Controls

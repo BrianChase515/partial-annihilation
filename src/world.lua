@@ -774,7 +774,7 @@ function W:speedOf(e)
   end
   local o = e.orders[1]
   if o and o.groupSpeed and not e.retreating then sp = math.min(sp, o.groupSpeed) end
-  if o and o.march and not o.march.contact and not e.retreating then sp = math.min(sp, o.march.speed) end
+  if o and o.march and not o.march.contact and not e.retreating and (o.formed or not o.formX) then sp = math.min(sp, o.march.speed) end
   return sp
 end
 
@@ -1491,9 +1491,21 @@ function W:updateUnit(e, dt)
     if o.march and not o.march.contact and (t or (e.lastHit and o.issued and e.lastHit > o.issued)) then
       o.march.contact = true
     end
+    local m = o.march
     if t then
       focus = t
       self:approach(e, t, dt)
+    elseif m and not m.contact and o.formX and not o.formed then
+      -- form up: take our place in the ranks where the army stands
+      m.formUntil = m.formUntil or self.time + 6
+      if not e.path or e.destX ~= o.formX or e.destY ~= o.formY then self:setDest(e, o.formX, o.formY) end
+      if self:followPath(e, dt, 12) or self.time > m.formUntil then
+        o.formed = true
+        e.path = nil
+        m.ready = (m.ready or 0) + 1
+      end
+    elseif m and not m.contact and o.formX and (m.ready or 0) < m.n and self.time < (m.formUntil or 0) then
+      e.path = nil -- in place: wait for the rest of the ranks
     else
       if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
       if self:followPath(e, dt, o.arrive or 10) then self:popOrder(e) end

@@ -421,11 +421,97 @@ local function craftScript()
   end)
 end
 
+
+---------------------------------------------------------------------------
+-- Annihilation: two big mixed armies attack-move into each other (ranks, march, kiting)
+local function battleScript()
+  frame()
+  aiGame({ size = 112, water = 0.04, seed = 5150, players = {
+    { ally = 1, level = 8, profile = "Balanced" }, { ally = 2, level = 8, profile = "Balanced" } } })
+  local w = game.world
+  game.ais = {}
+  w.noFog = true
+  w.kiteSkill = nil
+  local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+  local function spot(x, y)
+    local map = w.map
+    local tx, ty = map:tileAt(x, y)
+    local nx, ny = map:nearestTile(tx, ty, function(a, b) return map:passable("land", a, b) end, 12)
+    if nx then return map:center(nx, ny) end
+    return x, y
+  end
+  -- a jumbled army: spawned in a loose blob, so the attack-move visibly sorts it into ranks
+  local function army(team, ox, spec)
+    local list, i = {}, 0
+    for k, n in spec:gmatch("(%w+):(%d+)") do
+      for _ = 1, tonumber(n) do
+        i = i + 1
+        local a = i * 2.39996
+        local r = 28 * math.sqrt(i)
+        local x, y = spot(ox + math.cos(a) * r, cy + math.sin(a) * r)
+        list[#list + 1] = w:spawn(k, team, x, y)
+      end
+    end
+    return list
+  end
+  local spec = "tank:18+artillery:10+flak:5+scout:4"
+  local A = army(1, cx - 900, spec)
+  local B = army(2, cx + 900, spec)
+  -- ours: the real attack-move command, exactly as a player issues it
+  game:select(A)
+  game:commandMove(cx + 700, cy, "amove")
+  game:select({})
+  -- theirs: the same ranks and march (the command itself only takes our units)
+  local slots = game:formation(B, cx - 700, cy, true)
+  local slow = 999
+  for _, u in ipairs(B) do slow = math.min(slow, w:speedOf(u)) end
+  local march = { speed = slow }
+  for _, u in ipairs(B) do w:issue(u, { type = "amove", x = slots[u][1], y = slots[u][2], march = march }) end
+  local function mid(list)
+    local x, y, n = 0, 0, 0
+    for _, u in ipairs(list) do if u.alive then x, y, n = x + u.x, y + u.y, n + 1 end end
+    if n == 0 then return cx, cy end
+    return x / n, y / n
+  end
+  game.cam.zoom = 0.95
+  local function follow(list, lead)
+    local x, y = mid(list)
+    center(x + (lead or 0), y)
+  end
+  follow(A)
+  scene("Attack-move: the army sorts itself into ranks - tanks in front, artillery behind", 5, function() follow(A, 120) end)
+  scene("It marches at the pace of its slowest unit, so nobody runs ahead alone", 4, function() follow(A, 160) end)
+  -- skip ahead to just before contact
+  for _ = 1, 600 do
+    local ax, _ = mid(A)
+    local bx, _ = mid(B)
+    if bx - ax < 900 then break end
+    game:update(1 / 15)
+  end
+  game.cam.zoom = 0.82
+  scene("Contact: the ranks break and everyone fights", 5, function()
+    local ax, ay = mid(A); local bx, by = mid(B)
+    center((ax + bx) / 2, (ay + by) / 2)
+  end)
+  game.cam.zoom = 1.15
+  scene("Ranged units kite: artillery steps back from tanks and keeps firing", 7, function(i)
+    -- watch our artillery line
+    local art = {}
+    for _, u in ipairs(A) do if u.alive and u.key == "artillery" then art[#art + 1] = u end end
+    if #art > 0 then local x, y = mid(art); center(x + 80, y) else local ax, ay = mid(A); center(ax, ay) end
+  end)
+  game.cam.zoom = 0.82
+  scene("Partial Annihilation - free on GitHub, play in your browser", 4, function()
+    local ax, ay = mid(A); local bx, by = mid(B)
+    center((ax + bx) / 2, (ay + by) / 2)
+  end)
+end
+
 function S.start(fn, m)
   startFn = fn
   mode = m or "rts"
   co = coroutine.create(function()
-    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() else rtsScript() end
+    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() elseif mode == "battle" then battleScript() else rtsScript() end
     log("DONE frames", frameNo)
   end)
 end

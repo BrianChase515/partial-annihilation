@@ -637,10 +637,25 @@ function G:commandMove(x, y, kind, queue)
       if not groupSpeed or sp < groupSpeed then groupSpeed = sp end
     end
   end
-  if kind == "amove" and groupSpeed then march = { speed = groupSpeed }; groupSpeed = nil end
+  local fdx, fdy = 0, 0
+  if kind == "amove" and groupSpeed then
+    march = { speed = groupSpeed, n = #units }
+    groupSpeed = nil
+    -- form up first, where the army stands: the same ranks, shifted back to the group's centre
+    if not queue then
+      local cx, cy = 0, 0
+      for _, u in ipairs(units) do cx, cy = cx + u.x, cy + u.y end
+      cx, cy = cx / #units, cy / #units
+      local dx, dy, len = U.norm(x - cx, y - cy)
+      local back = math.min(len, 60)
+      fdx, fdy = cx + dx * back - x, cy + dy * back - y
+      march.formUp = true
+    end
+  end
   for _, u in ipairs(units) do
     local s = slots[u]
     local o = { type = kind == "gmove" and "move" or kind, x = s[1], y = s[2], groupSpeed = groupSpeed, march = march }
+    if march and march.formUp then o.formX, o.formY = s[1] + fdx, s[2] + fdy end
     if kind == "patrol" then
       local last = queue and u.orders[#u.orders]
       o.fromX, o.fromY = last and last.x or u.x, last and last.y or u.y
