@@ -567,8 +567,14 @@ function G:commandMove(x, y, kind, queue)
   self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.5, r = col[1], g = col[2], b = col[3] }
 end
 
+-- hold G while clicking: a group move (everyone at the slowest unit's pace); let go and clicks are normal again
+function G:groupHeld()
+  return not self.arena and love.keyboard.isDown("g") and #self:selectedMobile() > 1 and #self:selectedFactories() == 0
+end
+
 function G:rightClick(wx, wy, queue)
   local world = self.world
+  if self:groupHeld() then self:commandMove(wx, wy, "gmove", queue); return end
   local target = world:entityAt(wx, wy, function(e)
     if e.team == 1 then return true end
     if e.def.domain == "sub" and not self:subRevealed(e) then return false end
@@ -1424,7 +1430,10 @@ function G:mousepressed(x, y, button)
       -- constructors: click = patrol, drag = repair zone (decided on release)
       self.zoneStart = { wx, wy }
       return
-    elseif self.mode == "amove" or self.mode == "patrol" or self.mode == "gmove" then
+    elseif not self.mode and self:groupHeld() then
+      self:commandMove(wx, wy, "gmove", shift)
+      return
+    elseif self.mode == "amove" or self.mode == "patrol" then
       self:commandMove(wx, wy, self.mode, shift)
       if not shift then self.mode = nil end
       return
@@ -1448,11 +1457,6 @@ function G:mousepressed(x, y, button)
     end
     self.boxStart = { x, y }
   elseif button == 2 then
-    if self.mode == "gmove" then
-      self:commandMove(wx, wy, "gmove", shift)
-      if not shift then self.mode = nil end
-      return
-    end
     if self.mode then self.mode = nil; return end
     -- decide on release: a drag pans the camera, a click gives an order
     self.rightDown = { x, y, self.cam.x, self.cam.y }
@@ -1848,8 +1852,6 @@ function G:keypressed(key)
     local facs = self:selectedFactories()
     if #facs > 0 then
       for _, f in ipairs(facs) do f.repeatMode = not f.repeatMode end
-    elseif #self:selectedMobile() > 1 then
-      self.mode = "gmove"
     end
   elseif key == "m" and shift then
     MUSIC.setMuted(not MUSIC.muted)

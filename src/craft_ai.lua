@@ -67,6 +67,7 @@ AI.BENCH = {
   think = 0.9, act = 1, workers = 0, tier2At = 240, tier3At = 550, expandAt = 405,
   attackFood = 18, smart = true, attackRatio = 1.4, towers = 1, research = 0.55,
   creep = true, creepRatio = 1.4, focusHero = true, skillChance = 0.65, heroRetreat = 0.32, regroupRatio = 1.35,
+  legacy = true, -- keeps the 0.13.0 army habits (trickle attacks, thin spending) so the yardstick doesn't move
 }
 
 function AI.new(world, team, level, opts)
@@ -418,9 +419,11 @@ function AI:buildings(tm)
     end
     if self.P.towers >= 2 then order[#order + 1] = { r.tower, 2, 0 } end
   end
-  for _, o in ipairs(order) do
+  local armyOk = self.P.legacy or self:armyFood() >= 14 or tm.gold > 450
+  for i, o in ipairs(order) do
     local k, want, from = o[1], o[2], o[3]
-    if t >= from * (L <= 3 and 1.4 or 1) and have(k) < want then
+    -- the core four always; anything past them (tier buildings, a second barracks) only with an army in the field
+    if t >= from * (L <= 3 and 1.4 or 1) and have(k) < want and (from > 0 or armyOk) then
       local near = k == r.mill and self:woodSpot(hall) or nil
       if near then
         if self:build(k, near[1], near[2], 2, 8) then return end
@@ -522,7 +525,7 @@ function AI:production(tm)
   local altar = self:mine(function(e) return e.def.altar and e.built >= 1 end)[1]
   if altar and #altar.queue == 0 then
     local n = #C.heroesOf(w, self.team, true)
-    if n < 3 and tm.tier >= n + 1 then
+    if n < 3 and tm.tier >= n + 1 and (n == 0 or self.P.legacy or self:armyFood() >= 12 + 4 * n) then
       local pool = {}
       for _, k in ipairs(r.heroes) do
         local ok, why = C.canOrder(w, self.team, "hero_" .. k)
@@ -536,7 +539,8 @@ function AI:production(tm)
   if (saving or self.savingHall) and tm.gold < 500 then return end
   -- research at the forge and the unit buildings, when there's spare
   local spareGold = tm.gold - (tm.tier < 3 and 250 or 100)
-  if spareGold > 0 and t > 200 then
+  -- research is for an army we already have, not instead of one
+  if spareGold > 0 and t > 200 and (self.P.legacy or self:armyFood() >= 12 or tm.gold > 700) then
     for _, f in ipairs(self:mine(function(e) return e.def.factory and e.built >= 1 and #e.queue == 0 and not e.def.hall and not e.def.altar end)) do
       for _, k in ipairs(f.def.builds) do
         local d = D.units[k]
@@ -594,6 +598,13 @@ function AI:armyUnits()
     end
   end
   return list
+end
+
+-- food in fighting units (heroes count 4): how big the army really is
+function AI:armyFood()
+  local f = 0
+  for _, u in ipairs(self:armyUnits()) do f = f + (u.key == "commander" and 4 or (u.def.cost.food or 0)) end
+  return f
 end
 
 function AI:enemyNear(x, y, r)
@@ -686,15 +697,30 @@ function AI:army(tm)
     if not broke and (strength(near) > strength(fighters) * self.P.regroupRatio or food < self.attackFood * 0.35) then
       self.mode = "regroup"
       self.regroupUntil = t + 30
+      -- that wave failed: the next one waits for a bigger army instead of trickling in
+      if not self.P.legacy then self.failedWaves = math.min(3, (self.failedWaves or 0) + 1) end
     else
       local tgt = self:attackTarget(cx, cy)
       if DBG and t > 1500 and math.floor(t) % 30 == 0 then
         print("ATK", math.floor(t), self.team, tgt and tgt.key, tgt and math.floor(tgt.x), tgt and math.floor(tgt.y), math.floor(cx), math.floor(cy), #fighters)
       end
       if tgt then
+        -- the main body: the fighter with the most friends around it. Stragglers (a freshly revived
+        -- hero, new units from the barracks) walk to it instead of marching alone into the enemy
+        local lead, ln = nil, -1
+        for _, u in ipairs(fighters) do
+          local n = 0
+          for _, v in ipairs(fighters) do if U.dist2(u.x, u.y, v.x, v.y) < 400 * 400 then n = n + 1 end end
+          if n > ln then lead, ln = u, n end
+        end
         for _, u in ipairs(fighters) do
           local o = u.orders[1]
-          if not o or (o.type == "amove" and U.dist(o.x, o.y, tgt.x, tgt.y) > 250) or o.type == "move" then
+          local far = not self.P.legacy and ln >= 3 and U.dist(u.x, u.y, lead.x, lead.y) > 700
+          if far then
+            if not (o and o.type == "move" and o.join and U.dist(o.x, o.y, lead.x, lead.y) < 300) then
+              w:issue(u, { type = "move", x = lead.x, y = lead.y, join = true })
+            end
+          elseif not o or (o.type == "amove" and U.dist(o.x, o.y, tgt.x, tgt.y) > 250) or o.type == "move" then
             w:issue(u, { type = "amove", x = tgt.x, y = tgt.y })
           end
         end
@@ -733,16 +759,16 @@ function AI:army(tm)
     return
   end
   -- 4. strong enough: attack
-  local need = math.min(self.attackFood + math.floor(t / 300) * 4, 36)
+  local need = math.min(self.attackFood + math.floor(t / 300) * 4 + 4 * (self.failedWaves or 0), 40)
   if t > 1200 then need = math.min(need, 18) end -- late game: no more turtling
   -- better players attack when they're actually stronger, not at a fixed army size
-  if self.P.smart and food >= 10 then
+  if self.P.smart and food >= (self.P.legacy and 10 or math.max(12, self.attackFood * 0.7) + 3 * (self.failedWaves or 0)) then
     local mine = strength(fighters)
     local theirs = 0
     for _, o in ipairs(w.entities) do
       if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.worker then
         local s = o.hp * (o.def.weapon.damage / o.def.weapon.reload)
-        if o.def.building then s = s * 0.9 end
+        if o.def.building then s = s * (self.P.legacy and 0.9 or 1.25) end -- towers fight from where they stand: right where we'd attack
         theirs = theirs + s
       end
     end

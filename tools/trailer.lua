@@ -1,6 +1,7 @@
 -- Dev tool: record a short captioned feature trailer from real gameplay.
 --   love . --trailer rts   --window 1280x720
 --   love . --trailer arena --window 1280x720
+--   love . --trailer craft --window 1280x720
 -- Writes frames trailer_<mode>_#####.png to the save directory; tools/trailer.sh turns them
 -- into an MP4 and a GIF. Not shipped.
 local U = require("src.util")
@@ -306,11 +307,122 @@ local function arenaScript()
   scene("Break the towers, bring down their Core - 1v1 up to 3v3, or free-for-all", 6, function() if core.alive then center(core.x, core.y) end end)
 end
 
+---------------------------------------------------------------------------
+local function craftHeroesCast(w)
+  local A = require("src.arena")
+  local C = require("src.craft")
+  for t = 1, w.np do
+    for _, c in ipairs(C.heroesOf(w, t, false)) do
+      if c.skills then
+        local best, bd
+        for _, o in ipairs(w.entities) do
+          if o.alive and o.team and o.team > 0 and w:hostile(t, o.team) and not o.def.building then
+            local d = U.dist(c.x, c.y, o.x, o.y)
+            if d < 500 and (not bd or d < bd) then best, bd = o, d end
+          end
+        end
+        if best then
+          for slot = 4, 1, -1 do
+            if c.skills[slot] then c.skills[slot].readyAt = 0 end
+            if c.skills[slot] and A.useSkill(w, c, slot, best.x, best.y) then break end
+          end
+        end
+      end
+    end
+  end
+end
+
+local function overview(w)
+  w.noFog = true
+  game.cam.zoom = math.min(love.graphics.getWidth() / (w.map.w * w.T), (love.graphics.getHeight() - 240) / (w.map.h * w.T))
+  game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
+end
+
+local function craftScript()
+  frame()
+  local C = require("src.craft")
+  local function cgame(tmpl, seed)
+    aiGame({ mode = "craft", size = 88, seed = seed, template = tmpl, players = {
+      { ally = 1, level = 7, race = "vanguard", class = "ranger" }, { ally = 2, level = 7, race = "warband", class = "juggernaut" } } })
+    game.world.onCraftRefused = nil -- the computer's "not enough food" would spam the screen
+    return game.world
+  end
+  -- 1. the Horseshoe
+  local w = cgame("horseshoe", 515)
+  simFast(25)
+  overview(w)
+  scene("COMMANDER CRAFT  -  a classic fantasy-RTS ruleset, built into Partial Annihilation", 4.5, function() game.notices = {} end)
+  -- 2. economy
+  w.noFog = false
+  local hall
+  for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.hall then hall = e end end
+  game.cam.zoom = 1.25
+  center(hall.x + 60, hall.y + 40)
+  scene("Workers mine gold and chop lumber  -  every tree you fell is gone for good", 5, function() center(hall.x + 60, hall.y + 40) end)
+  -- 3. creeping
+  local hero, camp
+  for _ = 1, 60 do
+    simFast(5)
+    for t = 1, 2 do
+      for _, h in ipairs(C.heroesOf(w, t, false)) do
+        for _, cp in ipairs(w.craft.camps) do
+          for _, u in ipairs(cp.units) do
+            if u.alive and u.lastHit and w.time - u.lastHit < 1 and U.dist(u.x, u.y, h.x, h.y) < 400 then hero, camp = h, cp end
+          end
+        end
+      end
+    end
+    if hero then break end
+  end
+  game.cam.zoom = 1.3
+  if hero then
+    scene("Heroes creep neutral camps for experience  -  and choose a card at every level", 5.5, function() if hero.alive then center(hero.x, hero.y) end end)
+  end
+  -- 4. armies clash
+  game.cam.zoom = 1.15
+  for _ = 1, 40 do simFast(15); if w.time > 420 and focusFight(14) >= 14 then break end end
+  scene("Two asymmetric races  -  Vanguard and Warband  -  and real melee on the front line", 6, function(i) if i % 15 == 0 then focusFight(4) end end)
+  -- 5. heroes and ultimates
+  for _ = 1, 30 do simFast(10); if focusFight(10) >= 10 then break end end
+  scene("Ten heroes from Commander Arena, split between the races  -  ultimates included", 6, function(i)
+    if i % 15 == 0 then focusFight(4) end
+    if i % 18 == 1 then craftHeroesCast(w) end
+  end)
+  -- 6. teching up
+  for _ = 1, 40 do if (w.teams[1].tier or 1) >= 3 or w.over then break end simFast(15) end
+  local best
+  for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.hall and (not best or e.id < best.id) then best = e end end
+  if best then
+    game.cam.zoom = 0.9
+    w.noFog = true
+    center(best.x, best.y + 80)
+    scene("Upgrade your hall  -  Keep and Castle, Stronghold and Fortress  -  to unlock new units and research", 5,
+      function(i) center(best.x + (i - 30) * 2, best.y + 80) end)
+  end
+  -- 7. the maps
+  local names = { horseshoe = "Horseshoe", temple = "Old Temple", isles = "Shallow Isles", glade = "Serpent Glade" }
+  for i, tm in ipairs({ "horseshoe", "temple", "isles", "glade" }) do
+    w = cgame(tm, 600 + i)
+    simFast(40)
+    overview(w)
+    scene("Four 1v1 maps  -  " .. names[tm], 2.2, function() game.notices = {} end)
+  end
+  -- 8. outro
+  w = cgame("temple", 77)
+  simFast(500)
+  game.cam.zoom = 1.1
+  focusFight(1)
+  scene("Commander Craft  -  free in Partial Annihilation 0.13  -  play it in your browser", 4.5, function(i)
+    if i % 15 == 0 then focusFight(1) end
+    game.notices = {}
+  end)
+end
+
 function S.start(fn, m)
   startFn = fn
   mode = m or "rts"
   co = coroutine.create(function()
-    if mode == "arena" then arenaScript() else rtsScript() end
+    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() else rtsScript() end
     log("DONE frames", frameNo)
   end)
 end

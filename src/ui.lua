@@ -1243,7 +1243,7 @@ Orders (hold Shift to queue)
   Right-click a friendly unit with a factory selected .. new units join it and follow it
   A then click .............. attack-move (fight anything on the way)
   P then click .............. patrol
-  G then click .............. group move (everyone keeps the slowest unit's pace)
+  Hold G + click ............ group move (everyone keeps the slowest unit's pace)
   S ......................... stop
   Hold D .................... hold fire (selected units stop shooting until you let go)
   F ......................... retreat to your flag (+25% speed, weapons OFF until fully repaired; can't be cancelled)
@@ -1727,7 +1727,7 @@ function UI.draw(game)
   local hint
   if game.mode == "build" then hint = "Placing " .. D.units[game.buildKey].name .. " - click to place, drag for an area, Shift for more, right-click/Esc cancels"
   elseif game.mode == "amove" then hint = "Attack-move: click a destination (Shift queues)"
-  elseif game.mode == "gmove" then hint = "Group move: click a destination - everyone moves at the slowest unit's pace (Shift queues, Esc cancels)"
+  elseif not game.mode and game:groupHeld() then hint = "Group move (holding G): click a destination - everyone moves at the slowest unit's pace. Shift queues; let go of G for normal moves"
   elseif game.mode == "patrol" then hint = game:hasSelectedConstructor() and "Patrol: click a destination, or DRAG a circle to make a repair zone" or "Patrol: click a destination (Shift queues)"
   elseif game.mode == "flag" then hint = "Retreat flag: click where fleeing units should regroup"
   elseif game.mode == "skill" then hint = "Click where to use the skill (Esc cancels). Tip: Q W E R cast straight at the mouse."
@@ -1898,7 +1898,9 @@ function UI.click(game, x, y, b)
   local wx, wy = UI.minimapToWorld(game, x, y)
   if wx then
     if b == 1 then
-      if game.mode == "amove" or game.mode == "patrol" or game.mode == "gmove" then
+      if not game.mode and game:groupHeld() then
+        game:commandMove(wx, wy, "gmove", love.keyboard.isDown("lshift", "rshift"))
+      elseif game.mode == "amove" or game.mode == "patrol" then
         game:commandMove(wx, wy, game.mode, love.keyboard.isDown("lshift", "rshift"))
         game.mode = nil
       else

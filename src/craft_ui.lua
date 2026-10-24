@@ -301,7 +301,7 @@ Heroes
 Melee units (swords, axes, cavalry) must reach their target; ranged units and towers hit from afar and can
 shoot flyers. Siege (Mortars, Demolishers) wrecks buildings. Casters heal, slow or bloodlust on their own.
 
-  Right-click = move / attack / gather.  A = attack-move,  G = group move,  S = stop,  hold D = hold fire,  Ctrl+A = army
+  Right-click = move / attack / gather.  A = attack-move,  hold G + click = group move,  S = stop,  hold D = hold fire,  Ctrl+A = army
   Ctrl+1..9 groups, 1..9 recall.  Space = last attack.  Esc = menu,  F3 = pause,  + / - = game speed
 ]]
 
