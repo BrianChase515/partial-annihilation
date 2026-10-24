@@ -164,9 +164,15 @@ local function script(mode, secs)
     local SQ = require("src.squads")
     local secs2 = tonumber(os.getenv("PA_SECS") or "180")
     opts = { mode = "rts", coh = true, size = 96, water = 0.15, seed = tonumber(os.getenv("PA_SEED") or "31"), mods = { squads = true },
-      squadSetup = SQ.defaults(), players = { { human = true, ally = 1 }, { ally = 2, level = tonumber(os.getenv("PA_LEVEL") or "5") } } }
+      squadSetup = SQ.defaults(), enemySquads = os.getenv("PA_MIRROR") and "mirror" or "own",
+      players = { { human = true, ally = 1 }, { ally = 2, level = tonumber(os.getenv("PA_LEVEL") or "5") } } }
     game = startFn(opts)
     local w = game.world
+    for t = 1, 2 do
+      local l = {}
+      for _, sq in ipairs(SQ.squadsOf(w, t)) do l[#l + 1] = sq.type end
+      print("SQUADS", t, table.concat(l, ","))
+    end
     local nextOrder, nextLog = 0, 0
     if os.getenv("PA_SMOKE") then
       -- an enemy tank parks 230 away from our Armor squad; does Smoke Screen stop it shooting?

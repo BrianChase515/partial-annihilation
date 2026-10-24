@@ -59,7 +59,7 @@ local RTS_SETUP = { game = "standard",
   sandbox = { you = { tank = 20, artillery = 6, flak = 4 }, enemy = { tank = 20, artillery = 6, gunship = 4 } } }
 -- Commander of Heroes: map, format, difficulty and the squads you field
 local COH_FORMATS = { { "1v1", 1, 1 }, { "2v2", 2, 2 } }
-local COH_SETUP = { v = 2, size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
+local COH_SETUP = { v = 2, enemy = "own", size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
@@ -115,6 +115,7 @@ function Menu.new(prev)
       COH_SETUP.size = mem.coh.size or COH_SETUP.size
       COH_SETUP.format = COH_FORMATS[mem.coh.format or 0] and mem.coh.format or 1
       COH_SETUP.level = mem.coh.level or COH_SETUP.level
+      COH_SETUP.enemy = mem.coh.enemy or COH_SETUP.enemy
       -- (setups saved before v2 had the anti-air squad off: start those from the new defaults)
       if mem.coh.v == 2 and mem.coh.squads and #mem.coh.squads == require("src.squads").SLOTS then
         COH_SETUP.squads = mem.coh.squads
@@ -526,9 +527,13 @@ function Menu:cohRects()
     r[#r + 1] = { x = x0 + (i - 1) * 104, y = y + 44, w = 100, h = 34, label = o[1], kind = "cohfmt", value = i,
       active = C.format == i, rowLabel = i == 1 and "Format" or nil }
   end
-  r[#r + 1] = { x = x0, y = y + 88, w = 32, h = 34, label = "-", kind = "cohlv", d = -1, rowLabel = "Difficulty" }
-  r[#r + 1] = { x = x0 + 36, y = y + 88, w = 132, h = 34, label = C.level .. "  " .. LEVEL_NAMES[C.level], kind = "cohlv", d = 0 }
-  r[#r + 1] = { x = x0 + 172, y = y + 88, w = 32, h = 34, label = "+", kind = "cohlv", d = 1 }
+  for i, o in ipairs({ { "Their own picks", "own" }, { "Mirror yours", "mirror" } }) do
+    r[#r + 1] = { x = x0 + (i - 1) * 154, y = y + 88, w = 150, h = 34, label = o[1], kind = "cohenemy", value = o[2],
+      active = (C.enemy or "own") == o[2], rowLabel = i == 1 and "Enemy squads" or nil, small = true }
+  end
+  r[#r + 1] = { x = x0, y = y + 132, w = 32, h = 34, label = "-", kind = "cohlv", d = -1, rowLabel = "Difficulty" }
+  r[#r + 1] = { x = x0 + 36, y = y + 132, w = 132, h = 34, label = C.level .. "  " .. LEVEL_NAMES[C.level], kind = "cohlv", d = 0 }
+  r[#r + 1] = { x = x0 + 172, y = y + 132, w = 32, h = 34, label = "+", kind = "cohlv", d = 1 }
   local by = y + 4 * 46 + 54 + 160
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
@@ -598,7 +603,7 @@ function Menu:drawCohInfo(x0, y)
     .. "Run them out of tickets, or destroy their HQ, to win.\n\n"
     .. "1-5 always select that squad (twice: jump to it); click any unit for its whole squad (Alt: one unit). Fallen members are replaced at your HQ and walk back out to their leader - "
     .. "faster the more points you hold - and units heal fast there. A fallen leader returns after 45 s. Never scored (yet).",
-    x0, y + 140, 520)
+    x0, y + 186, 520)
 end
 
 function Menu:activeCount()
@@ -1093,6 +1098,7 @@ function Menu:mousepressed(x, y, b)
         self.dropdown = { coh = r.sqi, x = r.x, y = r.y + r.h + 2, w = 250 }
       elseif r.kind == "cohsize" then COH_SETUP.size = r.value
       elseif r.kind == "cohfmt" then COH_SETUP.format = r.value
+      elseif r.kind == "cohenemy" then COH_SETUP.enemy = r.value
       elseif r.kind == "cohlv" then COH_SETUP.level = math.max(1, math.min(10, COH_SETUP.level + (r.d ~= 0 and r.d or dir)))
       elseif r.kind == "sbdown" or r.kind == "sbup" or r.kind == "sbcount" then
         local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
@@ -1180,7 +1186,7 @@ function Menu:options()
     -- creation order decides colors and starts: you, enemy, (ally, enemy 2)
     if #players == 4 then players = { players[1], players[2], players[4], players[3] } end
     return { mode = "rts", coh = true, size = C.size == 1 and 96 or 128, water = WATER[1][2], players = players,
-      mods = { squads = true }, squadSetup = C.squads, menuMode = "coh",
+      mods = { squads = true }, squadSetup = C.squads, enemySquads = C.enemy or "own", menuMode = "coh",
       arenaSetup = self.arena, craftSetup = self.craft, sizeI = self.size, waterI = self.water, slots = self.slots }
   end
   if self.mode == "arena" then

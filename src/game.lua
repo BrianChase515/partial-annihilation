@@ -46,7 +46,7 @@ function G.new(opts)
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
     playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, craft = self.craft, template = opts.template,
-    experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup, coh = opts.coh,
+    experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup, coh = opts.coh, enemySquads = opts.enemySquads,
   })
   local world = self.world
   world.humanTeams = {}

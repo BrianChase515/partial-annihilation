@@ -215,11 +215,16 @@ function S.setup(world, opts)
     if human and opts.squadSetup then
       for _, sq in ipairs(opts.squadSetup) do if sq.on then designs[#designs + 1] = S.fixDesign(sq) end end
     else
-      designs = S.randomSquads(rng, math.max(2, nOn > 0 and nOn or 4))
+      if opts.enemySquads == "mirror" and opts.squadSetup and nOn >= 2 then
+        -- mirror: the same squads as the human, so every matchup has an answer
+        for _, ds in ipairs(opts.squadSetup) do if ds.on then designs[#designs + 1] = { type = ds.type } end end
+      else
+        designs = S.randomSquads(rng, math.max(2, nOn > 0 and nOn or 4))
+      end
       -- facing air (the human's setup is known): make sure something here shoots it down
       local enemyAir = false
       for _, ds in ipairs(opts.squadSetup or {}) do if ds.on and ds.type == "air" then enemyAir = true end end
-      if enemyAir and not S.hasAntiAir(designs) then designs[#designs].type = "aa" end
+      if enemyAir and not S.hasAntiAir(designs) and opts.enemySquads ~= "mirror" then designs[#designs].type = "aa" end
     end
     -- toward the middle of the map: that's where the squads stand ready
     local mx, my = map.w * world.T / 2, map.h * world.T / 2

@@ -89,7 +89,7 @@ A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units
 - **Capture points and tickets.** Five points: one near each base, three across the middle. Ground units standing on a point take it (aircraft can't). Hold more than the enemy and their tickets drain; every unit lost costs tickets too. Win when they run out, or when their HQ falls.
 - **Fall back, come again.** Units heal fast at the HQ; fallen members are replaced there (faster the more points you hold) and walk back out to their leader on their own (the panel shows "+N coming"); a fallen leader returns after 45 seconds.
 - **Built for people, not just bots.** Squad units are 60% tougher than in Annihilation, so fights last long enough to read and use skills, and points take 14 s to take. Lower difficulties also limit the bot's attention: it only looks after one or two squads at a time (level 9-10 manage them all).
-- 1v1 or 2v2 on a small or medium map, difficulty 1-10. Not scored yet (mode version 0.1).
+- 1v1 or 2v2 on a small or medium map, difficulty 1-10. The enemy picks its own squads or mirrors yours (good for learning). Not scored yet (mode version 0.1).
 
 ### Your Commander is a roguelike hero with a nuke
 Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:
