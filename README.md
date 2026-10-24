@@ -108,6 +108,7 @@ Victory and defeat get their own fanfares. A robotic voice calls out "Warning. N
 - **Dropships:** from minute 3, neutral alien crews drop and wander the map. When one meets you, the game pauses on a **coin flip**: heads they join you, tails they open fire.
 - **Groovy:** explosions become flowers, the palette goes 1970, and the landscape slowly trips out.
 - **Metal Alert:** only a quarter of the metal deposits, but each is worth three times as much, and the metal has to travel. Every extractor comes with its own **ore truck** that hauls loads to your **Refinery** (you start with one; build more). Kill a truck and that extractor needs a minute to roll out a new one, and rebuilding the extractor doesn't skip the wait.
+- **Sandbox** (a game type, next to Standard): pick any army for each side, up to 300 of every unit type, and they start beside the Commanders. One Commander each; losing yours still ends it. Never scored, never teaches Mirror or Nemesis.
 - **Post-Apocalypse:** no Commanders. Everyone starts with a single Constructor and wins by wiping out every enemy unit and building. At 10:00 the fog of war lifts for good.
 
 Combine them however you like. Score keeps running, but only games without gameplay modifiers (Groovy is cosmetic) count as official, or teach Mirror and Nemesis.

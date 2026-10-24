@@ -9,6 +9,9 @@ local function script(mode, secs)
     -- the title screen on a tab (PA_TAB=craft|arena|rts), optionally with a map picked (PA_MAPI)
     local menu = PA_MENU
     menu.mode = os.getenv("PA_TAB") or "craft"
+    if os.getenv("PA_GAME") then
+      for _, r in ipairs(menu:rects()) do if r.gametype == os.getenv("PA_GAME") then menu:mousepressed(r.x + 2, r.y + 2, 1) end end
+    end
     if os.getenv("PA_MAPI") then menu.craft.map = tonumber(os.getenv("PA_MAPI")) end
     for _ = 1, 4 do frame() end
     pending = "uishot_menu.png"
@@ -21,6 +24,7 @@ local function script(mode, secs)
   if os.getenv("PA_MODS") then
     opts.mods = {}
     for k in os.getenv("PA_MODS"):gmatch("[^,]+") do opts.mods[k] = true end
+    if opts.mods.sandbox then opts.sandbox = { you = { tank = 30, artillery = 10, battleship = 2 }, enemy = { tank = 30, gunship = 8 } } end
   end
   if mode == "arena" then opts.mode = "arena"; opts.players[1].class = os.getenv("PA_CLASS") or "ranger" end
   if mode == "arena" and os.getenv("PA_FIVE") then

@@ -48,7 +48,7 @@ function M.init(world, mods)
   end
   -- Score runs in every game. It is "official" (high-score table, online board) only when
   -- no gameplay modifiers are on; Groovy is cosmetic so it doesn't count.
-  world.official = not (world.mods.alien or world.mods.drops or world.mods.convoy or world.mods.apoc)
+  world.official = not (world.mods.alien or world.mods.drops or world.mods.convoy or world.mods.apoc or world.mods.sandbox or world.mods.squads)
   do
     world.score = {}
     for t = 1, world.np do
@@ -466,6 +466,43 @@ local function nearestRefinery(world, team, x, y)
   end
   return best
 end
+
+-- Sandbox: both sides' chosen armies wait beside their Commanders at the start ("you" goes to
+-- every team on your side, "enemy" to every team against you)
+function M.afterSpawn(world, opts)
+  if world.mods.sandbox and opts.sandbox then
+    local map = world.map
+    for t = 1, world.np do
+      local army = world.ally[t] == world.ally[1] and opts.sandbox.you or opts.sandbox.enemy
+      local tm = world.teams[t]
+      local cx, cy = tm.startX, tm.startY
+      local n = 0
+      for _, k in ipairs({ "scout", "tank", "artillery", "flak", "walker", "fighter", "bomber", "gunship", "boat", "destroyer", "sub", "battleship" }) do
+        local d = D.units[k]
+        for _ = 1, (army and army[k] or 0) do
+          n = n + 1
+          -- a widening spiral around the base; ships look for the nearest water
+          local a = n * 2.4
+          local r = 140 + math.sqrt(n) * 38
+          local x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
+          local tx, ty = map:tileAt(x, y)
+          local layer = (d.domain == "sea" or d.domain == "sub") and "sea" or (d.domain == "air" and nil or "land")
+          if layer then
+            local nx, ny = map:nearestTile(tx, ty, function(xx, yy) return map:passable(layer, xx, yy) end, layer == "sea" and 40 or 12)
+            if nx then x, y = map:center(nx, ny) else x = nil end
+          end
+          if x then
+            local u = world:spawn(k, t, x, y)
+            u.homeX, u.homeY = x, y
+          end
+        end
+      end
+    end
+  end
+  if world.mods.squads then M.setupSquads(world, opts) end
+end
+
+function M.setupSquads(world, opts) end -- Squad Tactics: filled in by src/squads.lua
 
 -- Post-Apocalypse: a side is out when nothing of it is left standing; the fog lifts at 10:00
 M.APOC_FOG = 600

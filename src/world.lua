@@ -152,6 +152,7 @@ function W.new(opts)
     end
     ::continue::
   end
+  MODS.afterSpawn(self, opts)
   if opts.arena then
     ARENA.setup(self, opts)
     self.parTime = ARENA.par(self)

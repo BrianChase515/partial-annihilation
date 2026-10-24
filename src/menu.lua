@@ -52,12 +52,62 @@ local AFORMATS = { { "1v1", 1, 1 }, { "1v2", 1, 2 }, { "2v2", 2, 2 }, { "2v1", 2
 local ASLOT_NAMES = { "You", "Ally", "Enemy", "Enemy 2", "Ally 2", "Enemy 3", "Ally 3", "Enemy 4", "Ally 4", "Enemy 5" }
 
 local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
+-- Annihilation game types, and the Sandbox armies (kept for the whole session)
+local GAMETYPES = { { "standard", "Standard" }, { "sandbox", "Sandbox" } }
+local SANDBOX_UNITS = { "scout", "tank", "artillery", "flak", "fighter", "bomber", "gunship", "boat", "destroyer", "sub", "battleship", "walker" }
+local RTS_SETUP = { game = "standard",
+  sandbox = { you = { tank = 20, artillery = 6, flak = 4 }, enemy = { tank = 20, artillery = 6, gunship = 4 } } }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
 
+-- menu memory: every choice on all three tabs is saved when a game starts and restored on the
+-- next visit to the title screen (and the next launch)
+local MEMFILE = "menu_setup.lua"
+local function ser(v)
+  local t = type(v)
+  if t == "number" then return string.format("%.6g", v)
+  elseif t == "string" then return string.format("%q", v)
+  elseif t == "boolean" then return tostring(v)
+  elseif t == "table" then
+    local out = {}
+    for k, x in pairs(v) do
+      if type(x) ~= "function" then
+        local key = type(k) == "number" and ("[" .. k .. "]") or ("[" .. string.format("%q", k) .. "]")
+        out[#out + 1] = key .. "=" .. ser(x)
+      end
+    end
+    return "{" .. table.concat(out, ",") .. "}"
+  end
+  return "nil"
+end
+local function loadMemory()
+  local ok, chunk = pcall(love.filesystem.load, MEMFILE)
+  if not ok or not chunk then return nil end
+  local ok2, t = pcall(chunk)
+  return ok2 and type(t) == "table" and t or nil
+end
+function Menu:remember()
+  local mem = { mode = self.mode, sizeI = self.size, waterI = self.water, slots = self.slots, mods = self.mods,
+    arenaSetup = self.arena, craftSetup = self.craft, rts = RTS_SETUP }
+  pcall(love.filesystem.write, MEMFILE, "return " .. ser(mem))
+end
+
 function Menu.new(prev)
   local self = setmetatable({}, Menu)
+  -- what was set up last time wins over the defaults (the finished game's own options otherwise)
+  local mem = loadMemory()
+  if mem then
+    prev = { sizeI = mem.sizeI, waterI = mem.waterI, slots = mem.slots, menuMode = mem.mode, arenaSetup = mem.arenaSetup,
+      craftSetup = mem.craftSetup, mods = mem.mods, savedMap = prev and prev.savedMap }
+    if mem.rts then
+      RTS_SETUP.game = mem.rts.game or RTS_SETUP.game
+      local known = false
+      for _, g in ipairs(GAMETYPES) do if g[1] == RTS_SETUP.game then known = true end end
+      if not known then RTS_SETUP.game = "standard" end
+      if mem.rts.sandbox then RTS_SETUP.sandbox = mem.rts.sandbox end
+    end
+  end
   self.size = prev and prev.sizeI or 2
   self.water = prev and prev.waterI or 2
   self.slots = prev and prev.slots or {
@@ -66,6 +116,9 @@ function Menu.new(prev)
     { on = false, team = 3, level = 5, prof = RANDOM_PROF },
     { on = false, team = 4, level = 5, prof = RANDOM_PROF },
   }
+  for _, sl in ipairs(self.slots) do
+    if sl.prof and not D.profiles[sl.prof] then sl.prof = RANDOM_PROF end -- (e.g. Mirror, before it unlocks again)
+  end
   self.savedMap = prev and prev.savedMap or nil
   self.mode = prev and prev.menuMode or "rts"
   self.arena = prev and prev.arenaSetup or {
@@ -365,11 +418,16 @@ function Menu:rects()
   local x0, y, w, h = self:layout()
   local r = {}
   self:tabRects(r)
+  -- game type, then map size and water on one row
+  for i, o in ipairs(GAMETYPES) do
+    r[#r + 1] = { x = x0 + (i - 1) * 174, y = y, w = 168, h = 34, label = o[2], gametype = o[1], active = RTS_SETUP.game == o[1],
+      rowLabel = i == 1 and "Game" or nil }
+  end
   for i, o in ipairs(SIZES) do
-    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y, w = 110, h = 34, label = o[1], field = "size", value = i, rowLabel = i == 1 and "Map size" or nil }
+    r[#r + 1] = { x = x0 + (i - 1) * 84, y = y + 44, w = 80, h = 34, label = o[1], field = "size", value = i, rowLabel = i == 1 and "Map" or nil, small = true }
   end
   for i, o in ipairs(WATER) do
-    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 44, w = 110, h = 34, label = o[1], field = "water", value = i, rowLabel = i == 1 and "Water" or nil }
+    r[#r + 1] = { x = x0 + 266 + (i - 1) * 84, y = y + 44, w = 80, h = 34, label = o[1] .. (i == 1 and " land" or (i == 2 and " water" or " water")), field = "water", value = i, small = true }
   end
   -- modifiers (toggles, can combine)
   local MODLIST = { { "alien", "Alien Tech" }, { "drops", "Dropships" }, { "convoy", "Metal Alert" }, { "apoc", "Post-Apoc" }, { "groovy", "Groovy" } }
@@ -407,8 +465,22 @@ function Menu:rects()
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
-  -- saved maps panel
   local px = x0 + 580
+  if RTS_SETUP.game == "sandbox" then
+    -- the two armies: a count per unit type (click +/-, Shift for 10, right-click lowers)
+    for i, k in ipairs(SANDBOX_UNITS) do
+      local yy = y + (i - 1) * 30
+      for si, side in ipairs({ "you", "enemy" }) do
+        local cx = px + 150 + (si - 1) * 120
+        r[#r + 1] = { x = cx, y = yy, w = 26, h = 26, label = "-", kind = "sbdown", sbside = side, sbkey = k, small = true }
+        r[#r + 1] = { x = cx + 28, y = yy, w = 50, h = 26, label = tostring(RTS_SETUP.sandbox[side][k] or 0), kind = "sbcount", sbside = side, sbkey = k, small = true }
+        r[#r + 1] = { x = cx + 80, y = yy, w = 26, h = 26, label = "+", kind = "sbup", sbside = side, sbkey = k, small = true }
+      end
+    end
+    self:updateRect(r, w)
+    return r
+  end
+  -- saved maps panel
   r[#r + 1] = { x = px, y = y, w = 300, h = 34, label = "Random new map", action = "random", active = not self.savedMap }
   for i, m in ipairs(self.maps) do
     if i > 5 then break end
@@ -511,7 +583,23 @@ function Menu:draw()
     lg.print("Team", x0 + 78, ty - 22)
     lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
     lg.print("Personality (click to choose)", x0 + 388, ty - 22)
-    lg.print("SAVED MAPS", x0 + 580, y - 22)
+    if RTS_SETUP.game == "sandbox" then
+      lg.print("SANDBOX ARMIES", x0 + 580, y - 22)
+      lg.setColor(0.6, 0.85, 1); lg.print("Your side", x0 + 580 + 150 + 22, y - 22)
+      lg.setColor(1, 0.55, 0.5); lg.print("Enemies", x0 + 580 + 270 + 26, y - 22)
+      lg.setFont(R.font(13))
+      for i, k in ipairs(SANDBOX_UNITS) do
+        lg.setColor(0.8, 0.85, 0.92)
+        lg.print(D.units[k].name, x0 + 580, y + (i - 1) * 30 + 5)
+      end
+      lg.setColor(0.5, 0.56, 0.64)
+      lg.printf("Shift-click = 10 at a time, right-click lowers. Every team on a side gets that army. Your Commander still has to survive. Never scored.",
+        x0 + 580, y + #SANDBOX_UNITS * 30 + 8, 380)
+      lg.setFont(R.font(13))
+      lg.setColor(0.55, 0.62, 0.7)
+    else
+      lg.print("SAVED MAPS", x0 + 580, y - 22)
+    end
   end
 
   local mx, my = love.mouse.getPosition()
@@ -624,6 +712,7 @@ function Menu:draw()
   elseif hoverProf then desc = D.profiles[hoverProf.prof].key .. ": " .. D.profiles[hoverProf.prof].desc
   else desc = "Same team number = allies. Hover a personality to see what it does." end
   lg.printf(desc, x0, ty + 4 * 46 + 4, 520)
+  if RTS_SETUP.game ~= "sandbox" then
   if self.savedMap then
     lg.setColor(0.6, 0.85, 0.65)
     lg.printf("Playing saved map: " .. self.savedMap.name .. "  (seed " .. self.savedMap.seed .. ")", x0 + 580, y + 44 + math.min(5, #self.maps) * 40 + 2, 300)
@@ -637,7 +726,7 @@ function Menu:draw()
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
   lg.print("HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
-  local official = not (self.mods.alien or self.mods.drops)
+  local official = not (self.mods.alien or self.mods.drops or self.mods.convoy or self.mods.apoc)
   if official then lg.setColor(0.5, 0.9, 0.55) else lg.setColor(1, 0.6, 0.35) end
   local ot = official and "this game counts" or "modifiers on: unofficial"
   lg.print(ot, x0 + 580 + 300 - R.font(13):getWidth(ot), hy)
@@ -667,6 +756,7 @@ function Menu:draw()
       lg.print(string.format("%d. %s  %s  %s", i, U_fmt(e.score), nm, tostring(e.result or "")), x0 + 580, oy + 4 + i * 20)
     end
   end
+  end -- (not sandbox)
   end -- rts info
   do
     local ON = require("src.online")
@@ -852,6 +942,12 @@ function Menu:mousepressed(x, y, b)
         local you = self.arena.slots[1]
         you.class = (you.class == r.roster) and 0 or r.roster
       elseif r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
+      elseif r.gametype then RTS_SETUP.game = r.gametype
+      elseif r.kind == "sbdown" or r.kind == "sbup" or r.kind == "sbcount" then
+        local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
+        local d = (r.kind == "sbdown" or (r.kind == "sbcount" and b == 2)) and -step or step
+        local t = RTS_SETUP.sandbox[r.sbside]
+        t[r.sbkey] = math.max(0, math.min(300, (t[r.sbkey] or 0) + d))
       elseif r.field then self[r.field] = r.value; self.savedMap = nil
       elseif r.kind == "toggle" then
         s.on = not s.on
@@ -896,6 +992,7 @@ function Menu:keypressed(k)
 end
 
 function Menu:options()
+  self:remember()
   if self.mode == "craft" then
     local CS = self.craft
     local races = D.CRAFT.races
@@ -946,7 +1043,9 @@ function Menu:options()
   local o = {
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
-    mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy, convoy = self.mods.convoy, apoc = self.mods.apoc },
+    mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy, convoy = self.mods.convoy, apoc = self.mods.apoc,
+      sandbox = RTS_SETUP.game == "sandbox" or nil, squads = RTS_SETUP.game == "squads" or nil },
+    sandbox = RTS_SETUP.game == "sandbox" and RTS_SETUP.sandbox or nil,
     menuMode = "rts", arenaSetup = self.arena, craftSetup = self.craft,
   }
   if self.savedMap then
