@@ -1322,7 +1322,9 @@ function W:kiteThreat(e)
   local myR = self:rangeOf(e)
   local best, bd
   self:query(e.x, e.y, myR + 40, function(o)
+    -- Arena: a Commander kites enemy Commanders only (backing off from creep waves would starve him)
     if o.alive and o ~= e and o.team and not o.def.building and o.def.weapon and not o.neutral and not o.disarmed
+      and not (self.arena and e.key == "commander" and o.key ~= "commander")
       and self:hostile(o.team, e.team) and self:canTarget(o, e) and self:canTarget(e, o) then
       local theirR = (o.mods and o.mods.melee or o.def.melee) and math.min(self:rangeOf(o), 100) or self:rangeOf(o)
       -- no point running from something much faster (a Scout swarm on artillery): stand and fight
