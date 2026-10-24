@@ -583,11 +583,56 @@ local function cohScript()
   scene("Partial Annihilation - free on GitHub, play in your browser", 4, function() game.notices = {} end)
 end
 
+
+---------------------------------------------------------------------------
+-- War is Hell: deep fog, named crews, bunkers, blood (both sides played by the computer)
+local function wihScript()
+  frame()
+  local SQ = require("src.squads")
+  game = startFn({ mode = "rts", coh = true, size = 128, water = 0.12, seed = 1944, mods = { squads = true },
+    squadSetup = SQ.defaults(), cohMode = "wih", hillFrac = 0.22, rockFrac = 0.06,
+    players = { { human = true, ally = 1 }, { ally = 2, level = 8 } } })
+  local w = game.world
+  game.ais[#game.ais + 1] = SQ.newAI(w, 1, 8)
+  local mine = SQ.squadsOf(w, 1)
+  local function mid(list)
+    local x, y, n = 0, 0, 0
+    for _, sq in ipairs(list) do for _, u in ipairs(sq.members) do if u.alive then x, y, n = x + u.x, y + u.y, n + 1 end end end
+    if n == 0 then return w.map.w * w.T / 2, w.map.h * w.T / 2 end
+    return x / n, y / n
+  end
+  local function pickAll() local l = {}; for _, sq in ipairs(mine) do for _, u in ipairs(sq.members) do if u.alive then l[#l + 1] = u end end end; game:select(l) end
+  -- 1. moving out into the fog
+  simFast(4)
+  game.cam.zoom = 0.75
+  pickAll()
+  scene("WAR IS HELL", 3, function() game.notices = {}; local x, y = mid(mine); center(x, y) end, { capY = 300 })
+  scene("No base. No reinforcements. Every man has a name.", 4.5, function() game.notices = {}; local x, y = mid(mine); center(x, y) end)
+  -- 2. contact
+  local fx, fy
+  for _ = 1, 90 do
+    simFast(2)
+    local n = focusFight(6)
+    if n >= 6 then fx, fy = game.cam.x, game.cam.y; break end
+  end
+  game.cam.zoom = 0.95
+  game:select({})
+  scene("Deep fog. Find them before they find you.", 4.5, function(i) game.notices = {}; if i % 8 == 0 then focusFight(3) end end)
+  scene("Take the high ground - or dig into a bunker.", 4.5, function(i) if i % 8 == 0 then focusFight(3) end end)
+  scene("When they die, they die.", 4.5, function(i) if i % 8 == 0 then focusFight(2) end end)
+  -- 3. the aftermath
+  simFast(25)
+  game.cam.zoom = 0.85
+  pickAll()
+  local x, y = mid(mine)
+  scene("Commander of Heroes: War is Hell - Partial Annihilation", 4, function() local a, b = mid(mine); center(a, b) end)
+end
+
 function S.start(fn, m)
   startFn = fn
   mode = m or "rts"
   co = coroutine.create(function()
-    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() elseif mode == "battle" then battleScript() elseif mode == "coh" then cohScript() else rtsScript() end
+    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() elseif mode == "battle" then battleScript() elseif mode == "coh" then cohScript() elseif mode == "wih" then wihScript() else rtsScript() end
     log("DONE frames", frameNo)
   end)
 end
