@@ -6,8 +6,15 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.14.0"  -- the first two numbers are the high-score season
-D.SEASON = D.VERSION:match("^(%d+%.%d+)")
+D.VERSION = "0.14.1"
+D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
+-- each mode's own maturity (the package keeps one version for updates and score seasons)
+D.MODE_VERSIONS = {
+  rts = { "0.8", "Mostly feature complete; still being balanced and polished." },
+  arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
+  craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
+}
+D.MODE_NAMES = { rts = "Annihilation", arena = "Commander Arena", craft = "Commander Craft" }
 
 D.units = {
   commander = {

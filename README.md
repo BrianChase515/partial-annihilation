@@ -10,6 +10,14 @@ Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of 
 
 **Three games in one:** **Annihilation**, the full Total Annihilation-style RTS; **Commander Arena**, a lane-battle mode where you control only your Commander; and **Commander Craft**, a Warcraft-style mode with workers, races and heroes.
 
+| Mode | Version | Status |
+|---|---|---|
+| Annihilation | 0.8 | Mostly feature complete; still being balanced and polished. |
+| Commander Arena | 0.6 | Playable end to end; heroes and maps still being tuned. |
+| Commander Craft | 0.4 | Early: the core is in, races, heroes and maps are still changing a lot. |
+
+The package version (shown in the corner of the title screen) covers all three; it's what the updater and the high-score seasons use.
+
 ## What makes it different
 
 ### Commander Craft: a Warcraft-style mode

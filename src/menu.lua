@@ -446,6 +446,13 @@ function Menu:draw()
     or (self.mode == "craft" and "Commander Craft: gold, lumber, heroes and three tiers. Warcraft rules, our heroes."
     or "A small real-time strategy game of land, sea and air. Shapes included.")
   lg.print(sub, w / 2 - R.font(18):getWidth(sub) / 2, y - 78)
+  do
+    local mv = D.MODE_VERSIONS[self.mode] or D.MODE_VERSIONS.rts
+    local vt = string.format("%s v%s  -  %s", D.MODE_NAMES[self.mode] or "Annihilation", mv[1], mv[2])
+    lg.setFont(R.font(13))
+    lg.setColor(th.sub[1], th.sub[2], th.sub[3], 0.7)
+    lg.print(vt, w / 2 - R.font(13):getWidth(vt) / 2, y - 52)
+  end
 
   -- column headers for player slots
   lg.setFont(R.font(13))
@@ -633,7 +640,7 @@ function Menu:draw()
     end
   end
   lg.setColor(0.4, 0.45, 0.52)
-  lg.print("v" .. D.VERSION, 12, h - 24)
+  lg.print("v" .. D.VERSION .. "  (" .. (D.MODE_NAMES[self.mode] or "") .. " " .. ((D.MODE_VERSIONS[self.mode] or {})[1] or "") .. ")", 12, h - 24)
   UI.drawMusicLabel(80, h - 24, false, true)
   lg.setFont(R.font(13))
   lg.setColor(0.5, 0.56, 0.64)

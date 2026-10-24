@@ -33,7 +33,8 @@ function L.start(game)
   table.sort(mods)
   local water, total = 0, w.map.w * w.map.h
   for i = 0, total - 1 do if w.map.terrain[i] == 0 then water = water + 1 end end
-  self:raw("PARTIAL ANNIHILATION MATCH LOG  v" .. D.VERSION .. "   " .. os.date("%Y-%m-%d %H:%M"))
+  local mk = w.craft and "craft" or (w.arena and "arena" or "rts")
+  self:raw("PARTIAL ANNIHILATION MATCH LOG  v" .. D.VERSION .. "  (" .. D.MODE_NAMES[mk] .. " " .. D.MODE_VERSIONS[mk][1] .. ")   " .. os.date("%Y-%m-%d %H:%M"))
   if w.craft then
     self:raw(string.format("Mode: COMMANDER CRAFT   map %s %dx%d seed %d, official score: %s", w.map.template or "horseshoe",
       w.map.w, w.map.h, w.map.seed, w.official and "yes" or "no"))
