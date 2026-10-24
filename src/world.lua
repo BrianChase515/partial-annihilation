@@ -64,7 +64,7 @@ function W.new(opts)
   for i = 0, n - 1 do self.visible[i] = 0; self.explored[i] = false end
   self.fogTimer = 0
   self.noFog = opts.noFog
-  self.noKite = os.getenv("PA_NOKITE") ~= nil -- test harness: switch kiting off to compare
+  self.noKite = (os.getenv("PA_NOKITE") or "") ~= "" -- test harness: switch kiting off to compare
 
   self.nukes = {}
   self.rngCmd = love.math.newRandomGenerator((opts.seed or 1) + 777)
@@ -1321,9 +1321,10 @@ function W:kiteThreat(e)
   local best, bd
   self:query(e.x, e.y, myR + 40, function(o)
     if o.alive and o ~= e and o.team and not o.def.building and o.def.weapon and not o.neutral and not o.disarmed
-      and self:hostile(o.team, e.team) and self:canTarget(o, e) then
+      and self:hostile(o.team, e.team) and self:canTarget(o, e) and self:canTarget(e, o) then
       local theirR = (o.mods and o.mods.melee or o.def.melee) and math.min(self:rangeOf(o), 100) or self:rangeOf(o)
-      if theirR + 40 < myR then
+      -- no point running from something much faster (a Scout swarm on artillery): stand and fight
+      if theirR + 40 < myR and self:speedOf(o) < self:speedOf(e) * 1.7 then
         local d = U.dist(e.x, e.y, o.x, o.y)
         local edge = d - theirR - o.def.radius - e.def.radius
         local minR = e.def.weapon.minRange or 0
