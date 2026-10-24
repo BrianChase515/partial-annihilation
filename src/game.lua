@@ -362,16 +362,20 @@ function G:clampCam()
   local z = self.cam.zoom
   local vw, vh = w / z, h / z
   local padTop, padBot = UI.TOP_H / z, UI.PANEL_H / z
+  -- the camera may run past the map's edges (up to about half a screen), so a base in a corner
+  -- can still be brought to the middle of the view instead of hiding under the HUD
+  local overX, overY = vw * 0.45, (vh - padTop - padBot) * 0.45
   if vw >= mw then
-    self.cam.x = (mw - vw) / 2
+    self.cam.x = U.clamp(self.cam.x, (mw - vw) / 2 - overX, (mw - vw) / 2 + overX)
   else
-    self.cam.x = U.clamp(self.cam.x, 0, mw - vw)
+    self.cam.x = U.clamp(self.cam.x, -overX, mw - vw + overX)
   end
   local usable = vh - padTop - padBot
   if usable >= mh then
-    self.cam.y = (mh - usable) / 2 - padTop
+    local c = (mh - usable) / 2 - padTop
+    self.cam.y = U.clamp(self.cam.y, c - overY, c + overY)
   else
-    self.cam.y = U.clamp(self.cam.y, -padTop, mh - vh + padBot)
+    self.cam.y = U.clamp(self.cam.y, -padTop - overY, mh - vh + padBot + overY)
   end
 end
 
