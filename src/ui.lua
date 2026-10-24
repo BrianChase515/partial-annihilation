@@ -379,7 +379,7 @@ function UI.drawCommanderCard(game)
   if game.craft then return craftUI().drawHeroBar(game) end
   local world = game.world
   local c = world.teams[1].commander
-  if not c then return end
+  if not c or c.key ~= "commander" then return end -- (Post-Apocalypse has no Commander)
   local w = lg.getWidth()
   local bw, bh = UI.SCORE_W, 58
   local x, y = w - bw - 10, (world.score and game.scoreBottom or UI.TOP_H) + 6
@@ -972,11 +972,14 @@ function UI.cardButtons(game, L)
     return btns
   end
   if ctx then
+    -- nine buttons (the Refinery with Metal Alert on) get a fifth column instead of a third row
+    local cols = #list > 2 * COLS and COLS + 1 or COLS
+    local cx0 = L.cardX - (cols - COLS) * (BTN + 6)
     for i, key in ipairs(list) do
-      local col = (i - 1) % COLS
-      local row = math.floor((i - 1) / COLS)
+      local col = (i - 1) % cols
+      local row = math.floor((i - 1) / cols)
       btns[#btns + 1] = {
-        x = L.cardX + col * (BTN + 6), y = L.cardY + row * (BTN + 6), w = BTN, h = BTN,
+        x = cx0 + col * (BTN + 6), y = L.cardY + row * (BTN + 6), w = BTN, h = BTN,
         kind = ctx, key = key, slot = i, hotkey = D.hotkeys[i],
       }
     end
@@ -1175,7 +1178,7 @@ function UI.drawCard(game, L)
       local et = U.fmt(d.cost.energy) .. "e"
       lg.print(et, b.x + b.w - font(11):getWidth(et) - 4, b.y + b.h - 16)
       lg.setColor(1, 1, 1, 0.75)
-      lg.print(string.upper(b.hotkey), b.x + 5, b.y + 3)
+      if b.hotkey then lg.print(string.upper(b.hotkey), b.x + 5, b.y + 3) end
       -- queued count on factory buttons
       if b.kind == "factory" then
         local n = 0

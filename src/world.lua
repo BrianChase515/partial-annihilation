@@ -130,12 +130,26 @@ function W.new(opts)
   for t = 1, self.np do
     local s = self.map.starts[t]
     local x, y = self.map:center(s.x, s.y)
+    if self.mods.apoc and not opts.arena and not opts.craft then
+      -- Post-Apocalypse: no Commander, just one Constructor to rebuild from
+      local b = self:spawn("builder", t, x, y)
+      b.homeX, b.homeY = x, y
+      b.mods, b.taken, b.upgrades, b.offers = b.mods or {}, {}, {}, {}
+      b.cxp, b.clevel = 0, 0
+      -- it stands in as the side's "leader" for the camera and HUD, but losing it isn't losing
+      self.teams[t].commander = b
+      self.teams[t].startX, self.teams[t].startY = x, y
+      goto continue
+    end
+    do
     local c = self:spawn("commander", t, x, y)
     c.homeX, c.homeY = x, y
     c.mods, c.taken, c.upgrades, c.offers = {}, {}, {}, {}
     c.cxp, c.clevel = 0, 0
     self.teams[t].commander = c
     self.teams[t].startX, self.teams[t].startY = x, y
+    end
+    ::continue::
   end
   if opts.arena then
     ARENA.setup(self, opts)
@@ -286,6 +300,7 @@ function W:recomputeEconomy()
   for t = 1, self.np do
     local tm = self.teams[t]
     tm.mIncome, tm.eIncome, tm.mStore, tm.eStore = 0, 0, 0, 0
+    tm.convoyIncome = 0
   end
   for _, e in ipairs(self.entities) do
     if e.alive and e.built >= 1 then
@@ -294,7 +309,14 @@ function W:recomputeEconomy()
         metal = (e.def.income and e.def.income.metal or 0) + e.mods.income.metal,
         energy = (e.def.income and e.def.income.energy or 0) + e.mods.income.energy } or e.def.income
       if inc then
-        tm.mIncome = tm.mIncome + (inc.metal or 0) * tm.incomeMul
+        local m = (inc.metal or 0) * tm.incomeMul
+        -- Metal Alert: extractors fill up for the ore trucks (worth three times as much) instead of
+        -- paying straight in; mIncome still counts it so the HUD and the computer can plan
+        if self.mods and self.mods.convoy and e.def.place == "deposit" then
+          m = m * 3
+          tm.convoyIncome = tm.convoyIncome + m
+        end
+        tm.mIncome = tm.mIncome + m
         tm.eIncome = tm.eIncome + (inc.energy or 0) * tm.incomeMul
       end
       local st = (e.mods and e.mods.storage) and {
@@ -1651,7 +1673,7 @@ function W:update(dt)
   if self.economyDirty then self:recomputeEconomy() end
   for t = 1, self.np do
     local tm = self.teams[t]
-    tm.metal = math.min(tm.mStore, tm.metal + tm.mIncome * dt)
+    tm.metal = math.min(tm.mStore, tm.metal + (tm.mIncome - (tm.convoyIncome or 0)) * dt)
     tm.energy = math.min(tm.eStore, tm.energy + tm.eIncome * dt)
     tm.stalled = false
     local md, ed = tm.mDemand or 0, tm.eDemand or 0
@@ -1693,6 +1715,8 @@ function W:update(dt)
   self:updateNukes(dt)
   if self.arena then ARENA.update(self, dt) end
   if self.craft then CRAFT.update(self, dt) end
+  MODS.updateConvoy(self, dt)
+  MODS.updateApoc(self, dt)
   MODS.updateAlien(self, dt)
   MODS.updateDrops(self, dt)
   MODS.updateScore(self, dt)

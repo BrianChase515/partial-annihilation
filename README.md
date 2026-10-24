@@ -107,8 +107,10 @@ Victory and defeat get their own fanfares. A robotic voice calls out "Warning. N
 - **Alien Tech:** an enormous alien walker is announced and then lands near the middle of the map. Hold its zone uncontested for 15 seconds to make it yours, king-of-the-hill style. Then the next one lands somewhere else.
 - **Dropships:** from minute 3, neutral alien crews drop and wander the map. When one meets you, the game pauses on a **coin flip**: heads they join you, tails they open fire.
 - **Groovy:** explosions become flowers, the palette goes 1970, and the landscape slowly trips out.
+- **Metal Alert:** only a quarter of the metal deposits, but each is worth three times as much, and the metal has to travel. Every extractor comes with its own **ore truck** that hauls loads to your **Refinery** (you start with one; build more). Kill a truck and that extractor needs a minute to roll out a new one, and rebuilding the extractor doesn't skip the wait.
+- **Post-Apocalypse:** no Commanders. Everyone starts with a single Constructor and wins by wiping out every enemy unit and building. At 10:00 the fog of war lifts for good.
 
-Combine them however you like. Score keeps running, but only games without Alien Tech or Dropships count as official.
+Combine them however you like. Score keeps running, but only games without gameplay modifiers (Groovy is cosmetic) count as official, or teach Mirror and Nemesis.
 
 ### Metal you have to go and take
 Metal near your base is scarce. Most deposits sit out in the contested middle of the map, and the richest ones (+2.6 metal, against +1.6 for a normal deposit) are a gold-ringed cluster at the very center and teal-ringed fields offshore. Turtling at home means falling behind.
@@ -261,7 +263,7 @@ Plain Lua on LÖVE 11.5, with no other dependencies.
 | `src/world.lua` | The simulation: economy, construction, combat, veterancy, fog of war, retreat and repair |
 | `src/ai.lua` | Computer opponents: economy, production, waves, raids, retreating, Commander tactics, nuke targeting, multi-enemy targeting |
 | `src/commander.lua` | Commander levels, the 20-upgrade pool and the Nuke |
-| `src/mods.lua` | Game modifiers: Alien Tech, Dropships, Score mode |
+| `src/mods.lua` | Game modifiers: Alien Tech, Dropships, Metal Alert, Post-Apocalypse, Score mode |
 | `src/scores.lua`, `src/online.lua` | Local high scores; update check, one-click update and online leaderboard (via `curl` and GitHub) |
 | `src/matchlog.lua` | Per-game logs for balance review |
 | `src/arena.lua`, `src/arena_ai.lua` | Commander Arena: lane map, towers, creep waves, the seven classes and their skills, and the computer Commanders |
@@ -279,7 +281,7 @@ Plain Lua on LÖVE 11.5, with no other dependencies.
 Computer-vs-computer games run headless at high speed:
 
 ```sh
-love . --autotest 25 <seed> <size> <level1> <profile1> <level2> <profile2> [--mods alien,drops,groovy]
+love . --autotest 25 <seed> <size> <level1> <profile1> <level2> <profile2> [--mods alien,drops,convoy,apoc,groovy]
 love . --autotest4 30 <seed> 128 ffa|2v2|3
 love . --arenatest 25 <seed> <size> 1v1|2v2|1v2 <level> [class1,class2,...]
 love . --smoketest     # a scripted "player" drives the real input handlers

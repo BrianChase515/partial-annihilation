@@ -1,4 +1,7 @@
 -- Game modifiers (toggled on the title screen, can run together):
+--   Metal Alert: only a quarter of the metal deposits; each extractor's metal (worth triple)
+--               has to be hauled to a Refinery by its own ore truck. A destroyed truck costs the
+--               extractor a minute to roll out a new one (rebuilding the extractor doesn't skip it).
 --   Alien Tech: a dormant alien walker lands near the middle of the map; hold its zone
 --               for 15 seconds with no enemies inside to claim it. Repeats after a capture.
 --   Score mode: points for kills/building/progress, kill-streak multipliers, a live
@@ -38,12 +41,14 @@ function M.init(world, mods)
   if world.mods.drops then
     world.drops = { nextAt = M.DROP_FIRST, squads = {}, count = 0 }
   end
+  if world.mods.convoy then M.initConvoy(world) end
+  if world.mods.apoc then world.apoc = { fogLifted = false, checkT = 0 } end
   if world.mods.alien then
     world.alien = { state = "waiting", arriveAt = M.ALIEN_FIRST, captures = 0 }
   end
   -- Score runs in every game. It is "official" (high-score table, online board) only when
   -- no gameplay modifiers are on; Groovy is cosmetic so it doesn't count.
-  world.official = not (world.mods.alien or world.mods.drops)
+  world.official = not (world.mods.alien or world.mods.drops or world.mods.convoy or world.mods.apoc)
   do
     world.score = {}
     for t = 1, world.np do
@@ -310,6 +315,7 @@ function M.addPoints(world, team, pts, streaky, kind)
 end
 
 function M.onKill(world, o, attacker)
+  M.convoyKilled(world, o)
   if not world.score or not attacker or not attacker.team or attacker.team < 1 then return end
   if o.team == 0 or not world:hostile(attacker.team, o.team) then return end
   if world.arena and not (attacker.key == "commander" or attacker.owner or o.arenaTower) then return end -- creeps' own fights don't score
@@ -332,7 +338,227 @@ function M.onKill(world, o, attacker)
   M.addPoints(world, attacker.team, v, true)
 end
 
+---------------------------------------------------------------------------
+-- Metal Alert
+
+M.TRUCK_CAP = 120       -- metal per trip
+M.TRUCK_LOAD = 2        -- seconds to load / unload
+M.TRUCK_REBUILD = 60    -- a lost truck: the extractor's downtime before the next one
+M.ORE_CAP = 400         -- an extractor holds this much waiting for its truck
+
+function M.initConvoy(world)
+  local map = world.map
+  -- keep a quarter of the land deposits: the two nearest each base, then a random share
+  local land = {}
+  for _, dp in ipairs(map.deposits) do if not dp.sea then land[#land + 1] = dp end end
+  local keep = {}
+  for t = 1, #map.starts do
+    local s = map.starts[t]
+    table.sort(land, function(a, b) return (a.x - s.x) ^ 2 + (a.y - s.y) ^ 2 < (b.x - s.x) ^ 2 + (b.y - s.y) ^ 2 end)
+    for i = 1, math.min(2, #land) do keep[land[i]] = true end
+  end
+  local target = math.max(#map.starts * 2, math.floor(#land * 0.25 + 0.5))
+  local n = 0
+  for _ in pairs(keep) do n = n + 1 end
+  local rng = love.math.newRandomGenerator(map.seed + 77)
+  local rest = {}
+  for _, dp in ipairs(land) do if not keep[dp] then rest[#rest + 1] = dp end end
+  for i = #rest, 2, -1 do local j = rng:random(i); rest[i], rest[j] = rest[j], rest[i] end
+  for _, dp in ipairs(rest) do
+    if n >= target then break end
+    -- keep the map's symmetry: a deposit stays with its mirror twin
+    keep[dp] = true; n = n + 1
+  end
+  local out = {}
+  map.deposit = {}
+  for _, dp in ipairs(map.deposits) do
+    if keep[dp] then
+      out[#out + 1] = dp
+      map.deposit[dp.y * map.w + dp.x] = dp
+      dp.trucks = {}   -- per team: { truck = e, readyAt = t, ever = true }
+    end
+  end
+  map.deposits = out
+  world.convoy = { refineriesGiven = false }
+end
+
+-- each player starts with a Refinery beside the Commander
+local function giveRefineries(world)
+  local map = world.map
+  for t = 1, world.np do
+    local c = world.teams[t].commander
+    if c then
+      local tx, ty = map:tileAt(c.x, c.y)
+      local placed = false
+      for r = 3, 12 do
+        for a = 0, 11 do
+          if placed then break end
+          local ang = a / 12 * math.pi * 2
+          local x, y = math.floor(tx + math.cos(ang) * r - 1), math.floor(ty + math.sin(ang) * r - 1)
+          if world:canPlace("refinery", x, y, t) then
+            world:spawn("refinery", t, (x + 1.5) * world.T, (y + 1.5) * world.T)
+            placed = true
+          end
+        end
+        if placed then break end
+      end
+    end
+  end
+  world.economyDirty = true
+end
+
+local function depositOf(world, mex)
+  local tx, ty = world.map:tileAt(mex.x, mex.y)
+  return world.map.deposit[ty * world.map.w + tx]
+end
+
+local function spawnTruck(world, mex, dp)
+  local map = world.map
+  local tx, ty = map:tileAt(mex.x, mex.y)
+  local nx, ny = map:nearestTile(tx, ty + 1, function(x, y) return map:passable("land", x, y) end, 6)
+  if not nx then return nil end
+  local x, y = map:center(nx, ny)
+  local u = world:spawn("oretruck", mex.team, x, y)
+  u.homeMex, u.cargo, u.state = mex, 0, "toMex"
+  local st = dp.trucks[mex.team] or {}
+  st.truck, st.readyAt, st.ever = u, nil, true
+  dp.trucks[mex.team] = st
+  u.deposit = dp
+  return u
+end
+
+-- an extractor finished: hand it its truck (the old one if alive, a new one if it's this side's
+-- first time here or the downtime is over)
+function M.convoyBuilt(world, b)
+  if not world.mods.convoy or b.def.place ~= "deposit" then return end
+  b.ore = 0
+  local dp = depositOf(world, b)
+  if not dp then return end
+  dp.trucks = dp.trucks or {}
+  local st = dp.trucks[b.team]
+  if st and st.truck and st.truck.alive then
+    st.truck.homeMex, st.truck.state = b, "toMex"
+  elseif not st or not st.ever then
+    spawnTruck(world, b, dp)
+  elseif not st.readyAt or world.time >= st.readyAt then
+    spawnTruck(world, b, dp)
+  end
+  -- otherwise the downtime is still running: updateConvoy rolls the truck out when it ends
+end
+
+function M.convoyKilled(world, o)
+  if not world.mods.convoy or not o.def.truck or not o.deposit then return end
+  local st = o.deposit.trucks[o.team]
+  if st and st.truck == o then
+    st.truck = nil
+    st.readyAt = world.time + M.TRUCK_REBUILD
+    if world.onTruckLost then world.onTruckLost(o) end
+  end
+end
+
+local function nearestRefinery(world, team, x, y)
+  local best, bd
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == team and e.key == "refinery" and e.built >= 1 then
+      local d = U.dist2(x, y, e.x, e.y)
+      if not bd or d < bd then best, bd = e, d end
+    end
+  end
+  return best
+end
+
+-- Post-Apocalypse: a side is out when nothing of it is left standing; the fog lifts at 10:00
+M.APOC_FOG = 600
+function M.updateApoc(world, dt)
+  local ap = world.apoc
+  if not ap then return end
+  if not ap.fogLifted and world.time >= M.APOC_FOG then
+    ap.fogLifted = true
+    world.noFog = true
+    if world.onApocFog then world.onApocFog() end
+  end
+  ap.checkT = ap.checkT - dt
+  if ap.checkT > 0 then return end
+  ap.checkT = 1
+  local alive = {}
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team and e.team > 0 and not e.doom then alive[e.team] = true end
+  end
+  for t = 1, world.np do
+    if not world.teams[t].dead and not alive[t] then world:eliminate(t) end
+  end
+end
+
+function M.updateConvoy(world, dt)
+  if not world.mods.convoy then return end
+  if not world.convoy.refineriesGiven then
+    world.convoy.refineriesGiven = true
+    giveRefineries(world)
+  end
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.built >= 1 and e.def.place == "deposit" and e.team and e.team > 0 then
+      -- the extractor fills up for its truck
+      local tm = world.teams[e.team]
+      local inc = (e.def.income and e.def.income.metal or 0) + ((e.mods and e.mods.income and e.mods.income.metal) or 0)
+      e.ore = math.min(M.ORE_CAP, (e.ore or 0) + inc * 3 * (tm.incomeMul or 1) * dt)
+      -- a truck due back after its downtime
+      local dp = depositOf(world, e)
+      local st = dp and dp.trucks and dp.trucks[e.team]
+      if st and not (st.truck and st.truck.alive) and st.readyAt and world.time >= st.readyAt then
+        spawnTruck(world, e, dp)
+      end
+    elseif e.alive and e.def.truck then
+      M.driveTruck(world, e, dt)
+    end
+  end
+end
+
+function M.driveTruck(world, u, dt)
+  local mex = u.homeMex
+  local function go(x, y)
+    local o = u.orders[1]
+    if not o or o.type ~= "move" or U.dist2(o.x, o.y, x, y) > 40 * 40 then world:issue(u, { type = "move", x = x, y = y, arrive = 30 }) end
+  end
+  if u.state == "toMex" or u.state == "loading" then
+    if not mex or not mex.alive then
+      -- no extractor to serve: wait by the refinery
+      local r = nearestRefinery(world, u.team, u.x, u.y)
+      if r and U.dist(u.x, u.y, r.x, r.y) > 140 then go(r.x, r.y + 110) end
+      if u.cargo > 0 then u.state = "toRefinery" end
+      return
+    end
+    if U.dist(u.x, u.y, mex.x, mex.y) > 60 then u.state = "toMex"; go(mex.x, mex.y); return end
+    u.state = "loading"
+    u.loadT = (u.loadT or 0) + dt
+    if u.loadT >= M.TRUCK_LOAD and (mex.ore or 0) >= math.min(M.TRUCK_CAP, 20) then
+      local take = math.min(M.TRUCK_CAP - u.cargo, mex.ore)
+      u.cargo = u.cargo + take
+      mex.ore = mex.ore - take
+      u.loadT = 0
+      if u.cargo >= M.TRUCK_CAP or (mex.ore or 0) < 5 then u.state = "toRefinery" end
+    end
+  elseif u.state == "toRefinery" or u.state == "unloading" then
+    local r = nearestRefinery(world, u.team, u.x, u.y)
+    if not r then return end -- no refinery: hold the load
+    local reach = r.def.w * world.T * 0.5 + 40
+    if U.dist(u.x, u.y, r.x, r.y) > reach then u.state = "toRefinery"; go(r.x, r.y); return end
+    u.state = "unloading"
+    u.loadT = (u.loadT or 0) + dt
+    if u.loadT >= M.TRUCK_LOAD then
+      local tm = world.teams[u.team]
+      tm.metal = math.min(tm.mStore, tm.metal + u.cargo)
+      if os.getenv("PA_CONVOYDBG") then print("DELIVER", math.floor(world.time), u.team, math.floor(u.cargo)) end
+      if u.team == world.playerTeam and u.cargo > 0 then
+        world.effects[#world.effects + 1] = { kind = "label", text = "+" .. math.floor(u.cargo) .. " metal", x = r.x, y = r.y - 50,
+          t = 0, life = 1.2, color = { 0.95, 0.85, 0.4 }, size = 12 }
+      end
+      u.cargo, u.loadT, u.state = 0, 0, "toMex"
+    end
+  end
+end
+
 function M.onBuilt(world, b)
+  M.convoyBuilt(world, b)
   if b.def.cost and world.score and world.score[b.team] then
     world.score[b.team].built = world.score[b.team].built + 1
     M.addPoints(world, b.team, (world.craft and ((b.def.cost.gold or 0) + (b.def.cost.wood or 0)) or b.def.cost.metal) * 0.1, false, "build")

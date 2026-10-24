@@ -261,12 +261,19 @@ function G.new(opts)
     if self.log then self.log:event(string.format("%s %s promoted: %s", D.teamName[g.team], g.def.name, g.genName)) end
   end
   -- Annihilation games you play to the end teach the Mirror and Nemesis opponents
-  if not self.arena and not self.craft and not self.opts.autotest and self.players[1] and self.players[1].human then
+  -- (only plain games count: modifiers like Metal Alert or Post-Apocalypse change how people play)
+  if not self.arena and not self.craft and not self.opts.autotest and world.official and self.players[1] and self.players[1].human then
     local GH = require("src.ghost")
     self.ghostRec = GH.newRecorder(world)
     local lv = 0
     for i, p in ipairs(self.players) do if not p.human and world:hostile(i, 1) then lv = math.max(lv, p.level or 5) end end
     self.ghostRec.oppLevel = lv > 0 and lv or 5
+  end
+  world.onTruckLost = function(o)
+    if o.team == 1 then self:notice("Ore truck destroyed! That extractor rolls out a new one in 60s", 3) end
+  end
+  world.onApocFog = function()
+    self:notice("10:00 - the fog has lifted. Everything is in plain sight.", 5)
   end
   world.onBuilt = function(b)
     if b.team == 1 and b.def.building then VOICE.say("construction") end
@@ -436,7 +443,7 @@ function G:select(list, add)
   if not add then self.selected = {} end
   if #list > 0 then self.inspect = nil end
   for _, e in ipairs(list) do
-    if e.alive and e.team == 1 then self.selected[e] = true end
+    if e.alive and e.team == 1 and not e.def.truck then self.selected[e] = true end -- ore trucks drive themselves
   end
   self.mode = nil
 end
@@ -480,7 +487,14 @@ end
 function G:commandContext()
   if self.craft then return CG.commandContext(self) end
   local b = self:selectedBuilders()
-  if #b > 0 then return "builder", b[1].def.builds, b end
+  if #b > 0 then
+    -- the Refinery only exists with the Metal Alert modifier
+    local list = {}
+    for _, k in ipairs(b[1].def.builds) do
+      if not D.units[k].convoyOnly or self.world.mods.convoy then list[#list + 1] = k end
+    end
+    return "builder", list, b
+  end
   local f = self:selectedFactories()
   if #f > 0 then
     -- use the most common factory type in the selection
@@ -1024,7 +1038,7 @@ function G:updateVoice(dt)
     MUSIC.floor = math.min(0.32, seen * 0.025)
   end
   local c = w.teams[1].commander
-  if c and c.alive then
+  if c and c.alive and c.key == "commander" then
     if c.hp < vs.cmdHp - 1 then
       if c.hp < c.maxhp * 0.3 then VOICE.say("commander_low") elseif not self.arena then VOICE.say("commander_attack") end
     end

@@ -18,6 +18,10 @@ local function script(mode, secs)
   end
   local opts = { size = mode == "arena" and 80 or 112, water = 0.3, seed = 31, autotest = true,
     players = { { ally = 1, level = 5 }, { ally = 2, level = 5 }, { ally = 1, level = 5 }, { ally = 2, level = 5 } } }
+  if os.getenv("PA_MODS") then
+    opts.mods = {}
+    for k in os.getenv("PA_MODS"):gmatch("[^,]+") do opts.mods[k] = true end
+  end
   if mode == "arena" then opts.mode = "arena"; opts.players[1].class = os.getenv("PA_CLASS") or "ranger" end
   if mode == "arena" and os.getenv("PA_FIVE") then
     opts.size, opts.template = 112, "battlefield"

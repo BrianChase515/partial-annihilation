@@ -1,7 +1,8 @@
 -- Ghost opponents for Annihilation, learned from the player's own games.
 --   Mirror  - plays like you: your unit mix, expansion speed, defences and attack timing
 --   Nemesis - plays against you: finds your habits and builds to punish one or two of them
--- Every finished Annihilation game (a win or a loss, not a game you quit) adds a summary to a
+-- Every finished Annihilation game without gameplay modifiers (a win or a loss, not a game you
+-- quit) adds a summary to a
 -- small file in the save folder. The file is per game version, so each new build starts fresh.
 -- Five finished games unlock both opponents.
 local D = require("src.defs")

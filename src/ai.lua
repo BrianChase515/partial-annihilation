@@ -224,7 +224,7 @@ function AI:update(dt)
   local world = self.world
   if world.over then return end
   local tm = world.teams[self.team]
-  if not tm.commander.alive then return end
+  if tm.dead or (tm.commander and tm.commander.key == "commander" and not tm.commander.alive) then return end
   self.timer = self.timer - dt
   if self.timer <= 0 then
     self.timer = self.diff.think
@@ -342,7 +342,7 @@ function AI:thinkCommander()
   world.cmdModes = world.cmdModes or {}
   world.cmdModes[self.team] = self.cmdMode
   local c = world.teams[self.team].commander
-  if not c or not c.alive then return end
+  if not c or not c.alive or c.key ~= "commander" then return end
   local style = self.profile.commander or "normal"
   -- 1. spend level-ups
   while #c.offers > 0 do world:chooseUpgrade(c, self:pickUpgrade(c, c.offers[1])) end

@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.14.1"
+D.VERSION = "0.14.2"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
@@ -21,7 +21,7 @@ D.units = {
     name = "Commander", short = "CMD", domain = "land", shape = "commander",
     radius = 15, hp = 3000, speed = 58, sight = 340, turn = 6,
     buildPower = 12, buildRange = 130, regen = 4,
-    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage" },
+    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "refinery" },
     weapon = { damage = 45, range = 210, reload = 0.6, speed = 560, targets = { land = true, sea = true } },
     income = { metal = 1.0, energy = 15 },
     storage = { metal = 600, energy = 2500 },
@@ -31,7 +31,7 @@ D.units = {
     name = "Constructor", short = "B", domain = "land", shape = "square",
     radius = 10, hp = 260, speed = 74, sight = 260,
     buildPower = 7, buildRange = 105,
-    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage" },
+    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "refinery" },
     cost = { metal = 60, energy = 500, work = 60 },
     desc = "Builds structures. Right-click your own unfinished or damaged things to help or repair.",
   },
@@ -242,6 +242,20 @@ D.units = {
     cost = { metal = 170, energy = 1100, work = 120 },
     desc = "A floating gun platform. Tougher than a Gun Tower and hits land, sea AND air. Built on water by Sea Constructors.",
   },
+  -- Metal Alert modifier only: the ore truck and the refinery it delivers to
+  oretruck = {
+    name = "Ore Truck", short = "T", domain = "land", shape = "square", convoyOnly = true, truck = true,
+    radius = 11, hp = 450, speed = 78, sight = 220,
+    cost = { metal = 0, energy = 0, work = 1 },
+    desc = "Hauls metal from its extractor to your Refinery by itself. Lose it and the extractor needs a minute to roll out a new one.",
+  },
+  refinery = {
+    name = "Refinery", short = "RF", domain = "building", building = true, convoyOnly = true,
+    w = 3, h = 3, place = "land", hp = 2400,
+    storage = { metal = 1000, energy = 0 },
+    cost = { metal = 250, energy = 1500, work = 200 },
+    desc = "Metal Alert: ore trucks bring your extractors' metal here. No refinery, no metal.",
+  },
   tidal = {
     name = "Tidal Generator", short = "TG", domain = "building", building = true,
     w = 2, h = 2, place = "water", hp = 450,
@@ -315,7 +329,7 @@ function D.canHit(weapon, targetDomain)
   return weapon.targets[targetDomain] == true
 end
 
-D.hotkeys = { "q", "w", "e", "r", "t", "y", "u", "i" }
+D.hotkeys = { "q", "w", "e", "r", "t", "y", "u", "i", "o" }
 
 D.teamColor = {
   [0] = { 0.72, 0.42, 1.00 },  -- neutral alien tech / undecided drop crews

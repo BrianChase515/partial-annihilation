@@ -337,10 +337,10 @@ function Menu:rects()
     r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 44, w = 110, h = 34, label = o[1], field = "water", value = i, rowLabel = i == 1 and "Water" or nil }
   end
   -- modifiers (toggles, can combine)
-  local MODLIST = { { "alien", "Alien Tech" }, { "drops", "Dropships" }, { "groovy", "Groovy" } }
+  local MODLIST = { { "alien", "Alien Tech" }, { "drops", "Dropships" }, { "convoy", "Metal Alert" }, { "apoc", "Post-Apoc" }, { "groovy", "Groovy" } }
   for i, m in ipairs(MODLIST) do
-    r[#r + 1] = { x = x0 + (i - 1) * 118, y = y + 88, w = 110, h = 34, label = m[2], modkey = m[1],
-      active = self.mods[m[1]], rowLabel = i == 1 and "Modifiers" or nil }
+    r[#r + 1] = { x = x0 + (i - 1) * 105, y = y + 88, w = 100, h = 34, label = m[2], modkey = m[1],
+      active = self.mods[m[1]], rowLabel = i == 1 and "Modifiers" or nil, small = true }
   end
   -- player slots
   local ty = y + 160
@@ -582,6 +582,8 @@ function Menu:draw()
     alien = "Alien Tech: a huge alien walker lands near the middle. Hold its zone 15s to claim it. Repeats. (Score becomes unofficial.)",
     drops = "Dropships: from 3:00, alien crews drop and wander. Meet one and a coin flip decides: join you or attack. (Unofficial score.)",
     groovy = "Groovy: flower-power explosions, far-out colors and a slowly tripping landscape. Cosmetic, so score stays official.",
+    convoy = "Metal Alert: a quarter of the metal deposits, worth triple - but an ore truck has to haul it to your Refinery. Lose a truck and that extractor needs a minute to roll out another. (Unofficial.)",
+    apoc = "Post-Apocalypse: no Commanders - everyone starts with a single Constructor. Destroy every enemy unit and building to win. The fog lifts at 10:00. (Unofficial.)",
   }
   if hoverMod then desc = MODDESC[hoverMod]
   elseif hoverProf then desc = D.profiles[hoverProf.prof].key .. ": " .. D.profiles[hoverProf.prof].desc
@@ -648,7 +650,7 @@ function Menu:draw()
     and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
     or self.mode == "craft" and "Tip: keep five workers on gold and a few on wood, build Farms before you need them, and creep with your hero early."
     or (require("src.ghost").unlocked() and "Tip: Mirror (plays like you) and Nemesis (plays against your habits) are in the personality list."
-      or string.format("Finish %d more Annihilation games (win or lose) to unlock two opponents that learn from how you play.",
+      or string.format("Finish %d more Annihilation games (win or lose, no gameplay modifiers) to unlock two opponents that learn from you.",
         math.max(0, require("src.ghost").NEEDED - require("src.ghost").completed())))
   -- (skipped when the buttons reach the bottom of a small screen)
   if not (self.mode == "arena" and self.arenaStartY and self.arenaStartY + 104 > h - 44) then
@@ -892,7 +894,7 @@ function Menu:options()
   local o = {
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
-    mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy },
+    mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy, convoy = self.mods.convoy, apoc = self.mods.apoc },
     menuMode = "rts", arenaSetup = self.arena, craftSetup = self.craft,
   }
   if self.savedMap then
