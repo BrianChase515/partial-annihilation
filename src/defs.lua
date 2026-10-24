@@ -6,14 +6,14 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.16.13"
+D.VERSION = "0.17.0"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
   rts = { "0.8", "Mostly feature complete; still being balanced and polished." },
   arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
   craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
-  coh = { "0.1", "Brand new: squads, leader skills, capture points and tickets. Expect big changes." },
+  coh = { "0.4", "Squads, leader skills, capture points and tickets - and War is Hell. Still being balanced." },
 }
 D.MODE_NAMES = { rts = "Annihilation", arena = "Commander Arena", craft = "Commander Craft", coh = "Commander of Heroes" }
 

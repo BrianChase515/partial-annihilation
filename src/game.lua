@@ -47,6 +47,7 @@ function G.new(opts)
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
     playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, craft = self.craft, template = opts.template,
     experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup, coh = opts.coh, enemySquads = opts.enemySquads, cohLength = opts.cohLength,
+    cohMode = opts.cohMode, hillFrac = opts.hillFrac, rockFrac = opts.rockFrac,
   })
   local world = self.world
   world.humanTeams = {}
@@ -279,6 +280,7 @@ function G.new(opts)
   world.onTruckLost = function(o)
     if o.team == 1 then self:notice("Ore truck destroyed! That extractor rolls out a new one in 60s", 3) end
   end
+  SFX.combatVolume, SFX.pitchMul = nil, nil -- (War is Hell turns these up below)
   if world.squads then
     -- your squads start on control groups 1, 2, 3
     local SQ = require("src.squads")
@@ -294,6 +296,27 @@ function G.new(opts)
       end
     end
     world.onSquadSound = function(name, x, y, v) SFX.at(name, x, y, self:soundView(), v) end
+    -- every named crewman who falls gets a word (and, in War is Hell, a scream and some blood)
+    world.onSquadDeath = function(sq, u)
+      if u.team == 1 then self:notice(string.format("%s is down! (squad %d, %s)", u.callsign or "A crewman", sq.idx, SQ.byType[sq.type].name), 2.2) end
+      if world.wih then
+        SFX.at("bigboom", u.x, u.y, self:soundView(), 1)
+        require("src.cries").scream(u, self:soundView(), u.team == 1 and 1 or 0.6)
+        require("src.cries").blood(world, u, true)
+      end
+    end
+    world.onBlood = function(o, amount)
+      if love.math.random() < 0.35 then require("src.cries").blood(world, o, false) end
+      require("src.cries").hurt(o, self:soundView(), o.team == 1 and 0.9 or 0.5)
+    end
+    if world.wih then
+      -- brutality: everything hits harder and deeper
+      SFX.combatVolume = 1.7
+      SFX.pitchMul = 0.86
+    end
+    world.onSquadPromoted = function(sq, new, old)
+      if sq.team == 1 then self:notice(string.format("%s takes command of squad %d", new.callsign or "A survivor", sq.idx), 2.5) end
+    end
     world.onSquadReinforced = function(sq, u)
       if sq.team == 1 and world.time - (sq.lastReinfNote or -99) > 12 then
         sq.lastReinfNote = world.time
@@ -2286,6 +2309,7 @@ function G:retreat(where)
   local hq = self.world.squads and self.world.teams[1].hq
   if where == "flag" and self.flag then x, y = self.flag.x, self.flag.y
   elseif hq and hq.alive then x, y = hq.x, hq.y + 90 -- Commander of Heroes: flee to the HQ (it heals)
+  elseif self.world.squads then x, y = self.world.teams[1].startX, self.world.teams[1].startY -- War is Hell: back where we came in
   elseif c and c.alive then x, y = c.x, c.y
   else x, y = self.world.teams[1].startX, self.world.teams[1].startY end
   local slots = self:formation(list, x, y)
@@ -2293,7 +2317,7 @@ function G:retreat(where)
     self.world:issue(u, { type = "retreat", x = slots[u][1], y = slots[u][2] })
   end
   self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.6, r = 1, g = 0.85, b = 0.3 }
-  local name = (where == "flag" and self.flag) and "the flag" or (hq and hq.alive and "the HQ" or "the Commander")
+  local name = (where == "flag" and self.flag) and "the flag" or (hq and hq.alive and "the HQ" or (self.world.squads and "the drop zone" or "the Commander"))
   self:notice("Retreating " .. #list .. " units to " .. name, 1.2)
 end
 

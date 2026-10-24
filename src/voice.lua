@@ -47,6 +47,9 @@ function V.update()
   end
 end
 
+-- is the announcer talking right now? (battlefield cries wait for him)
+function V.busy() return current ~= nil and current:isPlaying() end
+
 function V.stopAll()
   queue = {}
   if current then current:stop(); current = nil end

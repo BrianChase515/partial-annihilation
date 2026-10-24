@@ -539,6 +539,8 @@ function R.drawWorld(cam, game)
     for ty = ty0, ty1 do lg.line(tx0 * T, ty * T, tx1 * T, ty * T) end
   end
 
+  -- Commander of Heroes: bunkers, and War is Hell's blood on the ground (under the units)
+  if world.squads then require("src.squads").drawGround(world) end
   -- metal deposits
   for _, dpos in ipairs(map.deposits) do
     local cx, cy = (dpos.x + 0.5) * T, (dpos.y + 0.5) * T
@@ -747,6 +749,8 @@ function R.drawWorld(cam, game)
       lg.setColor(1, 0.85, 0.3, 1 - k)
       lg.setLineWidth(2.5)
       lg.circle("line", fx.x, fx.y, fx.size * (0.8 + k * 0.8))
+    elseif fx.kind == "blood" then
+      require("src.cries").drawSpray(fx, k)
     elseif fx.kind == "reticle" then
       -- a barrage on its way: a red target zone that tightens until the shells land
       local a = math.min(1, k * 6) * (1 - k * k)
@@ -863,7 +867,7 @@ function R.drawWorld(cam, game)
   end
 
   -- Commander of Heroes: capture points and flares
-  if world.capPoints then require("src.squads").draw(world, cam, game) end
+  if world.squads then require("src.squads").draw(world, cam, game) end
 
   -- Alien Tech landing zone (everyone sees it)
   local a = world.alien

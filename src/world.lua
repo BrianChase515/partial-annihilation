@@ -761,7 +761,7 @@ function W:rangeOf(e)
 end
 function W:buildRangeOf(e) return (e.def.buildRange or 0) * (self:modsOf(e).buildRange or 1) end
 function W:buildPowerOf(e) return (e.def.buildPower or 0) * (self:modsOf(e).build or 1) end
-function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) * (e.sqSight or 1) end
+function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) * (e.sqSight or 1) * (self.sightMul or 1) end
 -- how far a unit hunts for targets: its sight, or for artillery (spotted fire) its range
 function W:lookOf(e)
   if e.def.needsSpotter then return math.max(self:sightOf(e), self:rangeOf(e)) end
@@ -982,6 +982,7 @@ function W:fire(e, o)
   end
   if self.generals and not self.arena then dmg = dmg * self:generalBoost(e) end
   if self.craft then dmg = dmg * CRAFT.damageMul(self, e, o) end
+  if m.airDmg and o.def.domain == "air" then dmg = dmg * m.airDmg end -- light anti-air guns
   if self.heroes then
     dmg = dmg * (self:bv(e, "dmg") or 1) * (e.dmgMul or 1)
     if o.def.building and m.breaker then dmg = dmg * m.breaker end
@@ -1038,6 +1039,8 @@ end
 
 function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
+  -- War is Hell: hits draw blood (and the badly hurt cry out)
+  if self.wih and o.squad and self.onBlood then self.onBlood(o, amount) end
   -- Commander of Heroes: an HQ can't be hurt while its side still holds a capture point
   if o.key == "hq" and self.squads and self.capPoints then
     for _, p in ipairs(self.capPoints) do if p.owner == self.ally[o.team] then return end end

@@ -52,7 +52,7 @@ function S.at(name, x, y, view, vol)
   for _, src in ipairs(pool) do
     if not src:isPlaying() then
       src:setVolume(v)
-      src:setPitch(1 + (love.math.random() - 0.5) * 0.12)
+      src:setPitch((1 + (love.math.random() - 0.5) * 0.12) * (S.pitchMul or 1))
       if src:getChannelCount() == 1 then src:setPosition(pan, 0, -math.sqrt(1 - pan * pan)) end
       src:play()
       return true

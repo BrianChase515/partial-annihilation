@@ -10,6 +10,9 @@ local function script(mode, secs)
     local menu = PA_MENU
     menu.mode = os.getenv("PA_TAB") or "craft"
     if os.getenv("PA_SETTINGS") then require("src.settings").open = true end
+    if os.getenv("PA_COHGAME") then
+      for _, r in ipairs(menu:rects()) do if r.kind == "cohgame" and r.value == os.getenv("PA_COHGAME") then menu:mousepressed(r.x + 4, r.y + 4, 1) end end
+    end
     if os.getenv("PA_COHDROP") then
       for _, r in ipairs(menu:rects()) do if r.kind == "sqtype" and r.sqi == 2 then menu:mousepressed(r.x + 4, r.y + 4, 1) end end
     end
@@ -163,8 +166,9 @@ local function script(mode, secs)
     -- Q / W) against the computer; prints tickets as it goes, then a screenshot
     local SQ = require("src.squads")
     local secs2 = tonumber(os.getenv("PA_SECS") or "180")
-    opts = { mode = "rts", coh = true, size = 96, water = 0.15, seed = tonumber(os.getenv("PA_SEED") or "31"), mods = { squads = true },
+    opts = { mode = "rts", coh = true, size = os.getenv("PA_WIHMODE") and 128 or 96, water = 0.15, seed = tonumber(os.getenv("PA_SEED") or "31"), mods = { squads = true },
       squadSetup = SQ.defaults(), enemySquads = os.getenv("PA_MIRROR") and "mirror" or "own",
+      cohMode = os.getenv("PA_WIHMODE") and "wih" or "conquest", hillFrac = os.getenv("PA_WIHMODE") and 0.22 or nil, rockFrac = os.getenv("PA_WIHMODE") and 0.06 or nil,
       players = { { human = true, ally = 1 }, { ally = 2, level = tonumber(os.getenv("PA_LEVEL") or "5") } } }
     game = startFn(opts)
     local w = game.world
@@ -231,7 +235,8 @@ local function script(mode, secs)
           if L and L.alive then
             game:select({ L })
             local best, bd
-            for _, p in ipairs(w.capPoints) do
+            local targets = w.capPoints or { { x = w.teams[2].startX, y = w.teams[2].startY } }
+            for _, p in ipairs(targets) do
               if p.owner ~= w.ally[1] then
                 local d = (p.x - L.x) ^ 2 + (p.y - L.y) ^ 2 + i * 1e5 * ((_ + i) % 3)
                 if not bd or d < bd then best, bd = p, d end
@@ -255,7 +260,7 @@ local function script(mode, secs)
     end
     print("COH over", w.over and w.over.winnerAlly, math.floor(w.time))
     local L = SQ.squadsOf(w, 1)[1].leader
-    local fx, fy = (L and L.alive) and L.x or w.capPoints[3].x, (L and L.alive) and L.y or w.capPoints[3].y
+    local fx, fy = (L and L.alive) and L.x or w.map.w * w.T / 2, (L and L.alive) and L.y or w.map.h * w.T / 2
     local all = {}
     for _, sq in ipairs(SQ.squadsOf(w, 1)) do for _, u in ipairs(sq.members) do if u.alive then all[#all + 1] = u end end end
     game:select(all)
@@ -266,6 +271,9 @@ local function script(mode, secs)
       if b then love.mouse.setPosition(b.x + 10, b.y + 10) end
     end
     game.cam.zoom = 0.9
+    if os.getenv("PA_BUNKERVIEW") and w.bunkers and w.bunkers[1] then
+      w.noFog = true; game.cam.zoom = 0.55; fx, fy = w.bunkers[1].x, w.bunkers[1].y
+    end
     game:centerOn(fx, fy)
     for _ = 1, 6 do game:update(1 / 30); frame() end
     pending = "uishot_coh.png"

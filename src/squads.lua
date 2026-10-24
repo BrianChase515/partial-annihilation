@@ -75,6 +75,19 @@ S.CAP_TIME = 14         -- seconds for one unit to take a neutral point
 S.HQ_HP = 16000
 S.HP_MUL = 1.6          -- squad units are this much tougher than in Annihilation
 
+-- terrain: high ground sees further but is exposed; a bunker hides you and soaks hits
+S.HILL_SIGHT, S.HILL_TAKEN = 1.3, 1.15
+S.BUNKER_SIGHT, S.BUNKER_TAKEN, S.BUNKER_R = 0.7, 0.6, 95
+S.WIH_SIGHT = 0.8       -- War is Hell: deep fog - everyone sees less
+
+-- every crewman has a name (War is Hell makes you care)
+S.SURNAMES = { "Price", "Kowalski", "Okafor", "Reyes", "Lindqvist", "Brennan", "Haddad", "Nakamura", "Duarte", "Fischer",
+  "Mbeki", "Sullivan", "Ivanova", "Castillo", "Abara", "Moreau", "Tanaka", "Byrne", "Novak", "Hargrove", "Quinn",
+  "Delgado", "Varga", "Osei", "Holt", "Petrov", "Calloway", "Sorensen", "Adeyemi", "Marsh", "Kaur", "Lindgren",
+  "Booker", "Rinaldi", "Okoro", "Dubois", "Whitlock", "Kim", "Farouk", "Mendez", "Strand", "Ruiz", "Hale", "Bianchi",
+  "Achebe", "Lowe", "Sato", "Grady", "Moss", "Varela", "Thorne", "Pike", "Kovac", "Dunn", "Ash", "Vance", "Ortiz", "Royce" }
+S.RANKS = { "Pvt.", "Pvt.", "Pfc.", "Cpl.", "Spc." }
+
 -- saved setups from older versions (mixed squads) keep only their type
 function S.fixDesign(ds)
   if not S.byType[ds.type or ""] then ds.type = "armor" end
@@ -137,13 +150,28 @@ end
 
 -- every squad unit: tougher than in Annihilation (fights last long enough to use skills), Recon
 -- carries light anti-air guns, and the leader is a veteran
+local nameRng = love.math.newRandomGenerator(os.time())
+local function newName(world, leader)
+  world.usedNames = world.usedNames or {}
+  local nm
+  for _ = 1, 20 do
+    nm = S.SURNAMES[nameRng:random(#S.SURNAMES)]
+    if not world.usedNames[nm] then break end
+  end
+  world.usedNames[nm] = true
+  return (leader and "Sgt." or S.RANKS[nameRng:random(#S.RANKS)]) .. " " .. nm
+end
+
 local function prep(u, sq, leader)
   u.squad = sq
   u.hpMul = S.HP_MUL * (leader and 1.75 or 1)
   u.maxhp = math.floor(u.def.hp * (1 + 0.10 * (u.level or 0)) * u.hpMul); u.hp = u.maxhp
   u.mods = u.mods or {}
   if leader then u.mods.dmg = 1.25 end
-  if sq.type == "recon" then u.mods.hitsAir = true end
+  -- light anti-air: Recon's guns hit aircraft hard for their size, a tank's machine gun a little
+  if sq.type == "recon" then u.mods.hitsAir, u.mods.airDmg = true, 2.0 end
+  if sq.type == "armor" then u.mods.hitsAir, u.mods.airDmg = true, 0.35 end
+  u.callsign = u.callsign or newName(sq.world, leader)
 end
 
 local function makeLeader(world, sq, t, x, y)
@@ -151,8 +179,8 @@ local function makeLeader(world, sq, t, x, y)
   local L = world:spawn(ty.leader, t, x, y)
   L.homeX, L.homeY = x, y
   L.squad, L.squadLeader = sq, true
-  L.genName = ty.name .. " Leader"
   prep(L, sq, true)
+  L.genName = L.callsign
   sq.leader = L
   sq.members[#sq.members + 1] = L
   return L
@@ -191,10 +219,41 @@ local function setupPoints(world)
   end
 end
 
+-- bunkers: dug-in positions scattered (mirrored, so it's fair) across the map
+local function setupBunkers(world, n)
+  local map = world.map
+  local rng = love.math.newRandomGenerator((map.seed or 1) + 4242)
+  local W, H = map.w * world.T, map.h * world.T
+  world.bunkers = {}
+  local tries = 0
+  while #world.bunkers < n * 2 and tries < 400 do
+    tries = tries + 1
+    local x, y = rng:random(250, W - 250), rng:random(250, H / 2)
+    local tx, ty = map:tileAt(x, y)
+    local tx2, ty2 = map:tileAt(W - x, H - y)
+    local ok = map:passable("land", tx, ty) and map:passable("land", tx2, ty2)
+    for t = 1, world.np do
+      local tm = world.teams[t]
+      if U.dist(x, y, tm.startX, tm.startY) < 500 or U.dist(W - x, H - y, tm.startX, tm.startY) < 500 then ok = false end
+    end
+    for _, b in ipairs(world.bunkers) do if U.dist(x, y, b.x, b.y) < 380 then ok = false end end
+    if ok then
+      world.bunkers[#world.bunkers + 1] = { x = x, y = y, r = S.BUNKER_R }
+      world.bunkers[#world.bunkers + 1] = { x = W - x, y = H - y, r = S.BUNKER_R }
+    end
+  end
+end
+
+function S.inBunker(world, x, y)
+  for _, b in ipairs(world.bunkers or {}) do if U.dist2(x, y, b.x, b.y) <= b.r * b.r then return b end end
+end
+
 function S.setup(world, opts)
   local map = world.map
   world.squads = { list = {}, tickets = {}, pending = {} }
   world.visionSources = world.visionSources or {}
+  world.wih = opts.cohMode == "wih" or os.getenv("PA_WIH") ~= nil
+  if world.wih then world.sightMul = S.WIH_SIGHT end
   local rng = love.math.newRandomGenerator((map.seed or 1) + 911)
   for t = 1, world.np do
     local tm = world.teams[t]
@@ -202,12 +261,12 @@ function S.setup(world, opts)
     local size = 0
     for t2 = 1, world.np do if world.ally[t2] == world.ally[t] then size = size + 1 end end
     local len = S.LENGTHS[opts.cohLength or (os.getenv("PA_COHLEN") or "standard")] or S.LENGTHS.standard
-    world.squads.tickets[world.ally[t]] = len.tickets * (1 + 0.5 * (size - 1))
-    world.parTime = len.par * 60
+    if not world.wih then world.squads.tickets[world.ally[t]] = len.tickets * (1 + 0.5 * (size - 1)) end
+    world.parTime = world.wih and 15 * 60 or len.par * 60
     -- the HQ where the Commander would stand
     local tx, ty = map:tileAt(tm.startX, tm.startY)
     local hq
-    for r = 0, 8 do
+    for r = 0, world.wih and -1 or 8 do
       for a = 0, 7 do
         if hq then break end
         local x, y = math.floor(tx + math.cos(a * 0.785) * r) - 1, math.floor(ty + math.sin(a * 0.785) * r) - 1
@@ -244,7 +303,7 @@ function S.setup(world, opts)
       local off = (i - (#designs + 1) / 2) * 170
       local cx, cy = tm.startX + dx * 260 + px * off, tm.startY + dy * 260 + py * off
       local ty2 = S.byType[ds.type]
-      local sq = { team = t, idx = i, type = ds.type, members = {},
+      local sq = { team = t, idx = i, type = ds.type, members = {}, world = world, roster = {},
         skills = { { key = ty2.skills[1], readyAt = 0, untilT = 0 }, { key = ty2.skills[2], readyAt = 0, untilT = 0 } } }
       local lx, ly = place(world, cx, cy, D.units[ty2.leader].domain == "air" and nil or "land")
       makeLeader(world, sq, t, lx, ly)
@@ -261,7 +320,12 @@ function S.setup(world, opts)
       world.squads.list[#world.squads.list + 1] = sq
     end
   end
-  setupPoints(world)
+  if world.wih then world.capPoints = nil else setupPoints(world) end
+  setupBunkers(world, world.wih and 6 or 3)
+  -- the roster (names, alive or fallen) for the squad cards
+  for _, sq in ipairs(world.squads.list) do
+    for _, u in ipairs(sq.members) do sq.roster[#sq.roster + 1] = u end
+  end
   -- no economy here: no metal deposits on the map or the minimap
   map.deposits = {}
 end
@@ -408,8 +472,23 @@ function S.update(world, dt)
   for _, sq in ipairs(st.list) do
     local ally = world.ally[sq.team]
     local held = S.held(world, ally)
+    -- War is Hell: no HQ, no reinforcements. A fallen leader's best survivor takes command
+    if world.wih and sq.leader and not sq.leader.alive then
+      local old = sq.leader
+      local best
+      for _, u in ipairs(sq.members) do if u.alive and u ~= old and (not best or u.hp > best.hp) then best = u end end
+      if best then
+        best.squadLeader, best.genName = true, best.callsign
+        best.mods = best.mods or {}; best.mods.dmg = 1.25
+        sq.leader = best
+        if world.teams[sq.team].commander == old then world.teams[sq.team].commander = best end
+        if world.onSquadPromoted then world.onSquadPromoted(sq, best, old) end
+      else
+        sq.dead = true
+      end
+    end
     -- a fallen leader comes back at the HQ
-    if sq.leader and not sq.leader.alive then
+    if not world.wih and sq.leader and not sq.leader.alive then
       local hq = world.teams[sq.team].hq
       if not sq.respawnAt then
         sq.respawnAt = t + S.LEADER_RESPAWN
@@ -431,12 +510,18 @@ function S.update(world, dt)
     local wait = S.REINFORCE * U.clamp(1.3 - 0.12 * held, 0.6, 1.3)
     for i = #sq.members, 1, -1 do
       local u = sq.members[i]
+      if not u.alive and not u.fallenNoted then
+        u.fallenNoted = true
+        if world.onSquadDeath then world.onSquadDeath(sq, u) end
+      end
       if not u.alive and not u.squadLeader then
         table.remove(sq.members, i)
-        st.tickets[ally] = (st.tickets[ally] or 0) - 1; st.byLoss = (st.byLoss or 0) + 1
-        local w = D.units[u.key].weapon
-        local aa = w and w.targets.air and not w.targets.land
-        sq.queue[#sq.queue + 1] = { key = u.key, at = t + (aa and wait / 2 or wait) }
+        if not world.wih then
+          st.tickets[ally] = (st.tickets[ally] or 0) - 1; st.byLoss = (st.byLoss or 0) + 1
+          local w = D.units[u.key].weapon
+          local aa = w and w.targets.air and not w.targets.land
+          sq.queue[#sq.queue + 1] = { key = u.key, at = t + (aa and wait / 2 or wait) }
+        end
       elseif not u.alive and u.squadLeader and u ~= sq.leader then
         table.remove(sq.members, i) -- an old leader's body
       end
@@ -454,6 +539,7 @@ function S.update(world, dt)
         prep(u, sq)
         u.rejoining = true
         sq.members[#sq.members + 1] = u
+        sq.roster[#sq.roster + 1] = u
         if sq.leader and sq.leader.alive then world:issue(u, { type = "move", x = sq.leader.x, y = sq.leader.y, rejoin = true }) end
         if world.onSquadReinforced then world.onSquadReinforced(sq, u) end
       end
@@ -498,14 +584,24 @@ function S.update(world, dt)
     for _, u in ipairs(sq.members) do
       if u.alive then
         local on = alive and U.dist2(u.x, u.y, L.x, L.y) <= S.RADIUS * S.RADIUS
-        u.sqTaken = (on and hull) and 0.65 or nil
+        -- the ground under it: hills see further but are exposed; bunkers hide and protect
+        local tsight, ttaken = 1, 1
+        u.onHill, u.inBunker = nil, nil
+        if u.def.domain == "land" then
+          local tx, ty = world.map:tileAt(u.x, u.y)
+          if world.map:terrainAt(tx, ty) == 2 then tsight, ttaken, u.onHill = S.HILL_SIGHT, S.HILL_TAKEN, true
+          elseif S.inBunker(world, u.x, u.y) then tsight, ttaken, u.inBunker = S.BUNKER_SIGHT, S.BUNKER_TAKEN, true end
+        end
+        local taken = ttaken * ((on and hull) and 0.65 or 1)
+        u.sqTaken = taken ~= 1 and taken or nil
         local sp = 1
         if on and hull then sp = sp * 0.5 end
         if on and smoke then sp = sp * 0.85 end
         if on and sprint then sp = sp * 1.5 end
         if on and burn then sp = sp * 1.6 end
         u.sqSpeed = sp ~= 1 and sp or nil
-        u.sqSight = (on and spot) and 1.6 or nil
+        local sight = tsight * ((on and spot) and 1.6 or 1)
+        u.sqSight = sight ~= 1 and sight or nil
         u.sqRof = (on and rapid) and 1.8 or ((on and burn) and 1.3 or nil)
         u.smoked = (on and smoke) or nil
         if on and rep and u.hp < u.maxhp then
@@ -578,7 +674,16 @@ function S.update(world, dt)
     st.checkT = 0.5
     for tt = 1, world.np do
       local tm = world.teams[tt]
-      if not tm.dead and (not (tm.hq and tm.hq.alive) or (st.tickets[world.ally[tt]] or 1) <= 0) then
+      local out
+      if world.wih then
+        out = true
+        for _, sq in ipairs(st.list) do
+          if sq.team == tt then for _, u in ipairs(sq.members) do if u.alive then out = false end end end
+        end
+      else
+        out = not (tm.hq and tm.hq.alive) or (st.tickets[world.ally[tt]] or 1) <= 0
+      end
+      if not tm.dead and out then
         if os.getenv("PA_SQDBG") then print("SQOUT", tt, math.floor(world.time), st.tickets[world.ally[tt]], "drain", math.floor(st.byDrain or 0), "losses", st.byLoss or 0) end
         world:eliminate(tt)
       end
@@ -588,6 +693,26 @@ end
 
 ---------------------------------------------------------------------------
 -- Drawing: capture points (world) and on the minimap
+
+-- on the ground, under everything: bunkers (sandbag rings), and blood
+function S.drawGround(world)
+  local lg = love.graphics
+  for _, b in ipairs(world.bunkers or {}) do
+    lg.setColor(0.22, 0.18, 0.12, 0.55)
+    lg.circle("fill", b.x, b.y, b.r)
+    lg.setColor(0.62, 0.55, 0.38, 0.95)
+    for i = 0, 15 do
+      local a = i * math.pi / 8
+      lg.circle("fill", b.x + math.cos(a) * b.r, b.y + math.sin(a) * b.r, 9)
+    end
+    lg.setColor(0.4, 0.34, 0.22, 0.9)
+    for i = 0, 15 do
+      local a = i * math.pi / 8 + math.pi / 16
+      lg.circle("fill", b.x + math.cos(a) * (b.r - 8), b.y + math.sin(a) * (b.r - 8), 6)
+    end
+  end
+  if world.wih then require("src.cries").drawDecals(world) end
+end
 
 function S.draw(world, cam, game)
   local lg = love.graphics
@@ -788,6 +913,32 @@ function AI:useSkills(sq, foe, fd, fighting, frac, goal)
   end
 end
 
+-- War is Hell: where to go. In a fight, take the nearest bunker or high ground if it's close;
+-- otherwise head for where the enemy was last seen, or sweep the map toward their side
+function AI:huntGoal(sq, foe, fighting)
+  local w = self.world
+  local L = sq.leader
+  if fighting and self.level >= 4 then
+    local best, bd
+    for _, b in ipairs(w.bunkers or {}) do
+      local d = U.dist(L.x, L.y, b.x, b.y)
+      if d < 360 and (not bd or d < bd) and U.dist(foe.x, foe.y, b.x, b.y) > 120 then best, bd = b, d end
+    end
+    if best then return { x = best.x, y = best.y, hold = true } end
+  end
+  if self.lastSeen and w.time - self.lastSeen.t < 40 then return { x = self.lastSeen.x, y = self.lastSeen.y } end
+  -- sweep: waypoints spread over the enemy half, a new one when we get there
+  if not self.sweep or U.dist(L.x, L.y, self.sweep.x, self.sweep.y) < 250 or w.time > self.sweep.untilT then
+    local ex, ey
+    for t = 1, w.np do if w:hostile(t, self.team) then ex, ey = w.teams[t].startX, w.teams[t].startY end end
+    local W, H = w.map.w * w.T, w.map.h * w.T
+    local x = U.clamp((ex or W / 2) + self.rng:random(-W * 0.35, W * 0.35), 200, W - 200)
+    local y = U.clamp((ey or H / 2) + self.rng:random(-H * 0.35, H * 0.35), 200, H - 200)
+    self.sweep = { x = x, y = y, untilT = w.time + 60 }
+  end
+  return self.sweep
+end
+
 function AI:update(dt)
   local w = self.world
   if w.over or w.teams[self.team].dead then return end
@@ -816,28 +967,41 @@ function AI:update(dt)
         if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and (o.def.weapon or o.key == "hq")
           and not (o.smoked and U.dist(L.x, L.y, o.x, o.y) > 90) then
           local d = U.dist(L.x, L.y, o.x, o.y)
-          if not o.def.building then d = d * 0.8 end
-          if not fd or d < fd then foe, fd = o, d end
+          -- War is Hell: the computer only knows what its side can see
+          if w.wih and d > 400 and not S.sees(w, self.team, o.x, o.y) then d = nil end
+          if d then
+            if not o.def.building then d = d * 0.8 end
+            if not fd or d < fd then foe, fd = o, d end
+          end
         end
       end
+      if w.wih and foe then self.lastSeen = { x = foe.x, y = foe.y, t = w.time } end
       local fighting = foe and fd < 520
       -- pull back to heal, come back when healthy
       if sq.healing then
         if frac > 0.85 then sq.healing = nil end
-      elseif frac < self.retreatAt and hq and hq.alive then
+      elseif frac < self.retreatAt and ((hq and hq.alive) or w.wih) then
         sq.healing = true
+        -- (War is Hell: no HQ - fall back toward where we came in, out of the fight)
+        local rx, ry = hq and hq.x or tm.startX, hq and hq.y or tm.startY
         for _, u in ipairs(sq.members) do
-          if u.alive then w:issue(u, { type = "retreat", x = hq.x + self.rng:random(-90, 90), y = hq.y + self.rng:random(-90, 90) }) end
+          if u.alive then w:issue(u, { type = "retreat", x = rx + self.rng:random(-90, 90), y = ry + self.rng:random(-90, 90) }) end
         end
       end
-      local pi = self:pickPoint(sq, taken)
-      local goal = pi and w.capPoints[pi]
-      if pi then taken[pi] = true end
-      sq.goal = pi
+      local goal
+      if w.wih then
+        goal = self:huntGoal(sq, foe, fighting)
+      else
+        local pi = self:pickPoint(sq, taken)
+        goal = pi and w.capPoints[pi]
+        if pi then taken[pi] = true end
+        sq.goal = pi
+      end
       if not sq.healing then
         -- fight what's close; otherwise go take the point; everyone stays with the leader
         local tx, ty
-        if fighting then tx, ty = foe.x, foe.y
+        if goal and goal.hold then tx, ty = goal.x, goal.y -- into the bunker, then fight from it
+        elseif fighting then tx, ty = foe.x, foe.y
         elseif goal then tx, ty = goal.x, goal.y
         elseif foe then tx, ty = foe.x, foe.y end
         if tx then

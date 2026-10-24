@@ -115,8 +115,9 @@ function M.generate(opts)
   end
   table.sort(vals)
   local waterLevel = vals[math.max(1, math.floor(#vals * waterFrac))]
-  local hillLevel = vals[math.floor(#vals * 0.86)]
-  local rockLevel = vals[math.floor(#vals * 0.965)]
+  -- rougher maps (War is Hell): more high ground and more rock to break up lines of fire
+  local hillLevel = vals[math.floor(#vals * (1 - (opts.hillFrac or 0.14) - (opts.rockFrac or 0.035)))]
+  local rockLevel = vals[math.floor(#vals * (1 - (opts.rockFrac or 0.035)))]
 
   local terrain = {}
   for i = 0, w * h - 1 do

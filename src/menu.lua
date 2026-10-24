@@ -16,7 +16,12 @@ local THEMES = {
     active = { 0.62, 0.2, 0.38 }, btn = { 0.2, 0.1, 0.18 }, hover = { 0.32, 0.15, 0.27 }, line = { 0.8, 0.45, 0.62 } },
   craft = { bg = { 0.05, 0.07, 0.04 }, title = { 1, 0.85, 0.45 }, sub = { 0.75, 0.82, 0.6 }, field = { 0.1, 0.13, 0.08 },
     active = { 0.45, 0.36, 0.12 }, btn = { 0.13, 0.16, 0.1 }, hover = { 0.22, 0.26, 0.16 }, line = { 0.75, 0.65, 0.35 } },
+  -- Commander of Heroes, War is Hell: camouflage
+  wih = { bg = { 0.13, 0.15, 0.09 }, title = { 0.86, 0.82, 0.62 }, sub = { 0.72, 0.7, 0.52 }, field = { 0.2, 0.22, 0.13 },
+    active = { 0.38, 0.42, 0.2 }, btn = { 0.22, 0.2, 0.13 }, hover = { 0.3, 0.3, 0.18 }, line = { 0.6, 0.58, 0.38 } },
 }
+-- War is Hell's camouflage pattern behind the title screen
+local CAMO = { { 0.24, 0.27, 0.15 }, { 0.32, 0.28, 0.18 }, { 0.12, 0.14, 0.08 }, { 0.4, 0.38, 0.25 } }
 local ATEMPLATES = {
   { "classic", "Classic", "Classic: three lanes, two towers each. The standard match." },
   { "longroad", "Long Road", "Long Road: winding lanes and three towers per lane. Longer, more strategic games (par +3 min)." },
@@ -59,7 +64,7 @@ local RTS_SETUP = { game = "standard",
   sandbox = { you = { tank = 20, artillery = 6, flak = 4 }, enemy = { tank = 20, artillery = 6, gunship = 4 } } }
 -- Commander of Heroes: map, format, difficulty and the squads you field
 local COH_FORMATS = { { "1v1", 1, 1 }, { "2v2", 2, 2 } }
-local COH_SETUP = { v = 2, enemy = "own", length = "standard", size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
+local COH_SETUP = { v = 2, game = "conquest", enemy = "own", length = "standard", size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
@@ -117,6 +122,7 @@ function Menu.new(prev)
       COH_SETUP.level = mem.coh.level or COH_SETUP.level
       COH_SETUP.enemy = mem.coh.enemy or COH_SETUP.enemy
       COH_SETUP.length = mem.coh.length or COH_SETUP.length
+      COH_SETUP.game = mem.coh.game or COH_SETUP.game
       -- (setups saved before v2 had the anti-air squad off: start those from the new defaults)
       if mem.coh.v == 2 and mem.coh.squads and #mem.coh.squads == require("src.squads").SLOTS then
         COH_SETUP.squads = mem.coh.squads
@@ -532,9 +538,15 @@ function Menu:cohRects()
     r[#r + 1] = { x = x0 + (i - 1) * 154, y = y + 88, w = 150, h = 34, label = o[1], kind = "cohenemy", value = o[2],
       active = (C.enemy or "own") == o[2], rowLabel = i == 1 and "Enemy squads" or nil, small = true }
   end
-  for i, o in ipairs({ { "Quick  5-7 min", "quick" }, { "Standard  10-12", "standard" }, { "Long  ~18", "long" } }) do
-    r[#r + 1] = { x = x0 + (i - 1) * 132, y = y + 176, w = 128, h = 34, label = o[1], kind = "cohlen", value = o[2],
-      active = (C.length or "standard") == o[2], rowLabel = i == 1 and "Length" or nil, small = true }
+  for i, o in ipairs({ { "Conquest", "conquest" }, { "War is Hell", "wih" } }) do
+    r[#r + 1] = { x = x0 + 220 + (i - 1) * 154, y = y, w = 150, h = 34, label = o[1], kind = "cohgame", value = o[2],
+      active = (C.game or "conquest") == o[2], small = true }
+  end
+  if (C.game or "conquest") == "conquest" then
+    for i, o in ipairs({ { "Quick  5-7 min", "quick" }, { "Standard  10-12", "standard" }, { "Long  ~18", "long" } }) do
+      r[#r + 1] = { x = x0 + (i - 1) * 132, y = y + 176, w = 128, h = 34, label = o[1], kind = "cohlen", value = o[2],
+        active = (C.length or "standard") == o[2], rowLabel = i == 1 and "Length" or nil, small = true }
+    end
   end
   r[#r + 1] = { x = x0, y = y + 132, w = 32, h = 34, label = "-", kind = "cohlv", d = -1, rowLabel = "Difficulty" }
   r[#r + 1] = { x = x0 + 36, y = y + 132, w = 132, h = 34, label = C.level .. "  " .. LEVEL_NAMES[C.level], kind = "cohlv", d = 0 }
@@ -603,12 +615,22 @@ function Menu:drawCohInfo(x0, y)
   end
   -- how it plays, under the setup on the left
   lg.setColor(0.6, 0.66, 0.74)
+  if COH_SETUP.game == "wih" then
+    lg.setColor(0.86, 0.8, 0.6)
+    lg.printf("WAR IS HELL. No HQ, no points, no reinforcements: the squads you bring are all you get, and when they die, they die. "
+      .. "Deep fog on a rough map - find the enemy and destroy every last unit. Hills see further but you take more damage up there; "
+      .. "bunkers hide you and soak hits. When a leader falls, his best survivor takes command. Every crewman has a name.\n\n"
+      .. "Brutal: blood, screams, and the guns hit harder. Never scored (yet).", x0, y + 186, 520)
+    return
+  end
   lg.printf("Five capture points. Ground units standing on a point take it (aircraft can't). Your HQ can't be hurt while you hold at least one point. "
+    .. "Hills see further but take more damage; bunkers hide and protect. "
     .. "Hold more points than the enemy and their tickets drain; every unit you lose costs tickets too. "
     .. "Run them out of tickets, or destroy their HQ, to win.\n\n"
     .. "1-5 always select that squad (twice: jump to it); click any unit for its whole squad (Alt: one unit). Fallen members are replaced at your HQ and walk back out to their leader - "
     .. "faster the more points you hold - and units heal fast there. A fallen leader returns after 45 s. Never scored (yet).",
     x0, y + 230, 520)
+  -- (terrain applies here too)
 end
 
 function Menu:activeCount()
@@ -645,9 +667,24 @@ end
 function Menu:draw()
   local lg = love.graphics
   local x0, y, w, h = self:layout()
-  local th = THEMES[self.mode] or THEMES.rts
+  local wih = self.mode == "coh" and COH_SETUP.game == "wih"
+  local th = wih and THEMES.wih or THEMES[self.mode] or THEMES.rts
   lg.clear(th.bg[1], th.bg[2], th.bg[3])
-  for _, s in ipairs(self.shapes) do
+  if wih then
+    -- camouflage: overlapping blobs in four field colors (fixed, so it doesn't swim)
+    local rng = love.math.newRandomGenerator(1944)
+    for i = 1, 140 do
+      local c = CAMO[(i % #CAMO) + 1]
+      lg.setColor(c[1], c[2], c[3], 0.9)
+      local bx, by = rng:random(-60, w + 60), rng:random(-60, h + 60)
+      for k = 1, 4 do
+        lg.ellipse("fill", bx + rng:random(-40, 40), by + rng:random(-25, 25), rng:random(30, 80), rng:random(18, 45))
+      end
+    end
+    lg.setColor(0, 0, 0, 0.35)
+    lg.rectangle("fill", 0, 0, w, h)
+  end
+  for _, s in ipairs(wih and {} or self.shapes) do
     local c = D.teamColor[s.team]
     lg.setColor(c[1], c[2], c[3], 0.22)
     if s.kind == 1 then lg.rectangle("fill", s.x - s.s, s.y - s.s, s.s * 2, s.s * 2, 3)
@@ -670,7 +707,8 @@ function Menu:draw()
   lg.setColor(th.sub[1], th.sub[2], th.sub[3])
   local sub = self.mode == "arena" and "Commander Arena: no base, no army. Your Commander, three lanes and endless creeps."
     or (self.mode == "craft" and "Commander Craft: gold, lumber, heroes and three tiers. Warcraft rules, our heroes.")
-    or (self.mode == "coh" and "Commander of Heroes: lead squads, not armies. Take the map, bleed their tickets."
+    or (self.mode == "coh" and (COH_SETUP.game == "wih" and "War is Hell: find them, kill them, and bring your men home."
+      or "Commander of Heroes: lead squads, not armies. Take the map, bleed their tickets.")
     or "A small real-time strategy game of land, sea and air. Shapes included.")
   lg.print(sub, w / 2 - R.font(18):getWidth(sub) / 2, y - 78)
   do
@@ -1105,6 +1143,9 @@ function Menu:mousepressed(x, y, b)
       elseif r.kind == "cohfmt" then COH_SETUP.format = r.value
       elseif r.kind == "cohenemy" then COH_SETUP.enemy = r.value
       elseif r.kind == "cohlen" then COH_SETUP.length = r.value
+      elseif r.kind == "cohgame" then
+        COH_SETUP.game = r.value
+        if r.value == "wih" and COH_SETUP.size == 1 then COH_SETUP.size = 2 end -- (a moderate map to search)
       elseif r.kind == "cohlv" then COH_SETUP.level = math.max(1, math.min(10, COH_SETUP.level + (r.d ~= 0 and r.d or dir)))
       elseif r.kind == "sbdown" or r.kind == "sbup" or r.kind == "sbcount" then
         local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
@@ -1193,6 +1234,7 @@ function Menu:options()
     if #players == 4 then players = { players[1], players[2], players[4], players[3] } end
     return { mode = "rts", coh = true, size = C.size == 1 and 96 or 128, water = WATER[1][2], players = players,
       mods = { squads = true }, squadSetup = C.squads, enemySquads = C.enemy or "own", cohLength = C.length or "standard", menuMode = "coh",
+      cohMode = C.game or "conquest", hillFrac = C.game == "wih" and 0.22 or nil, rockFrac = C.game == "wih" and 0.06 or nil,
       arenaSetup = self.arena, craftSetup = self.craft, sizeI = self.size, waterI = self.water, slots = self.slots }
   end
   if self.mode == "arena" then

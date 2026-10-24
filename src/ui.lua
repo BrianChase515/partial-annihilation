@@ -194,12 +194,25 @@ function UI.drawTop(game)
     local foe
     for a in pairs(st.tickets) do if a ~= me then foe = a end end
     lg.setFont(font(14))
-    lg.setColor(0.95, 0.85, 0.5)
-    lg.print("COMMANDER OF HEROES", 14, 10)
-    lg.setColor(0.85, 0.9, 0.96)
     local SQ = require("src.squads")
-    lg.print(string.format("Tickets  %d  vs  %d      Points  %d - %d", math.max(0, math.floor(st.tickets[me] or 0)),
-      math.max(0, math.floor(foe and st.tickets[foe] or 0)), SQ.held(game.world, me), foe and SQ.held(game.world, foe) or 0), 230, 10)
+    if game.world.wih then
+      lg.setColor(0.9, 0.35, 0.25)
+      lg.print("WAR IS HELL", 14, 10)
+      local mineN, seenN = 0, 0
+      for _, e in ipairs(game.world.entities) do
+        if e.alive and e.squad then
+          if e.team == 1 then mineN = mineN + 1 elseif game.world:isVisible(e) then seenN = seenN + 1 end
+        end
+      end
+      lg.setColor(0.85, 0.9, 0.96)
+      lg.print(string.format("Your men  %d      Enemy in sight  %d", mineN, seenN), 160, 10)
+    else
+      lg.setColor(0.95, 0.85, 0.5)
+      lg.print("COMMANDER OF HEROES", 14, 10)
+      lg.setColor(0.85, 0.9, 0.96)
+      lg.print(string.format("Tickets  %d  vs  %d      Points  %d - %d", math.max(0, math.floor(st.tickets[me] or 0)),
+        math.max(0, math.floor(foe and st.tickets[foe] or 0)), SQ.held(game.world, me), foe and SQ.held(game.world, foe) or 0), 230, 10)
+    end
   else
   resourceBar(14, 7, "METAL", tm.metal, tm.mStore, tm.mIncome, tm.mSpend, { 0.82, 0.86, 0.95 })
   resourceBar(370, 7, "ENERGY", tm.energy, tm.eStore, tm.eIncome, tm.eSpend, { 1, 0.85, 0.3 })
@@ -406,7 +419,7 @@ function UI.drawSquadPanel(game)
   local me = world.ally[1]
   local foe
   for a in pairs(st.tickets) do if a ~= me then foe = a end end
-  local th = 44
+  local th = world.wih and 4 or 44 -- (War is Hell has no tickets)
   local bh = th + #list * rh + 8
   panelBox(x, y, bw, bh, 0.9)
   local cols = (world.mods and world.mods.groovy) and D.groovyColor or D.teamColor
@@ -419,6 +432,7 @@ function UI.drawSquadPanel(game)
     lg.rectangle("fill", right and (bx + (bw - 30) / 2 - ww) or bx, by, ww, 9, 2)
   end
   lg.setFont(font(12))
+  if not world.wih then
   local mt, ft = math.max(0, math.floor(st.tickets[me] or 0)), math.max(0, math.floor(foe and st.tickets[foe] or 0))
   local mc, fc = allyCol(me), allyCol(foe)
   lg.setColor(mc[1], mc[2], mc[3]); lg.print(tostring(mt), x + 10, y + 5)
@@ -432,6 +446,7 @@ function UI.drawSquadPanel(game)
   full[me] = math.max(full[me] or 0, mt); if foe then full[foe] = math.max(full[foe] or 0, ft) end
   bar(x + 10, y + 24, mt / math.max(1, full[me]), mc, true)
   bar(x + 20 + (bw - 30) / 2, y + 24, ft / math.max(1, foe and full[foe] or 1), fc, false)
+  end
   game.squadRows = { { x = x, y = y, w = bw, h = th, header = true } }
   local mx, my = love.mouse.getPosition()
   local t = world.time
@@ -1102,7 +1117,9 @@ function UI.drawSquadInfo(game, L)
     -- the two skills
     for slot = 1, 2 do
       local def, st, ok, on = skillState(sq, slot, t)
-      local bx, by, bw, bh = cx + 6, y + 68 + (slot - 1) * 38, cw - 12, 32
+      -- side by side, so the crew's names fit underneath
+      local half = (cw - 18) / 2
+      local bx, by, bw, bh = cx + 6 + (slot - 1) * (half + 6), y + 66, half, 30
       local hov = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
       if on then lg.setColor(0.2, 0.48, 0.3)
       elseif ok then lg.setColor(hov and 0.26 or 0.17, hov and 0.33 or 0.22, hov and 0.46 or 0.3)
@@ -1114,15 +1131,39 @@ function UI.drawSquadInfo(game, L)
       end
       lg.setColor(hov and 1 or 0.45, hov and 0.85 or 0.55, hov and 0.4 or 0.68, 0.9)
       lg.rectangle("line", bx + 0.5, by + 0.5, bw - 1, bh - 1, 5)
-      lg.setFont(font(12))
+      lg.setFont(font(11))
       lg.setColor(1, 1, 1, (ok or on) and 1 or 0.55)
       local key = isA and (slot == 1 and "Q " or "W ") or ""
-      lg.print(key .. def.name, bx + 7, by + 3)
+      local label = key .. def.name
+      while #label > 4 and font(11):getWidth(label) > bw - 8 do label = label:sub(1, -2) end
+      lg.print(label, bx + 5, by + 2)
       lg.setFont(font(10))
       lg.setColor(on and 0.6 or 0.8, on and 1 or 0.85, on and 0.6 or 0.9, (ok or on) and 1 or 0.6)
-      lg.print(st, bx + 7, by + 18)
+      lg.print(st, bx + 5, by + 16)
       game.sqInfoBtns[#game.sqInfoBtns + 1] = { x = bx, y = by, w = bw, h = bh, sq = sq, slot = slot }
       if hov then tip = { def = def, x = bx, y = by, sq = sq } end
+    end
+    -- the crew by name: the living first (leader starred), then the fallen
+    local rows = {}
+    for _, u in ipairs(sq.roster or {}) do if u.alive then rows[#rows + 1] = u end end
+    for k = #(sq.roster or {}), 1, -1 do local u = sq.roster[k]; if not u.alive then rows[#rows + 1] = u end end
+    lg.setFont(font(10))
+    for k = 1, math.min(5, #rows) do
+      local u = rows[k]
+      local ry = y + 100 + (k - 1) * 11.5
+      local nm = (u == sq.leader and u.alive and "* " or "  ") .. (u.callsign or u.def.name)
+      if u.alive then
+        lg.setColor(u == sq.leader and 1 or 0.85, u == sq.leader and 0.85 or 0.88, u == sq.leader and 0.4 or 0.92)
+        lg.print(nm, cx + 8, ry)
+        local f = u.hp / u.maxhp
+        lg.setColor(0.12, 0.14, 0.18)
+        lg.rectangle("fill", cx + cw - 46, ry + 3, 38, 5, 1)
+        lg.setColor(0.2 + (1 - f) * 0.8, 0.3 + f * 0.6, 0.15)
+        lg.rectangle("fill", cx + cw - 46, ry + 3, 38 * f, 5, 1)
+      else
+        lg.setColor(0.6, 0.3, 0.28, 0.85)
+        lg.print(nm .. "  KIA", cx + 8, ry)
+      end
     end
     game.sqCards[#game.sqCards + 1] = { x = cx, y = y, w = cw, h = ch, sq = sq }
   end
@@ -1775,6 +1816,14 @@ HOW TO WIN
   holds a point); a flashing red ring means it can be hurt.
   Units heal fast at your HQ. Fallen members are replaced there - faster the more points
   you hold. A fallen leader returns after 45 seconds (his squad has no skills meanwhile).
+
+TERRAIN
+  Hills (brown ground): +30% sight, but +15% damage taken.  Bunkers (sandbag rings): -40% damage, -30% sight.
+  Tanks carry a light anti-air machine gun; Recon's guns hit aircraft hard.
+
+WAR IS HELL
+  No HQ, no points, no reinforcements: when they die, they die. Deep fog, rough ground. Find the
+  enemy and destroy every unit. A fallen leader's best survivor takes command. F flees toward your drop zone.
 
 SQUAD TYPES (each squad is one kind of unit; the leader is a veteran of it)
   Armor - 4 Tanks .............. Hull Down, Smoke Screen
