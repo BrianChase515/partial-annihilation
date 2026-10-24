@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.15.1"
+D.VERSION = "0.15.2"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
@@ -100,11 +100,11 @@ D.units = {
   },
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
-    radius = 22, hp = 4200, speed = 40, sight = 460,
+    radius = 22, hp = 4200, speed = 40, sight = 460, needsSpotter = true,
     weapon = { damage = 55, range = 1300, minRange = 200, reload = 3.6, speed = 420, splash = 48, ballistic = true,
       targets = { land = true, sea = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
-    desc = "Siege ship. Shells anything within 40 tiles, but slowly. Can't hit aircraft or subs. Everyone will hunt it.",
+    desc = "Siege ship. Shells anything within 40 tiles that a friend can see (it only sees 460 itself), but slowly. Can't hit aircraft or subs. Everyone will hunt it.",
   },
   seabuilder = {
     name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",
