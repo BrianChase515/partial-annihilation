@@ -36,26 +36,58 @@ local COMP = {
     { "demolisher", 0.8, 2, 2 }, { "ironhide", 2.2, 3 }, { "wyvern", 1.3, 3 } },
 }
 
-function AI.new(world, team, level)
+-- Everything difficulty changes, in one place. The big levers:
+--   act      - how reliably it does each chore on a given think (idle workers, empty production,
+--              the next building): low levels forget things the way a busy human does
+--   workers  - how many workers it keeps over the "right" number
+--   tiers    - when it techs up;  expand - when it takes a second mine
+--   smart    - attacks when it's actually stronger (instead of at a fixed army size)
+function AI.params(L)
+  return {
+    think = math.max(0.3, 1.6 - 0.13 * L),
+    act = math.min(1, 0.25 + 0.075 * L),
+    workers = ({ -6, -5, -3, -2, -1, 0, 1, 1, 1, 1 })[L],
+    tier2At = 420 - 24 * L, tier3At = 900 - 45 * L,
+    expandAt = 600 - 25 * L,
+    attackFood = L <= 3 and (10 + 2 * L) or (20 + L),
+    smart = L >= 4, attackRatio = 1.7 - 0.05 * L,
+    towers = L >= 6 and 2 or (L >= 4 and 1 or 0),
+    research = 0.1 + 0.08 * L,
+    creep = L >= 3, creepRatio = 1.8 - 0.06 * L,
+    focusHero = L >= 5, skillChance = 0.25 + 0.07 * L,
+    heroRetreat = 0.2 + 0.02 * L,
+    regroupRatio = 1.05 + 0.05 * L,
+    goldMul = L >= 8 and (1 + 0.1 * (L - 7)) or nil,
+  }
+end
+
+-- the frozen yardstick every level is measured against (level 5 as of 0.13.0); tuning the
+-- real levels never moves it
+AI.BENCH = {
+  think = 0.9, act = 1, workers = 0, tier2At = 240, tier3At = 550, expandAt = 405,
+  attackFood = 18, smart = true, attackRatio = 1.4, towers = 1, research = 0.55,
+  creep = true, creepRatio = 1.4, focusHero = true, skillChance = 0.65, heroRetreat = 0.32, regroupRatio = 1.35,
+}
+
+function AI.new(world, team, level, opts)
   local self = setmetatable({}, AI)
   self.world, self.team = world, team
   self.level = math.max(1, math.min(10, level or 5))
   local L = self.level
+  local P = (opts and opts.bench) and AI.BENCH or AI.params(L)
+  self.P = P
   self.rng = love.math.newRandomGenerator(world.map.seed + team * 313)
-  self.thinkEvery = math.max(0.3, 1.5 - 0.12 * L)
+  self.thinkEvery = P.think
   self.think = 0.5
   self.race = C.raceOf(world, team)
-  self.profileName = "Craft " .. self.race.name
-  self.brain = setmetatable({ world = world, team = team, level = L, rng = self.rng, skillChance = 0.3 + 0.07 * L }, HeroBrain)
-  -- tier timing and army size before attacking scale with difficulty
-  self.tier2At = 330 - 18 * L
-  self.tier3At = 700 - 30 * L
-  -- weaker players attack early with whatever they have; stronger ones wait until they're ahead
-  self.attackFood = 8 + 2 * L
-  self.workerGoal = 11 + math.floor(L / 3)
+  self.profileName = "Craft " .. self.race.name .. ((opts and opts.bench) and " (bench)" or "")
+  self.brain = setmetatable({ world = world, team = team, level = L, rng = self.rng, skillChance = P.skillChance }, HeroBrain)
+  self.tier2At, self.tier3At = P.tier2At, P.tier3At
+  self.attackFood = P.attackFood
+  self.workerGoal = 11
   self.mode = "build"
   local tm = world.teams[team]
-  if L >= 8 then tm.goldMul = 1 + 0.1 * (L - 7) end -- the top difficulties mine faster (the menu says so)
+  tm.goldMul = P.goldMul -- the top difficulties mine faster (the menu says so)
   for _, h in ipairs(C.heroesOf(world, team, true)) do h.aiLevel = L end
   return self
 end
@@ -233,8 +265,8 @@ function AI:update(dt)
     if h.offers and #h.offers > 0 then self.brain:pickOffer(h) end
   end
   self:economy(tm)
-  self:buildings(tm)
-  self:production(tm)
+  if self.rng:random() < self.P.act then self:buildings(tm) end
+  if self.rng:random() < self.P.act then self:production(tm) end
   local before = self.mode
   self:army(tm)
   if DBG and self.mode ~= before then print(string.format("MODE t=%d T%d %s -> %s", w.time, self.team, before, self.mode)) end
@@ -254,9 +286,8 @@ function AI:economy(tm)
   end
   local woodWant = 2 + (tm.tier or 1) + math.min(1, #halls - 1)
   if tm.wood > 700 then woodWant = 1 elseif tm.wood > 400 then woodWant = 2 end
-  local goal = 5 * #myMines + woodWant + 1 + (self.level >= 6 and 1 or 0)
-  if self.level <= 4 then goal = goal - (5 - self.level) end -- weaker players under-build workers
-  if hall and #workers < goal then
+  local goal = math.max(4, 5 * #myMines + woodWant + 1 + self.P.workers)
+  if hall and #workers < goal and self.rng:random() < self.P.act then
     for _, h in ipairs(halls) do
       if #h.queue == 0 and #workers + self:count(self.race.worker, true) - #workers < goal then self:queue(h, self.race.worker) end
     end
@@ -278,7 +309,7 @@ function AI:economy(tm)
     for _, m in ipairs(myMines) do if (onGold[m] or 0) < 5 then return m end end
   end
   for _, e in ipairs(workers) do
-    if #e.orders == 0 and not e.inMine then
+    if #e.orders == 0 and not e.inMine and self.rng:random() < self.P.act then
       local target = needy()
       if target and onWood >= math.min(2, woodWant) then
         w:issue(e, { type = "harvest", kind = "gold", target = target })
@@ -359,7 +390,7 @@ function AI:buildings(tm)
   local halls = self:count(r.hall, true)
   local mainLow = not main or U.dist(main.x, main.y, hx, hy) > 700 or main.gold < 2500
   self.savingHall = nil
-  if exp and halls < 3 and (mainLow or (halls < 2 and t > 480 - 15 * L)) and not self:pendingBuildAny(r.hall) then
+  if exp and halls < 3 and (mainLow or (halls < 2 and t > self.P.expandAt)) and not self:pendingBuildAny(r.hall) then
     local sx, sy = self:hallSpotNear(exp)
     if sx and self:build(r.hall, sx, sy, 0, 5) then self.expanding = exp; return end
     if tm.gold < D.units[r.hall].cost.gold then self.savingHall = true; return end
@@ -372,7 +403,7 @@ function AI:buildings(tm)
     { r.mill, 1, 110 },
     { r.forge, 1, 150 },
   }
-  if L >= 4 then order[#order + 1] = { r.tower, 1, 200 } end
+  if self.P.towers >= 1 then order[#order + 1] = { r.tower, 1, 200 } end
   if tm.tier >= 2 then
     for _, k in ipairs(D.units[r.worker].builds) do
       local d = D.units[k]
@@ -385,7 +416,7 @@ function AI:buildings(tm)
       local d = D.units[k]
       if d.tier == 3 and d.factory then order[#order + 1] = { k, 1, 0 } end
     end
-    if L >= 5 then order[#order + 1] = { r.tower, 2, 0 } end
+    if self.P.towers >= 2 then order[#order + 1] = { r.tower, 2, 0 } end
   end
   for _, o in ipairs(order) do
     local k, want, from = o[1], o[2], o[3]
@@ -512,7 +543,7 @@ function AI:production(tm)
         if d.research and C.canOrder(w, self.team, k) then
           local useful = d.stat or d.flag
           if d.unitMods then for uk in pairs(d.unitMods) do if self:count(uk) >= 3 then useful = true end end end
-          if useful and self.rng:random() < 0.25 + 0.06 * L then self:queue(f, k); break end
+          if useful and self.rng:random() < self.P.research then self:queue(f, k); break end
         end
       end
     end
@@ -602,7 +633,7 @@ function AI:army(tm)
     local danger = n >= 4 or (eh ~= nil)
     if foe or eh or (h.chase and h.chase.alive) then self.brain:useSkills(h, eh, danger) end
     -- a hurt hero goes home to heal (better players do it earlier)
-    if h.hp < h.maxhp * (0.22 + 0.02 * self.level) and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 then
+    if h.hp < h.maxhp * self.P.heroRetreat and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 then
       w:issue(h, { type = "retreat", x = hall.x, y = hall.y + 120 })
       h.aiHealing = true
     end
@@ -652,7 +683,7 @@ function AI:army(tm)
     for _, o in ipairs(w.entities) do
       if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and not o.def.building and o.def.weapon and U.dist(o.x, o.y, cx, cy) < 700 then near[#near + 1] = o end
     end
-    if not broke and (strength(near) > strength(fighters) * (1.1 + 0.05 * self.level) or food < self.attackFood * 0.35) then
+    if not broke and (strength(near) > strength(fighters) * self.P.regroupRatio or food < self.attackFood * 0.35) then
       self.mode = "regroup"
       self.regroupUntil = t + 30
     else
@@ -668,7 +699,7 @@ function AI:army(tm)
           end
         end
         -- better players focus a hurt enemy hero
-        if self.level >= 5 then
+        if self.P.focusHero then
           for _, o in ipairs(near) do
             if o.key == "commander" and o.hp < o.maxhp * 0.5 then
               for _, u in ipairs(fighters) do if U.dist(u.x, u.y, o.x, o.y) < 450 then w:issue(u, { type = "attack", target = o }) end end
@@ -690,7 +721,7 @@ function AI:army(tm)
     return
   end
   -- 3. creeping: with the hero and a few units, clear camps for experience and the middle mine
-  local camp = self:creepTarget(fighters, food)
+  local camp = self.P.creep and self:creepTarget(fighters, food)
   if camp then
     self.mode = "creep"
     for _, u in ipairs(fighters) do
@@ -705,7 +736,7 @@ function AI:army(tm)
   local need = math.min(self.attackFood + math.floor(t / 300) * 4, 36)
   if t > 1200 then need = math.min(need, 18) end -- late game: no more turtling
   -- better players attack when they're actually stronger, not at a fixed army size
-  if self.level >= 4 and food >= 10 then
+  if self.P.smart and food >= 10 then
     local mine = strength(fighters)
     local theirs = 0
     for _, o in ipairs(w.entities) do
@@ -715,7 +746,7 @@ function AI:army(tm)
         theirs = theirs + s
       end
     end
-    if mine > theirs * (1.6 - 0.04 * self.level) then need = 0 end
+    if mine > theirs * self.P.attackRatio then need = 0 end
   end
   -- out of gold for good: no point waiting, go and finish it
   if food >= need or (tm.foodUsed or 0) >= D.CRAFT.FOOD_CAP - 6 or broke then
@@ -735,8 +766,15 @@ end
 function AI:rallyPoint()
   local hall = self:hall()
   if not hall then return self.world.teams[self.team].startX, self.world.teams[self.team].startY end
-  -- in front of the hall, toward the way out of the base (down the arm)
-  return hall.x, hall.y + 380
+  -- in front of the hall, toward the middle of the map (the way out of the base)
+  local w = self.world
+  local mx, my = w.map.w * w.T / 2, w.map.h * w.T / 2
+  local dx, dy = U.norm(mx - hall.x, my - hall.y)
+  local x, y = hall.x + dx * 380, hall.y + dy * 380
+  local tx, ty = w.map:tileAt(x, y)
+  local nx, ny = w.map:nearestTile(tx, ty, function(a, b) return w.map:passable("land", a, b) end, 8)
+  if nx then x, y = w.map:center(nx, ny) end
+  return x, y
 end
 
 -- the nearest living creep camp we can take: small ones with the hero early, the
@@ -753,7 +791,7 @@ function AI:creepTarget(fighters, food)
     if alive > 0 then
       local myHp = 0
       for _, u in ipairs(fighters) do myHp = myHp + u.hp end
-      if myHp > hp * (1.6 - 0.04 * self.level) then
+      if myHp > hp * self.P.creepRatio then
         local d = U.dist(h.x, h.y, cp.x, cp.y)
         -- the enemy's side of the map is off limits for creeping
         local enemyHall

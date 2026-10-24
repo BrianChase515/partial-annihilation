@@ -81,7 +81,14 @@ function C.setup(w, opts)
     end
     local c = w.teams[t].commander
     C.makeHero(w, c, (players[t] or {}).class)
-    c.x, c.y = hx + 40, hy + 120
+    do
+      -- just outside the hall, on its side toward the middle of the map
+      local mx, my = map.w * w.T / 2, map.h * w.T / 2
+      local dx, dy = U.norm(mx - hx, my - hy)
+      local tx, ty = map:tileAt(hx + dx * 120, hy + dy * 120)
+      local nx, ny = map:nearestTile(tx, ty, function(a, b) return map:passable("land", a, b) end, 8)
+      c.x, c.y = nx and (nx + 0.5) * w.T or hx, ny and (ny + 0.5) * w.T or hy + 120
+    end
     c.homeX, c.homeY = c.x, c.y
     w.teams[t].startX, w.teams[t].startY = hx, hy
   end
@@ -98,6 +105,12 @@ function C.setup(w, opts)
       camp.units[#camp.units + 1] = u
     end
     st.camps[#st.camps + 1] = camp
+  end
+  w.onCampAlert = function(camp, foe)
+    if not foe.alive or foe.key == "goldmine" then return end
+    for _, u in ipairs(camp.units) do
+      if u.alive and #u.orders == 0 and not (u.retaliate and u.retaliate.alive) then u.retaliate = foe end
+    end
   end
   C.recount(w)
 end

@@ -82,15 +82,17 @@ function love.load(args)
     -- love . --crafttest <minutes> <seed> <levelA/levelB> [raceA,raceB] [classA,classB]
     if a == "--crafttest" then
       autotest = { minutes = tonumber(args[i + 1]) or 20, seed = tonumber(args[i + 2]) or 5, size = 88, craft = true }
-      local la, lb = (args[i + 3] or "5/5"):match("^(%d+)/(%d+)$")
+      local la, lb = (args[i + 3] or "5/5"):match("^(%w+)/(%w+)$")
       local races, classes = {}, {}
       for k in (args[i + 4] or ""):gmatch("[^,]+") do races[#races + 1] = k end
       for k in (args[i + 5] or ""):gmatch("[^,]+") do classes[#classes + 1] = k end
       local players = {
-        { ally = 1, level = tonumber(la) or 5, race = races[1], class = classes[1] },
-        { ally = 2, level = tonumber(lb) or 5, race = races[2], class = classes[2] },
+        { ally = 1, level = tonumber(la) or 5, race = races[1], class = classes[1], bench = la == "B" },
+        { ally = 2, level = tonumber(lb) or 5, race = races[2], class = classes[2], bench = lb == "B" },
       }
-      startGame({ size = 88, seed = autotest.seed, autotest = true, players = players, mode = "craft" })
+      local tmpl
+      for k, x in ipairs(args) do if x == "--template" then tmpl = args[k + 1] end end
+      startGame({ size = 88, seed = autotest.seed, autotest = true, players = players, mode = "craft", template = tmpl })
       return
     end
   end

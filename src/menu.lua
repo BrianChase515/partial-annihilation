@@ -52,7 +52,8 @@ function Menu.new(prev)
     slots = { { human = true, class = 0 }, { class = 0, level = 5 }, { class = 0, level = 5 }, { class = 0, level = 5 } },
   }
   for i = #self.arena.slots + 1, 10 do self.arena.slots[i] = { class = 0, level = 5 } end
-  self.craft = prev and prev.craftSetup or { race = 0, hero = 0, enemy = 0, level = 5 }
+  self.craft = prev and prev.craftSetup or { race = 0, hero = 0, enemy = 0, level = 5, map = 1 }
+  self.craft.map = self.craft.map or 1
   self.mods = prev and prev.mods or { alien = false, drops = false, score = false, groovy = false }
   self.maps = Maps.load()
   self.t = 0
@@ -213,10 +214,16 @@ function Menu:craftRects()
     r[#r + 1] = { x = x0 + (i - 1) * 132, y = y + 92, w = 126, h = 34, label = rc.name, cfield = "enemy", value = i, active = CS.enemy == i, rowLabel = i == 1 and "Enemy race" or nil, craceHover = i }
   end
   r[#r + 1] = { x = x0 + #races * 132, y = y + 92, w = 126, h = 34, label = "Random", cfield = "enemy", value = 0, active = CS.enemy == 0 }
+  local CMAPS = require("src.craft_map").TEMPLATES
+  for i, t in ipairs(CMAPS) do
+    r[#r + 1] = { x = x0 + (i - 1) * 104, y = y + 184, w = 100, h = 34, label = t[2], cfield = "map", value = i, active = CS.map == i,
+      rowLabel = i == 1 and "Map" or nil, small = true, cmapHover = i }
+  end
+  r[#r + 1] = { x = x0 + #CMAPS * 104, y = y + 184, w = 80, h = 34, label = "Random", cfield = "map", value = 0, active = CS.map == 0, small = true }
   r[#r + 1] = { x = x0, y = y + 138, w = 32, h = 34, label = "-", kind = "clvdown", rowLabel = "Difficulty" }
   r[#r + 1] = { x = x0 + 36, y = y + 138, w = 160, h = 34, label = CS.level .. "  " .. LEVEL_NAMES[CS.level], kind = "lvlabel", clevel = true }
   r[#r + 1] = { x = x0 + 200, y = y + 138, w = 32, h = 34, label = "+", kind = "clvup" }
-  local by = y + 290
+  local by = y + 316
   self.craftStartY = by
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
@@ -230,12 +237,13 @@ function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
   local CS = self.craft
   lg.setFont(R.font(12))
   lg.setColor(0.62, 0.68, 0.55)
-  lg.print("Map: the Horseshoe (1v1) - a U of land around a lake, a rich gold mine on the peninsula in the middle.", x0, y + 182)
-  lg.print("Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 200)
+  lg.print("1v1. Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 226)
   lg.setFont(R.font(14))
   lg.setColor(0.75, 0.8, 0.65)
   local desc
-  if hoverHero then
+  if self.hoverMap then
+    desc = require("src.craft_map").TEMPLATES[self.hoverMap][3]
+  elseif hoverHero then
     local cls = ARENA.byClass[hoverHero]
     desc = cls.name .. ": " .. cls.tag
   elseif hoverRace then
@@ -245,11 +253,15 @@ function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
       for _, k in ipairs(rc.heroes) do t[#t + 1] = ARENA.byClass[k].name end
       return t end)(), ", ") .. "."
   elseif self.hoverLevel then
-    desc = "Difficulty " .. self.hoverLevel .. " (" .. LEVEL_NAMES[self.hoverLevel] .. ")"
+    local L = self.hoverLevel
+    desc = "Difficulty " .. L .. " (" .. LEVEL_NAMES[L] .. "): " .. (L <= 2 and "few workers, forgets chores, attacks with whatever it has." or
+      L <= 4 and "a so-so economy, techs late, pokes at you early." or
+      L <= 6 and "a full economy, creeps with its hero, attacks when it's ahead, focuses hurt heroes." or
+      "tight macro, early tech and expansion, picks its fights" .. (L >= 8 and string.format("; also mines %d%% faster.", (L - 7) * 10) or "."))
   else
     desc = "Destroy every enemy building. Hover a race or hero to read about it."
   end
-  lg.printf(desc, x0, y + 232, 520)
+  lg.printf(desc, x0, y + 250, 520)
   -- right column: the race you picked
   local rc = CS.race > 0 and D.CRAFT.races[CS.race]
   local px = x0 + 580
@@ -446,7 +458,7 @@ function Menu:draw()
 
   local mx, my = love.mouse.getPosition()
   local hoverProf, hoverMod, hoverClass, hoverTmpl
-  self.hoverLevel, self.hoverRace, self.hoverHero = nil, nil, nil
+  self.hoverLevel, self.hoverRace, self.hoverHero, self.hoverMap = nil, nil, nil, nil
   for _, r in ipairs(self:rects()) do
     if r.rowLabel then
       lg.setFont(R.font(16))
@@ -468,6 +480,7 @@ function Menu:draw()
     if hover and r.clevel then self.hoverLevel = self.craft.level end
     if hover and r.craceHover then self.hoverRace = r.craceHover end
     if hover and r.heroKey then self.hoverHero = r.heroKey end
+    if hover and r.cmapHover then self.hoverMap = r.cmapHover end
     if r.cfield then active = r.active end
     if r.kind == "chip" then
       local c = D.teamColor[r.slot]
@@ -812,7 +825,9 @@ function Menu:options()
     local myRace = CS.race > 0 and races[CS.race].key or nil
     local hero = (CS.race > 0 and CS.hero > 0) and races[CS.race].heroes[CS.hero] or nil
     local enemy = CS.enemy > 0 and races[CS.enemy].key or nil
+    local CMAPS = require("src.craft_map").TEMPLATES
     return { mode = "craft", size = 88, menuMode = "craft", craftSetup = CS, arenaSetup = self.arena,
+      template = CS.map > 0 and CMAPS[CS.map][1] or "random",
       players = { { human = true, ally = 1, race = myRace, class = hero }, { ally = 2, level = CS.level, race = enemy } },
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end

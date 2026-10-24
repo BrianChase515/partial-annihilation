@@ -9,7 +9,24 @@ local M = require("src.map")
 local CM = {}
 M.TREE = 4
 
+CM.TEMPLATES = {
+  { "horseshoe", "Horseshoe", "The Horseshoe: a U of land around a lake. Bases at the top of each arm, corner expansions, a rich mine on the peninsula in the middle." },
+  { "temple", "Old Temple", "Old Temple: open ground, bases in opposite corners, a natural expansion beside each, and a walled plaza in the middle with a rich mine and a boss." },
+  { "isles", "Shallow Isles", "Shallow Isles: two big islands joined by shallow fords; each has a base and an outer expansion, and a small island in the middle holds the rich mine." },
+  { "glade", "Serpent Glade", "Serpent Glade: one long road winds through deep forest between the bases, past pocket expansions; a narrow hunters' trail cuts across." },
+}
+
 function CM.generate(opts)
+  local t = opts.template
+  if t == "random" or not t then
+    local list = { "horseshoe", "temple", "isles", "glade" }
+    t = list[love.math.newRandomGenerator(opts.seed or os.time()):random(#list)]
+  end
+  if t == "horseshoe" then return CM.horseshoe(opts) end
+  return CM.carved(opts, t)
+end
+
+function CM.horseshoe(opts)
   local self = setmetatable({}, M)
   local N = opts.size or 88
   local w, h = N, N
@@ -146,6 +163,191 @@ function CM.generate(opts)
   for t = 1, #players do
     local side = ((t - 1) % 2) + 1
     local hl = self.halls[side]
+    self.starts[t] = { x = hl.x + 2, y = hl.y + 6, side = side }
+  end
+  self:labelComponents()
+  return self
+end
+
+---------------------------------------------------------------------------
+-- Carved maps: start from solid forest (or open water), carve clearings and roads, then drop
+-- mines, halls and creep camps. Two-player maps are point-symmetric (180 degrees).
+
+function CM.carved(opts, template)
+  local self = setmetatable({}, M)
+  local N = 96
+  local w, h = N, N
+  self.w, self.h = w, h
+  self.T = D.TILE
+  self.seed = opts.seed or os.time()
+  self.craft = true
+  self.template = template
+  local rng = love.math.newRandomGenerator(self.seed)
+  self.rng = rng
+  local terrain, height = {}, {}
+  self.wood = {}
+  local water = template == "isles"
+  for i = 0, w * h - 1 do
+    height[i] = 0.5
+    terrain[i] = water and M.WATER or 4
+    if not water then self.wood[i] = 100 end
+  end
+  self.terrain, self.height = terrain, height
+  self.waterLevel = 0.55
+  local ph = rng:random() * 6.28
+  local function rot(x, y) return w - 1 - x, h - 1 - y end
+  local function set(x, y, t)
+    if x < 2 or y < 2 or x > w - 3 or y > h - 3 then return end
+    local i = y * w + x
+    terrain[i] = t
+    if t == 4 then self.wood[i] = 100 else self.wood[i] = nil end
+  end
+  -- a blob (both sides): radius r, with a wobbly edge
+  local function blob(cx, cy, r, t)
+    t = t or M.LAND
+    for _, c in ipairs({ { cx, cy }, { rot(cx, cy) } }) do
+      for y = math.floor(c[2] - r - 3), math.ceil(c[2] + r + 3) do
+        for x = math.floor(c[1] - r - 3), math.ceil(c[1] + r + 3) do
+          local a = math.atan2(y - c[2], x - c[1])
+          local rr = r + 1.3 * math.sin(a * 3 + ph) + 0.8 * math.sin(a * 5 - ph)
+          if (x - c[1]) ^ 2 + (y - c[2]) ^ 2 <= rr * rr then set(x, y, t) end
+        end
+      end
+    end
+  end
+  -- a road through points (both sides), half-width hw
+  local function road(pts, hw, t)
+    for i = 1, #pts - 1 do
+      local a, b = pts[i], pts[i + 1]
+      local len = math.max(1, U.dist(a[1], a[2], b[1], b[2]))
+      for k = 0, len, 0.5 do
+        local f = k / len
+        local x, y = a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f
+        local ww = hw + 0.8 * math.sin((x + y) * 0.3 + ph)
+        blob(x, y, ww, t)
+      end
+    end
+  end
+  local mines, halls, camps = {}, {}, {}
+  local function mine(x, y, gold, extra)
+    local m = { x = x, y = y, gold = gold }
+    for k, v in pairs(extra or {}) do m[k] = v end
+    mines[#mines + 1] = m
+    if not m.center then
+      local rx, ry = rot(x, y)
+      local m2 = { x = rx - 2, y = ry - 2, gold = gold }
+      for k, v in pairs(extra or {}) do m2[k] = v end
+      if m2.side then m2.side = 2 end
+      mines[#mines + 1] = m2
+    end
+  end
+  local function camp(x, y, kind, center)
+    camps[#camps + 1] = { x = x, y = y, kind = kind }
+    if not center then local rx, ry = rot(x, y); camps[#camps + 1] = { x = rx, y = ry, kind = kind } end
+  end
+  local c = (N - 1) / 2
+  local q = N / 96
+  local function P(fx, fy) return math.floor(fx * N + 0.5), math.floor(fy * N + 0.5) end
+
+  local base, natural, nat2
+  if template == "temple" then
+    base = { P(0.2, 0.2) }
+    natural = { P(0.47, 0.13) }
+    nat2 = { P(0.13, 0.5) }
+    blob(base[1], base[2], 12 * q)
+    blob(natural[1], natural[2], 7 * q)
+    blob(nat2[1], nat2[2], 6 * q)
+    blob(c, c, 14 * q)
+    road({ { base[1], base[2] }, { natural[1], natural[2] }, { c + 10 * q, c - 16 * q }, { c, c } }, 3.6 * q)
+    road({ { base[1], base[2] }, { nat2[1], nat2[2] }, { c - 16 * q, c + 10 * q }, { c, c } }, 3.6 * q)
+    road({ { base[1], base[2] }, { c - 6 * q, c - 6 * q } }, 3.2 * q)
+    -- a rocky wall around the plaza with four gaps (paths cut it again below)
+    for a = 0, 63 do
+      local ang = a / 64 * math.pi * 2
+      if math.abs(math.sin(ang * 2)) > 0.35 then
+        local x, y = math.floor(c + math.cos(ang) * 15 * q + 0.5), math.floor(c + math.sin(ang) * 15 * q + 0.5)
+        set(x, y, M.ROCK)
+      end
+    end
+    -- side lanes around the plaza that link the two halves
+    road({ { natural[1], natural[2] }, { P(0.8, 0.18) } }, 3 * q)
+    mine(base[1] - 7, base[2] - 7, 9000, { side = 1 })
+    mine(natural[1] - 1, natural[2] - 5, 5500)
+    mine(nat2[1] - 5, nat2[2] - 1, 5500)
+    mine(math.floor(c) - 1, math.floor(c) - 1, 12000, { center = true })
+    camp(natural[1] + 3, natural[2] + 3, "small")
+    camp(nat2[1] + 3, nat2[2] + 3, "small")
+    camp(math.floor(c) + 4, math.floor(c) + 4, "big", true)
+  elseif template == "isles" then
+    base = { P(0.22, 0.3) }
+    natural = { P(0.18, 0.72) }
+    -- the west island
+    blob(base[1], base[2], 14 * q)
+    blob(natural[1], natural[2], 9 * q)
+    road({ { base[1], base[2] }, { natural[1], natural[2] } }, 8 * q)
+    -- the middle island and the fords (shallow, walkable)
+    blob(c, c, 9 * q)
+    road({ { base[1] + 8 * q, base[2] }, { P(0.5, 0.2) }, { P(0.75, 0.25) } }, 3 * q)
+    road({ { natural[1], natural[2] }, { c - 6 * q, c + 4 * q } }, 2.6 * q)
+    -- trees on the islands: groves along the shores
+    for i = 0, w * h - 1 do
+      local x, y = i % w, math.floor(i / w)
+      if terrain[i] == M.LAND then
+        local nearWater = false
+        for dy = -2, 2 do for dx = -2, 2 do
+          local j = (y + dy) * w + (x + dx)
+          if terrain[j] == M.WATER then nearWater = true end
+        end end
+        if nearWater and rng:random() < 0.75 and U.dist(x, y, c, c) > 10 * q then set(x, y, 4) end
+      end
+    end
+    mine(base[1] - 8, base[2] - 6, 9000, { side = 1 })
+    mine(natural[1] - 5, natural[2] + 2, 6000)
+    mine(math.floor(c) - 1, math.floor(c) - 1, 12000, { center = true })
+    camp(natural[1] + 2, natural[2] - 4, "small")
+    camp(math.floor(c) + 4, math.floor(c) + 3, "big", true)
+  else -- glade
+    base = { P(0.15, 0.16) }
+    natural = { P(0.18, 0.55) }
+    blob(base[1], base[2], 11 * q)
+    blob(natural[1], natural[2], 6 * q)
+    blob(c, c, 9 * q)
+    -- the serpent road: east, down, west, down... to the middle and on (mirrored half)
+    road({ { base[1], base[2] }, { P(0.55, 0.18) }, { P(0.6, 0.33) }, { P(0.3, 0.36) }, { P(0.32, 0.47) }, { c, c } }, 3.4 * q)
+    road({ { natural[1], natural[2] }, { P(0.32, 0.47) } }, 2.8 * q)
+    -- the hunters' trail: narrow, straight across the forest
+    road({ { base[1] + 6, base[2] + 6 }, { P(0.12, 0.85) }, { P(0.3, 0.88) } }, 1.6 * q)
+    mine(base[1] - 6, base[2] - 7, 9000, { side = 1 })
+    mine(natural[1] - 5, natural[2] - 1, 6000)
+    mine(math.floor(c) - 1, math.floor(c) - 1, 12000, { center = true })
+    camp(natural[1] + 2, natural[2] + 2, "small")
+    camp(math.floor(c) + 4, math.floor(c) + 4, "big", true)
+  end
+  -- border
+  for y = 0, h - 1 do for x = 0, w - 1 do
+    if x < 2 or y < 2 or x > w - 3 or y > h - 3 then terrain[y * w + x] = M.ROCK; self.wood[y * w + x] = nil end
+  end end
+  -- clear room around every mine and the halls
+  local function clear(x0, y0, x1, y1)
+    for y = math.max(2, y0), math.min(h - 3, y1) do for x = math.max(2, x0), math.min(w - 3, x1) do
+      if terrain[y * w + x] ~= M.LAND then terrain[y * w + x] = M.LAND; self.wood[y * w + x] = nil end
+    end end
+  end
+  for _, m in ipairs(mines) do clear(m.x - 2, m.y - 2, m.x + 4, m.y + 4) end
+  -- halls: four or five tiles from the main mine, toward the middle of the base clearing
+  local hx, hy = math.floor(base[1] - 2), math.floor(base[2] - 2)
+  halls[1] = { x = hx, y = hy }
+  local rx, ry = rot(hx, hy)
+  halls[2] = { x = rx - 3, y = ry - 3 }
+  for _, hl in ipairs(halls) do clear(hl.x - 3, hl.y - 3, hl.x + 7, hl.y + 7) end
+  for _, cp in ipairs(camps) do clear(cp.x - 3, cp.y - 3, cp.x + 3, cp.y + 3) end
+  self.deposits, self.deposit, self.blocked = {}, {}, {}
+  self.mines, self.halls, self.camps = mines, halls, camps
+  self.starts = {}
+  local players = opts.players or { { ally = 1 }, { ally = 2 } }
+  for t = 1, #players do
+    local side = ((t - 1) % 2) + 1
+    local hl = halls[side]
     self.starts[t] = { x = hl.x + 2, y = hl.y + 6, side = side }
   end
   self:labelComponents()

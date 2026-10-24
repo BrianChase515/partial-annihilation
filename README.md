@@ -23,7 +23,11 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
 - **Three tiers.** Town Hall → Keep → Castle (Great Hall → Stronghold → Fortress) unlock units, buildings, research and your 2nd and 3rd hero.
 - **No free upgrades.** Units never level up. Every improvement is bought: weapons and armor (three levels) at the Blacksmith / War Mill, and each production building researches upgrades for its own units (Defend, Long Rifles, Berserker Strength, Ensnare, Pulverize and more).
 - **Heroes.** You start with your class's hero and one skill. Levels come from enemies and creeps dying nearby, each with a card (skills at 2 and 4, the ultimate at 6). Heroes heal fast by your halls and rise again at your altar. Flee (F) works for them too.
-- **The Horseshoe map** (1v1): a U of land around a lake. Each player starts at the top of an arm with a gold mine; expansion mines sit in the bottom corners, and a rich mine waits on the peninsula in the middle, guarded by gnolls and an Ogre Warlord.
+- **Four 1v1 maps** (or Random), all original layouts inspired by classic fantasy-RTS maps:
+  - **Horseshoe:** a U of land around a lake, corner expansions, a rich mine on the middle peninsula guarded by gnolls and an Ogre Warlord.
+  - **Old Temple:** open ground, bases in opposite corners, two expansions each, and a walled plaza in the middle.
+  - **Shallow Isles:** islands joined by shallow fords around a lake, with the rich mine on a small middle island.
+  - **Serpent Glade:** one long road winding through deep forest past pocket expansions, plus a narrow hunters' trail.
 - **Melee matters.** Swords, axes and cavalry have to reach their target; ranged units and towers can hit flyers; siege wrecks buildings; casters heal, slow and bloodlust on their own.
 - **A computer opponent (difficulty 1-10)** that works its economy, creeps with its heroes, expands, techs up and attacks. Levels 8-10 also mine 10-30% faster.
 - **Its own soundtrack**: three fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove). The RTS keeps its five; the Arena mixes all eight.

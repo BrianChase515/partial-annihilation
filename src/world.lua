@@ -993,6 +993,11 @@ function W:damage(o, amount, attacker)
     o.aggro[attacker] = self.time + 8
     if self.onProvoke then self.onProvoke(o, attacker) end
   end
+  -- Craft creep camps fight as one: hitting a creep, or being hit by one, wakes the whole camp
+  if self.onCampAlert and attacker and attacker.alive then
+    if o.creepCamp and attacker.team ~= o.team then self.onCampAlert(o.creepCamp, attacker)
+    elseif attacker.creepCamp and o.team ~= attacker.team then self.onCampAlert(attacker.creepCamp, o) end
+  end
   self.teams[o.team].lastAttacked = self.time
   self.teams[o.team].lastAttackX, self.teams[o.team].lastAttackY = o.x, o.y
   if attacker and attacker.alive and not o.def.building and #o.orders == 0 and o.def.weapon and not o.retaliate and not o.disarmed then

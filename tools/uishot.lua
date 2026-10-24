@@ -64,7 +64,7 @@ local function script(mode, secs)
     return
   end
   if mode == "craft" then
-    opts = { mode = "craft", size = 88, seed = 31, autotest = true,
+    opts = { mode = "craft", size = 88, seed = tonumber(os.getenv("PA_SEED") or "31"), autotest = true, template = os.getenv("PA_TEMPLATE"),
       players = { { ally = 1, level = 5, race = os.getenv("PA_RACE") or "vanguard", class = os.getenv("PA_CLASS") }, { ally = 2, level = 5, race = "warband" } } }
   end
   local tmpl = mode:match("^arena%-(%a+)")
@@ -100,6 +100,12 @@ local function script(mode, secs)
     end
     if #sel > 0 then game:select(sel) end
     if os.getenv("PA_WIDE") then game.cam.zoom = 0.6; game:centerOn(c.x, c.y + 200) end
+    if os.getenv("PA_OVERVIEW") then
+      w.noFog = true
+      local vw, vh = love.graphics.getWidth(), love.graphics.getHeight() - 240
+      game.cam.zoom = math.min(vw / (w.map.w * w.T), vh / (w.map.h * w.T))
+      game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
+    end
   end
   for _ = 1, 6 do game:update(1 / 30); frame() end
   if mode == "arena" then

@@ -36,7 +36,7 @@ function G.new(opts)
     }
   end
   if opts.autotest then
-    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", class = players[1].class, race = players[1].race }
+    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", class = players[1].class, race = players[1].race, bench = players[1].bench }
   end
   self.arena = opts.mode == "arena"
   self.craft = opts.mode == "craft"
@@ -55,7 +55,7 @@ function G.new(opts)
   for i, p in ipairs(players) do
     if self.craft then
       if not p.human then
-        local ai = require("src.craft_ai").new(world, i, p.level)
+        local ai = require("src.craft_ai").new(world, i, p.level, { bench = p.bench })
         self.ais[#self.ais + 1] = ai
         p.profileName = ai.profileName
       end
@@ -1662,6 +1662,7 @@ function G:keypressed(key)
   end
   if key == "d" and self.holdToggle then self.holdToggle = false end
   if self.craft then
+    if key == "q" and shift and CG.trainWorker(self) then return end
     if CG.heroKey(self, key) then return end
     if key == "n" then return end
     if key == "c" and not shift then CG.cycleHero(self); return end

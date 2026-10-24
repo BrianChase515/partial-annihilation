@@ -241,6 +241,28 @@ function CG.cycleHero(game)
   game:select({ h })
 end
 
+-- Shift+Q from anywhere: one more worker at your least-busy hall (unless a factory is selected,
+-- where Shift+Q keeps meaning "queue 5 of the first unit")
+function CG.trainWorker(game)
+  local ctx = game:commandContext()
+  if ctx == "factory" then return false end
+  local w = game.world
+  local best
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == 1 and e.def.hall and e.built >= 1 and (not best or #e.queue < #best.queue) then best = e end
+  end
+  if not best then game:notice("No hall to train workers", 1.2); return true end
+  local key
+  for _, k in ipairs(best.def.builds) do if D.units[k].worker then key = k; break end end
+  if not key then return true end
+  local ok, why = C.enqueue(w, best, key)
+  if ok then
+    C.recount(w)
+    game:notice("Training a " .. D.units[key].name .. " (" .. #best.queue .. " queued)", 1)
+  elseif why then game:notice(why, 1.4) end
+  return true
+end
+
 -- Tab / the Builder button: the next idle worker
 function CG.idleWorker(game)
   local list = {}

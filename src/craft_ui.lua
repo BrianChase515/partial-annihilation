@@ -205,7 +205,7 @@ CU.ORDERS = {
   { "flee", "Flee", "F", "Selected units retreat to your flag (+25% speed, weapons off until healed). A hero flees to your hall at +50%." },
   { "skill1", nil, "Q" }, { "skill2", nil, "W" }, { "skill3", nil, "E" }, { "skill4", nil, "R" },
   { "army", "Army", "Ctrl+A", "Select every fighting unit (not workers)." },
-  { "builder", "Worker", "Tab", "Jump to the next idle worker." },
+  { "builder", "Worker", "Tab", "Jump to the next idle worker. Shift+Q trains one at your hall from anywhere." },
   { "cmd", "Hero", "C", "Jump between your heroes." },
   { "follow", "Follow", "L", "Camera follows the selection." },
   { "help", "Help", "F1", "All controls and tips." },
@@ -278,7 +278,7 @@ Goal: destroy every enemy building. Lose all of yours and you're out (no hall le
 Economy
   Workers (Peasants / Peons): right-click a GOLD MINE to mine (one worker inside at a time, ~5 per mine),
   right-click a TREE to chop wood. They carry it to your hall (wood also to a Lumber Mill / War Mill).
-  New workers start gathering by themselves. Tab = next idle worker. Mines run dry: the middle mine is the big one,
+  New workers start gathering by themselves. Tab = next idle worker, Shift+Q = train a worker from anywhere. Mines run dry: the middle mine is the big one,
   guarded by creeps - kill them for gold and hero experience.
   Everything is paid in full when you order it (right-click a queued unit to cancel and get it back).
   FOOD: every unit uses food; Farms / Burrows and halls provide it (max 80).
