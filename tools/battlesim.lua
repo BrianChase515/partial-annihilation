@@ -336,6 +336,18 @@ local function rtsFight(ka, kb, budget, seed)
   local function value(k) local c = D.units[k].cost; return c.metal + (c.energy or 0) / 10 end
   local function place(k, team, dx)
     local list = {}
+    -- "artillery:4+scout:2" = exact counts of several kinds
+    if k:find(":") then
+      local i = 0
+      for kk, nn in k:gmatch("(%w+):(%d+)") do
+        for _ = 1, tonumber(nn) do
+          i = i + 1
+          local x, y = spot(w, cx + dx + ((i - 1) % 3) * 40 * (dx > 0 and 1 or -1), cy - 90 + math.floor((i - 1) / 3) * 45)
+          list[#list + 1] = w:spawn(kk, team, x, y)
+        end
+      end
+      return list, i
+    end
     local n = math.max(1, math.floor(budget / value(k) + 0.5))
     local d = D.units[k]
     for i = 1, n do
@@ -348,13 +360,44 @@ local function rtsFight(ka, kb, budget, seed)
     end
     return list, n
   end
-  local A, na = place(ka, 1, D.units[ka].building and -60 or -260)
-  local B, nb = place(kb, 2, D.units[kb].building and 60 or 260)
-  for _, u in ipairs(A) do if not u.def.building then w:issue(u, { type = "amove", x = cx + 500, y = cy }) end end
+  local function isB(k) return D.units[k] and D.units[k].building end
+  -- against a defensive line, the attackers start well outside its reach
+  local A, na = place(ka, 1, isB(ka) and -60 or (isB(kb) and -520 or -260))
+  local B, nb = place(kb, 2, isB(kb) and 60 or (isB(ka) and 520 or 260))
+  for _, u in ipairs(A) do
+    if u.key == "scout" and ka:find("artillery") then
+      -- a spotter: stands off at the edge of its sight and holds (like a player would)
+      w:issue(u, { type = "move", x = cx - 280, y = u.y })
+      u.holdFire = true
+    elseif not u.def.building then w:issue(u, { type = "amove", x = cx + 500, y = cy }) end
+  end
   for _, u in ipairs(B) do if not u.def.building then w:issue(u, { type = "amove", x = cx - 500, y = cy }) end end
   local t0 = w.time
   while w.time - t0 < 90 do
     for _ = 1, 15 do w:update(1 / 30) end
+    -- spotters creep forward to keep the nearest enemy at the edge of their sight
+    for _, u in ipairs(A) do
+      if u.alive and u.holdFire then
+        local best, bd
+        for _, o in ipairs(B) do if o.alive then local d = U.dist(u.x, u.y, o.x, o.y); if not bd or d < bd then best, bd = o, d end end end
+        if best and math.abs(bd - 370) > 30 then
+          local dx, dy = U.norm(u.x - best.x, u.y - best.y)
+          local x, y = spot(w, best.x + dx * 370, best.y + dy * 370)
+          w:issue(u, { type = "move", x = x, y = y })
+        end
+      end
+    end
+    if os.getenv("BS_DBG") then
+      for _, u in ipairs(A) do
+        if u.alive and u.key == "artillery" then
+          local nd = 9999
+          for _, o in ipairs(B) do if o.alive then nd = math.min(nd, U.dist(u.x, u.y, o.x, o.y)) end end
+          print(string.format("A %.1f art hp %d dist %d order %s chase %s", w.time - t0, u.hp, nd, u.orders[1] and u.orders[1].type or "-", u.chase and u.chase.key or "-"))
+          break
+        end
+      end
+      for _, u in ipairs(A) do if u.alive and u.key == "scout" then local nd = 9999; for _, o in ipairs(B) do if o.alive then nd = math.min(nd, U.dist(u.x, u.y, o.x, o.y)) end end; print("  scout", u.hp, nd) break end end
+    end
     if hpOf(A) <= 0 or hpOf(B) <= 0 then break end
   end
   local a, am = hpOf(A)
@@ -403,7 +446,7 @@ local function run()
       { "tank", "scout" }, { "tank", "artillery" }, { "artillery", "scout" }, { "tank", "gunship" }, { "flak", "gunship" },
       { "flak", "bomber" }, { "fighter", "gunship" }, { "fighter", "bomber" }, { "gunship", "scout" }, { "bomber", "tank" },
       { "turret", "tank" }, { "turret", "scout" }, { "turret", "artillery" }, { "aaturret", "gunship" }, { "aaturret", "bomber" },
-      { "tank", "flak" },
+      { "tank", "flak" }, { "artillery:5", "turret" }, { "artillery:4+scout:2", "turret" },
     }
     for _, pr in ipairs(pairsList) do
       local sw, sa, sb, na, nb = 0, 0, 0
@@ -417,6 +460,8 @@ local function run()
         na, pr[1], nb, pr[2], 100 * sw / runs, 100 * sa / runs, 100 * sb / runs))
       io.stdout:flush()
     end
+  elseif what == "rtsone" then
+    print("RESULT", rtsFight(args[2], args[3], 1200, 9701))
   elseif what == "stats" then
     local L = tonumber(args[2]) or 6
     for _, c in ipairs(CLASSES) do

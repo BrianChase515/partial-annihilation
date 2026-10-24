@@ -716,6 +716,11 @@ end
 function W:buildRangeOf(e) return (e.def.buildRange or 0) * (self:modsOf(e).buildRange or 1) end
 function W:buildPowerOf(e) return (e.def.buildPower or 0) * (self:modsOf(e).build or 1) end
 function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) end
+-- how far a unit hunts for targets: its sight, or for artillery (spotted fire) its range
+function W:lookOf(e)
+  if e.def.needsSpotter then return math.max(self:sightOf(e), self:rangeOf(e)) end
+  return self:sightOf(e)
+end
 
 function W:speedOf(e)
   local flee = e.retreating and (e.key == "commander" and 1.5 or 1.25) or 1
@@ -859,11 +864,22 @@ function W:canTarget(e, o)
   return D.canHit(e.def.weapon, o.def.domain)
 end
 
+-- can e's side see o? (its own eyes, or any friendly unit or building close enough to o)
+function W:spotted(e, o)
+  if U.dist2(e.x, e.y, o.x, o.y) <= self:sightOf(e) ^ 2 then return true end
+  local seen = false
+  self:query(o.x, o.y, 480, function(f)
+    if not seen and f.alive and f ~= e and f.team and self.ally[f.team] == self.ally[e.team] and f.def.sight
+      and U.dist2(f.x, f.y, o.x, o.y) <= self:sightOf(f) ^ 2 then seen = true end
+  end)
+  return seen
+end
+
 function W:findTarget(e, range)
   local best, bd, bestIsUnit
   local w = e.def.weapon
   self:query(e.x, e.y, range + 48, function(o)
-    if self:canTarget(e, o) then
+    if self:canTarget(e, o) and (not e.def.needsSpotter or self:spotted(e, o)) then
       local d = U.dist(e.x, e.y, o.x, o.y) - (o.def.building and o.def.radius * 0.7 or o.def.radius)
       if d <= range and d >= w.minRange then
         -- prefer armed units, then units, then buildings
@@ -1192,10 +1208,12 @@ function W:findChaseTarget(e)
   if not w or e.disarmed or e.neutral then return nil end
   local best, bd
   local layer = self:layerOf(e)
-  self:query(e.x, e.y, self:sightOf(e) + 40, function(o)
-    if self:canTarget(e, o) then
+  -- artillery looks as far as it can shoot, but only at what a friend can see for it
+  local look = self:lookOf(e)
+  self:query(e.x, e.y, look + 40, function(o)
+    if self:canTarget(e, o) and (not e.def.needsSpotter or self:spotted(e, o)) then
       local d = U.dist(e.x, e.y, o.x, o.y)
-      if d <= self:sightOf(e) and (not layer or d <= self:rangeOf(e) or self.map:canReach(layer, e.x, e.y, o.x, o.y, w.range * 0.9)) then
+      if d <= look and (not layer or d <= self:rangeOf(e) or self.map:canReach(layer, e.x, e.y, o.x, o.y, w.range * 0.9)) then
         local score = d - (o.def.weapon and 120 or 0) - (o.def.building and 0 or 60)
         if o.decoy or o.key == "decoy" then score = score - 600 end
         if not bd or score < bd then best, bd = o, score end
@@ -1242,7 +1260,7 @@ function W:updateUnit(e, dt)
     -- idle: retaliate / defend area, then return home
     if e.def.weapon then
       local t = e.chase
-      if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > self:sightOf(e) + 220) then t = nil end
+      if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > self:lookOf(e) + 220) then t = nil end
       if not t and e.retaliate and e.retaliate.alive and self:canTarget(e, e.retaliate) then t = e.retaliate end
       e.retaliate = nil
       if not t then
@@ -1250,7 +1268,7 @@ function W:updateUnit(e, dt)
         if e.idleScan <= 0 then
           e.idleScan = 0.5
           t = self:findChaseTarget(e)
-          if t and U.dist(e.homeX, e.homeY, t.x, t.y) > self:sightOf(e) + 120 then t = nil end
+          if t and U.dist(e.homeX, e.homeY, t.x, t.y) > self:lookOf(e) + 120 then t = nil end
         end
       end
       e.chase = t
@@ -1273,7 +1291,7 @@ function W:updateUnit(e, dt)
     if self:followPath(e, dt, o.arrive or 8) then self:popOrder(e) end
   elseif o.type == "amove" or o.type == "patrol" then
     local t = e.chase
-    if t and (not t.alive or U.dist(e.x, e.y, t.x, t.y) > self:sightOf(e) + 160) then t = nil; e.path = nil end
+    if t and (not t.alive or U.dist(e.x, e.y, t.x, t.y) > self:lookOf(e) + 160) then t = nil; e.path = nil end
     if not t and e.def.weapon then
       e.amScan = (e.amScan or 0) - dt
       if e.amScan <= 0 then

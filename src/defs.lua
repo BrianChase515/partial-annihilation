@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.13.6"  -- the first two numbers are the high-score season
+D.VERSION = "0.13.7"  -- the first two numbers are the high-score season
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 
 D.units = {
@@ -31,7 +31,7 @@ D.units = {
   scout = {
     name = "Scout", short = "1", domain = "land", shape = "square",
     radius = 8, hp = 130, speed = 155, sight = 420,
-    weapon = { damage = 7, range = 150, reload = 0.35, speed = 650, targets = { land = true, sea = true } },
+    weapon = { damage = 4, range = 150, reload = 0.35, speed = 650, targets = { land = true, sea = true } },
     cost = { metal = 35, energy = 280, work = 28 },
     desc = "Fast and fragile. Good for finding the enemy.",
   },
@@ -44,10 +44,10 @@ D.units = {
   },
   artillery = {
     name = "Artillery", short = "3", domain = "land", shape = "square",
-    radius = 12, hp = 300, speed = 50, sight = 270,
+    radius = 12, hp = 300, speed = 50, sight = 270, needsSpotter = true,
     weapon = { damage = 85, range = 440, minRange = 90, reload = 3.2, speed = 300, splash = 55, ballistic = true, targets = { land = true, sea = true } },
     cost = { metal = 160, energy = 1200, work = 130 },
-    desc = "Long range, splash damage. Weak up close.",
+    desc = "Long range, splash damage. Weak up close. Only sees 270: to fire at full range it needs a spotter (a Scout sees farthest).",
   },
   flak = {
     name = "Flak Truck", short = "4", domain = "land", shape = "square",

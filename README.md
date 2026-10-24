@@ -161,6 +161,8 @@ Shapes tell you the domain, and the number tells you the type:
 | Triangle | Air | Fighter (1), Bomber (2), Gunship (3) |
 | Circle | Sea | Sea Constructor (B), Patrol Boat (1), Destroyer (2), Submarine (3, only ships can hit it), Battleship (4, long oval hull) |
 
+**Artillery needs spotters.** It only sees 270, but shoots 440: it fires at full range only at targets a friendly unit or building can see. Scouts see farthest (420), so a Scout or two parked at the edge of an enemy's defences turns your artillery loose on them.
+
 **Buildings:**
 - Metal Extractor
 - Solar Collector
