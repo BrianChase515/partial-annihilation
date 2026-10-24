@@ -51,7 +51,7 @@ D.units = {
   },
   artillery = {
     name = "Artillery", short = "3", domain = "land", shape = "square",
-    radius = 12, hp = 300, speed = 50, sight = 270, needsSpotter = true,
+    radius = 12, hp = 300, speed = 45, sight = 270, needsSpotter = true,
     weapon = { damage = 85, range = 440, minRange = 90, reload = 3.2, speed = 300, splash = 55, ballistic = true, targets = { land = true, sea = true } },
     cost = { metal = 160, energy = 1200, work = 130 },
     desc = "Long range, splash damage. Weak up close. Only sees 270: to fire at full range it needs a spotter (a Scout sees farthest).",

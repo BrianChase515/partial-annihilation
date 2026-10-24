@@ -1219,12 +1219,16 @@ function G:update(dt)
   end
   self:updateFollow(dt)
 
-  local step = dt * self.speed
-  -- fixed sub-steps for stability
+  -- fixed sub-steps (never longer than 1/30 s) so any speed plays out exactly the same.
+  -- High speeds on a slow machine: a frame does at most ~0.1 s of real work and the rest
+  -- is dropped, so the game runs as fast as it can instead of locking up
+  local step = math.min(dt, 0.05) * self.speed
   local n = math.max(1, math.ceil(step / 0.034))
-  for _ = 1, n do
+  local t0 = love.timer.getTime()
+  for i = 1, n do
     self.world:update(step / n)
     for _, ai in ipairs(self.ais) do ai:update(step / n) end
+    if i < n and self.speed > 3 and love.timer.getTime() - t0 > 0.1 then break end
   end
 
   -- under attack notices
@@ -1944,9 +1948,9 @@ function G:keypressed(key)
   elseif key == "tab" then
     self:selectIdleBuilder()
   elseif key == "=" or key == "kp+" then
-    self:setSpeed(self.speed + 0.5)
+    self:stepSpeed(1)
   elseif key == "-" or key == "kp-" then
-    self:setSpeed(self.speed - 0.5)
+    self:stepSpeed(-1)
   elseif key == "b" and not ctrl then
     self.showSidebar = not self.showSidebar
   elseif (key == "delete" or key == "backspace") and shift then
@@ -2056,9 +2060,22 @@ function G:startNuke()
   end
 end
 
+-- game speed steps: the simulation always runs in the same small fixed steps, so speed never
+-- changes the outcome, only how many steps a frame takes
+G.SPEEDS = { 0.5, 1, 1.5, 2, 3, 5, 8, 10, 15 }
 function G:setSpeed(v)
-  self.speed = U.clamp(v, 0.5, 3)
+  self.speed = U.clamp(v, 0.5, 15)
   self:notice("Game speed " .. self.speed .. "x", 1)
+end
+function G:stepSpeed(dir)
+  local cur, list = self.speed, G.SPEEDS
+  local pick = dir > 0 and list[#list] or list[1]
+  if dir > 0 then
+    for _, v in ipairs(list) do if v > cur + 0.01 then pick = v; break end end
+  else
+    for i = #list, 1, -1 do if list[i] < cur - 0.01 then pick = list[i]; break end end
+  end
+  self:setSpeed(pick)
 end
 
 -- Pull the selected units back (weapons off, +25% speed) to the flag or the Commander

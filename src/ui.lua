@@ -219,7 +219,7 @@ function UI.drawTop(game)
   addBtn("Help", "help")
   addBtn(game.paused and "Resume" or "Pause", "pause", 70)
   addBtn("+", "faster", 26)
-  addBtn(string.format("%.1fx", game.speed), "speed1", 46)
+  addBtn(game.speed >= 5 and string.format("%dx", game.speed) or string.format("%.1fx", game.speed), "speed1", 46)
   addBtn("-", "slower", 26)
   for _, b in ipairs(btns) do
     local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
@@ -2068,8 +2068,8 @@ function UI.click(game, x, y, b)
         if tb.action == "menu" then game.menuOpen = true
         elseif tb.action == "help" then game.showHelp = true
         elseif tb.action == "pause" then game.paused = not game.paused
-        elseif tb.action == "faster" then game:setSpeed(game.speed + 0.5)
-        elseif tb.action == "slower" then game:setSpeed(game.speed - 0.5)
+        elseif tb.action == "faster" then game:stepSpeed(1)
+        elseif tb.action == "slower" then game:stepSpeed(-1)
         elseif tb.action == "speed1" then game:setSpeed(1) end
       end
     end
