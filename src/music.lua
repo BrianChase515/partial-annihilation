@@ -25,29 +25,35 @@ end
 
 -- five soundtracks: "" (D minor), "_b" Iron Tide (E minor), "_c" Ashfall (C minor),
 -- "_d" Overdrive (A minor), "_e" Last Light (G minor)
-M.SUITES = { "", "_b", "_c", "_d", "_e" }
+-- three fantasy suites for Commander Craft: "_f" Banners of Dawn (D major), "_g" Drums of the
+-- Warband (D dorian), "_h" Moonlit Grove (E minor). The RTS plays the original five, Craft its
+-- own three, and the Arena (a mashup) any of the eight.
+M.SUITES = { "", "_b", "_c", "_d", "_e", "_f", "_g", "_h" }
+M.POOLS = { rts = { "", "_b", "_c", "_d", "_e" }, craft = { "_f", "_g", "_h" } }
 M.LOOPS_PER_SUITE = 2
-M.NAMES = { [""] = "Annihilation", _b = "Iron Tide", _c = "Ashfall", _d = "Overdrive", _e = "Last Light" }
+M.NAMES = { [""] = "Annihilation", _b = "Iron Tide", _c = "Ashfall", _d = "Overdrive", _e = "Last Light",
+  _f = "Banners of Dawn", _g = "Drums of the Warband", _h = "Moonlit Grove" }
 M.changedAt = nil   -- love.timer time of the last soundtrack change (for the "Music:" label)   -- during a match, move on to another suite after this many loops
 
 -- a shuffled order of all suites, starting with `first`
-function M.playlist(first)
+function M.playlist(first, pool)
   local rest = {}
-  for _, s in ipairs(M.SUITES) do if s ~= first then rest[#rest + 1] = s end end
+  for _, s in ipairs(pool or M.SUITES) do if s ~= first then rest[#rest + 1] = s end end
   for i = #rest, 2, -1 do local j = love.math.random(i); rest[i], rest[j] = rest[j], rest[i] end
   table.insert(rest, 1, first)
   return rest
 end
 
 -- start a match: random first suite, then rotate through the rest
-function M.match()
+function M.match(mode)
+  local pool = M.POOLS[mode] or M.SUITES
   -- start on a different soundtrack than the one that was just playing
   local first
   for _ = 1, 8 do
-    first = M.SUITES[love.math.random(#M.SUITES)]
+    first = pool[love.math.random(#pool)]
     if first ~= M.suite then break end
   end
-  M.queue = M.playlist(first)
+  M.queue = M.playlist(first, pool)
   M.qi = 1
   M.rotate = true
   M.start(M.queue[1])
@@ -166,16 +172,21 @@ function M.reset()
 end
 
 -- title screen: make sure the calm layer is playing
-function M.menu()
+function M.menu(mode)
   if stinger and stinger:isPlaying() then return end
   M.fadeOut = nil
   M.rotate = false
+  local pool = M.POOLS[mode] or M.SUITES
+  -- switching the title-screen tab to Craft (or away from it) changes the music too
+  local fits = false
+  for _, s in ipairs(pool) do if s == M.suite then fits = true end end
+  if playing and not fits and mode then playing = false end
   if not playing then
     M.reset()
     -- a different soundtrack from the one that just played
     local pick
     for _ = 1, 8 do
-      pick = M.SUITES[love.math.random(#M.SUITES)]
+      pick = pool[love.math.random(#pool)]
       if pick ~= M.suite then break end
     end
     M.start(pick)

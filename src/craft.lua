@@ -8,8 +8,9 @@ local ARENA = require("src.arena")
 
 local C = {}
 local CR = D.CRAFT
+local XPDBG = os.getenv("PA_XPDBG")
 
-C.XP_MUL = 2.6            -- hero experience per kill (scaled from the Arena's numbers)
+C.XP_MUL = 1.9            -- hero experience per kill (scaled from the Arena's numbers)
 C.HERO_XP_RANGE = 1000
 C.MINE_TIME = 1.0         -- seconds a worker spends inside a gold mine
 C.CHOP_TIME = 5.5         -- seconds to chop a load of wood
@@ -70,8 +71,12 @@ function C.setup(w, opts)
     hall.rally = nil
     local mine = C.nearestMine(w, hx, hy)
     for i = 1, 5 do
-      local a = i / 5 * math.pi + 0.3
-      local u = w:spawn(r.worker, t, hx + math.cos(a) * 90, hy - 90 + math.sin(a) * 30)
+      -- in a row just above the hall, toward the mine
+      local px, py = hx - 80 + i * 32, hy - hall.def.h * w.T * 0.5 - 26
+      local ptx, pty = map:tileAt(px, py)
+      local nx, ny = map:nearestTile(ptx, pty, function(x, y) return map:passable("land", x, y) end, 6)
+      if nx then px, py = map:center(nx, ny) end
+      local u = w:spawn(r.worker, t, px, py)
       if mine then w:issue(u, { type = "harvest", kind = "gold", target = mine }) end
     end
     local c = w.teams[t].commander
@@ -237,6 +242,7 @@ function C.canOrder(w, team, key)
   local d = D.units[key]
   if not d then return false, "?" end
   local r = raceOf(w, team)
+  if d.building and not U.contains(D.units[r.worker].builds, key) then return false, "Not a " .. r.name .. " building" end
   if d.tier and (tm.tier or 1) < d.tier then
     return false, "Needs " .. r.tierNames[d.tier] .. " (upgrade your " .. r.tierNames[1] .. ")"
   end
@@ -498,7 +504,7 @@ function C.updateHarvest(w, e, o, dt)
     o.edge = nil
     e.path = nil
     if carry.kind == "gold" then
-      local mul = C.upkeep(tm)
+      local mul = C.upkeep(tm) * (tm.goldMul or 1)
       tm.gold = tm.gold + carry.amount * mul
       tm.goldIn = (tm.goldIn or 0) + carry.amount * mul
     else
@@ -567,8 +573,18 @@ function C.updateHarvest(w, e, o, dt)
   end
 end
 
--- a fresh worker gets to work: gold until the mine has five, then wood
-function C.autoGather(w, u)
+-- a fresh worker gets to work: gold until the mine has five, then wood. A hall's rally
+-- point on a mine or a tree sends them straight there; on open ground they just go there.
+function C.autoGather(w, u, rally)
+  if rally and rally.x then
+    local rm, rd = C.nearestMine(w, rally.x, rally.y)
+    if rm and rd < 110 then w:issue(u, { type = "harvest", kind = "gold", target = rm }); return end
+    local tx, ty = w.map:tileAt(rally.x, rally.y)
+    if w.map:inBounds(tx, ty) and w.map.terrain[ty * w.map.w + tx] == 4 then
+      w:issue(u, { type = "harvest", kind = "wood", tree = { x = tx, y = ty } }); return
+    end
+    return
+  end
   local m = C.nearestMine(w, u.x, u.y)
   local onGold = 0
   if m then
@@ -717,12 +733,22 @@ function C.update(w, dt)
         end
       end
     end
+    -- heroes standing by one of their halls recover quickly (2% a second)
+    for _, h in ipairs(w.entities) do
+      if h.alive and h.key == "commander" and h.hp < h.maxhp and h.team and h.team > 0 then
+        local near = false
+        w:query(h.x, h.y, 420, function(b) if b.alive and b.team == h.team and b.def.hall and b.built >= 1 and U.dist(b.x, b.y, h.x, h.y) < 400 then near = true end end)
+        if near then h.hp = math.min(h.maxhp, h.hp + h.maxhp * 0.005); h.healing = 0.4 end
+      end
+    end
     -- fallen heroes rise at an altar (or the hall)
     for tt = 1, w.np do
       for _, h in ipairs(C.heroesOf(w, tt, true)) do
         if not h.alive and h.respawnAt and t >= h.respawnAt and not w.teams[tt].dead then
           local spot = C.reviveSpot(w, tt)
-          if spot then
+          local cost = C.reviveCost(h)
+          if spot and w.teams[tt].gold >= cost then
+            w.teams[tt].gold = w.teams[tt].gold - cost
             h.respawnX, h.respawnY = spot.x, spot.y + spot.def.h * w.T * 0.5 + 30
             ARENA.respawn(w, h)
           end
@@ -760,10 +786,21 @@ function C.update(w, dt)
           tm.revealed = true
           if w.onRevealed then w.onRevealed(tt) end
         elseif halls[tt] then tm.revealed = nil end
+        if tm.revealed then
+          -- no hall: every enemy can see your buildings
+          for _, e in ipairs(w.entities) do
+            if e.alive and e.team == tt and e.def.building then
+              for t2 = 1, w.np do if w:hostile(t2, tt) then e.seen[t2] = true end end
+            end
+          end
+        end
       end
     end
   end
 end
+
+-- bringing a hero back costs gold (more for a higher level); no gold, no hero
+function C.reviveCost(h) return 80 + 30 * (h.clevel or 0) end
 
 function C.reviveSpot(w, team)
   local altar, hall
@@ -780,7 +817,7 @@ end
 -- Kills: hero experience, bounties, revives
 
 function C.xpValue(o)
-  if o.key == "commander" then return 200 + 100 * (o.clevel or 0) end
+  if o.key == "commander" then return 110 + 60 * (o.clevel or 0) end
   if o.def.building then return 0 end
   if o.summon then return 20 end
   return o.def.xp or 20
@@ -818,6 +855,7 @@ function C.onKill(w, o, attacker)
     end
   end
   for _, h in ipairs(takers) do ARENA.commanderXP(w, h, value / #takers) end
+  if XPDBG then print(string.format("XP t=%d victim=%s(team %s) value=%d takers=%d killer=%s", w.time, o.key, tostring(o.team), value, #takers, attacker and attacker.key or "?")) end
 end
 
 function C.heroDied(w, c, attacker)

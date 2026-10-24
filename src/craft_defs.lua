@@ -30,7 +30,7 @@ return function(D)
 
   -- ================================================================== VANGUARD (order, steel, faith)
   U.peasant = unit({ name = "Peasant", short = "P", worker = true, radius = 8, hp = 240, speed = 80, sight = 260,
-    buildPower = 10, buildRange = 70, melee = true,
+    buildPower = 10, buildRange = 100, melee = true,
     weapon = { damage = 6, range = 55, reload = 1.2, speed = 900, targets = LAND },
     cost = { gold = 75, wood = 0, food = 1, work = 120 }, xp = 15,
     desc = "Mines gold, chops wood and builds. Right-click a gold mine or a tree to gather." })
@@ -39,8 +39,8 @@ return function(D)
     cost = { gold = 135, wood = 0, food = 2, work = 160 }, xp = 30,
     desc = "Melee. Sword-and-shield infantry that holds the line. Learn Defend at the Barracks." })
   U.rifleman = unit({ name = "Rifleman", short = "R", radius = 9, hp = 450, speed = 72, sight = 320,
-    weapon = { damage = 21, range = 270, reload = 1.35, speed = 800, targets = ALL },
-    cost = { gold = 205, wood = 30, food = 3, work = 200 }, xp = 35,
+    weapon = { damage = 22, range = 270, reload = 1.35, speed = 800, targets = ALL },
+    cost = { gold = 175, wood = 25, food = 2, work = 190 }, xp = 32,
     desc = "Ranged. Long musket; hits ground and air." })
   U.knight = unit({ name = "Knight", short = "K", radius = 12, hp = 1150, speed = 100, sight = 300, melee = true, armor = 0.78, tier = 3,
     weapon = { damage = 30, range = 70, reload = 1.25, speed = 900, targets = LAND },
@@ -105,7 +105,7 @@ return function(D)
 
   -- ================================================================== WARBAND (tribes, beasts, spirits)
   U.peon = unit({ name = "Peon", short = "P", worker = true, radius = 8, hp = 260, speed = 80, sight = 260,
-    buildPower = 10, buildRange = 70, melee = true,
+    buildPower = 10, buildRange = 100, melee = true,
     weapon = { damage = 7, range = 55, reload = 1.2, speed = 900, targets = LAND },
     cost = { gold = 75, wood = 0, food = 1, work = 120 }, xp = 15,
     desc = "Mines gold, chops wood and builds. Right-click a gold mine or a tree to gather." })
@@ -114,8 +114,8 @@ return function(D)
     cost = { gold = 170, wood = 0, food = 3, work = 190 }, xp = 40,
     desc = "Melee. Brutal axe infantry: more health and bite than a Footman, but more food." })
   U.headhunter = unit({ name = "Headhunter", short = "H", radius = 9, hp = 420, speed = 74, sight = 320,
-    weapon = { damage = 24, range = 250, reload = 1.5, speed = 700, targets = ALL },
-    cost = { gold = 140, wood = 20, food = 2, work = 180 }, xp = 30,
+    weapon = { damage = 23, range = 250, reload = 1.5, speed = 700, targets = ALL },
+    cost = { gold = 150, wood = 20, food = 2, work = 180 }, xp = 30,
     desc = "Ranged. Throws spears at ground and air." })
   U.demolisher = unit({ name = "Demolisher", short = "D", radius = 12, hp = 500, speed = 52, sight = 300, tier = 2,
     weapon = { damage = 62, range = 450, minRange = 110, reload = 3.6, speed = 320, splash = 50, ballistic = true, targets = LAND, bldMul = 2.2 },
@@ -150,7 +150,7 @@ return function(D)
     cost = { gold = 385, wood = 185, food = 0, work = 1100 },
     desc = "Trains Peons and takes in gold and wood. Upgrades to Stronghold (tier 2) and Fortress (tier 3). Provides 12 food." })
   U.w_burrow = building({ name = "Burrow", short = "Bw", w = 2, h = 2, hp = 650, sight = 300, food = 7, armor = 0.75,
-    weapon = { damage = 9, range = 250, reload = 1.2, speed = 700, targets = ALL },
+    weapon = { damage = 7, range = 240, reload = 1.2, speed = 700, targets = ALL },
     cost = { gold = 100, wood = 40, food = 0, work = 380 },
     desc = "Provides 7 food, and its defenders throw spears at anything close." })
   U.w_barracks = building({ name = "War Camp", short = "WC", w = 3, h = 3, hp = 1600, sight = 260, factory = true, buildPower = 10, armor = 0.8,

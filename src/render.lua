@@ -107,6 +107,7 @@ function R.drawEntity(e, cam, selected)
   local d = e.def
   local zoom = cam.zoom
   local cr, cg, cb = teamColor(e.team)
+  if e.key == "goldmine" then cr, cg, cb = 0.85, 0.66, 0.22 end
   local frame = e.built < 1
   local lg = love.graphics
   if d.building then
@@ -612,6 +613,7 @@ function R.drawWorld(cam, game)
   for _, e in ipairs(list) do
     R.drawHealth(e, sel[e] or e.built < 1 or (e.key == "commander") or e.general)
   end
+  if world.craft then require("src.craft_ui").drawOver(world, cam, list) end
   for _, e in ipairs(list) do
     if e.key == "commander" then R.drawNameplate(e, cam.zoom)
     elseif e.general then R.drawGeneralTag(e, cam.zoom) end

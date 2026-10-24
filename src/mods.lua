@@ -316,7 +316,9 @@ function M.onKill(world, o, attacker)
   -- worth = metal + a tenth of the energy (towers and plants are mostly energy)
   local c = o.def.cost
   local v = c and ((c.metal or 0) + (c.energy or 0) / 10) or 50
-  if o.key == "commander" then v = world.arena and 800 or 3000 end
+  -- Commander Craft prices are gold and wood
+  if world.craft and c then v = (c.gold or 0) + (c.wood or 0) end
+  if o.key == "commander" then v = world.arena and 800 or (world.craft and 900 or 3000) end
   v = v * (1 + 0.1 * ((o.key == "commander" and o.clevel) or o.level or 0))
   if o.general then v = v * 3 end
   if o.def.building then
@@ -333,7 +335,7 @@ end
 function M.onBuilt(world, b)
   if b.def.cost and world.score and world.score[b.team] then
     world.score[b.team].built = world.score[b.team].built + 1
-    M.addPoints(world, b.team, b.def.cost.metal * 0.1, false, "build")
+    M.addPoints(world, b.team, (world.craft and ((b.def.cost.gold or 0) + (b.def.cost.wood or 0)) or b.def.cost.metal) * 0.1, false, "build")
   end
 end
 

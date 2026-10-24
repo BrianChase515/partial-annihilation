@@ -36,7 +36,8 @@ function CG.init(game)
   w.onCommanderDown = function(c, attacker)
     local killer = attacker and (attacker.key == "commander" and attacker or attacker.owner)
     if c.team == 1 then
-      game:notice(string.format("Your %s has fallen. Rises at your altar in %ds", ARENA.byClass[c.class].name, math.ceil(c.respawnAt - w.time)), 3.5)
+      game:notice(string.format("Your %s has fallen. Rises at your altar in %ds (for %d gold)", ARENA.byClass[c.class].name,
+        math.ceil(c.respawnAt - w.time), C.reviveCost(c)), 3.5)
       VOICE.say("cmd_down")
     elseif w:hostile(c.team, 1) then
       game:notice("Enemy hero slain: " .. ARENA.byClass[c.class].name, 3)

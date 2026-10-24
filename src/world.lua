@@ -1028,6 +1028,7 @@ function W:kill(o, attacker)
   if self.craft then
     CRAFT.onKill(self, o, attacker)
     if self.onKill then self.onKill(o, attacker) end
+    MODS.onKill(self, o, attacker)
     local size = o.def.building and o.def.radius * 1.4 or o.def.radius * 2
     self.effects[#self.effects + 1] = { kind = "boom", x = o.x, y = o.y, t = 0, life = 0.6, size = size }
     return
@@ -1312,6 +1313,8 @@ function W:updateUnit(e, dt)
     if not e.path or e.destX ~= o.x or e.destY ~= o.y then self:setDest(e, o.x, o.y) end
     if self:followPath(e, dt, 40) or self.time - (o.issued or self.time) > 45 then
       e.retreating = false
+      -- Commander Craft: a hero who made it home fights again at once (the hall heals him)
+      if self.craft then e.disarmed = nil end
       self:popOrder(e)
     end
     return
@@ -1356,11 +1359,19 @@ function W:updateBuildOrder(e, o, dt)
   -- frame not placed yet: walk there and place it
   local cx, cy = (o.tx + d.w / 2) * self.T, (o.ty + d.h / 2) * self.T
   local reach = self:buildRangeOf(e) + d.w * self.T * 0.5
+  -- someone built over the spot while we walked there: give up (unless it's our own frame of it)
+  o.checkT = (o.checkT or 0) - dt
+  if o.checkT <= 0 then
+    o.checkT = 1
+    local ex = self.map.blocked[self.map:idx(o.tx, o.ty)]
+    local mineFrame = ex and ex.alive and ex.team == e.team and ex.key == o.key and ex.built < 1
+    if not mineFrame and not self:canPlace(o.key, o.tx, o.ty, e.team) then self:popOrder(e); return end
+  end
   if U.dist2(e.x, e.y, cx, cy) > reach * reach then
     if not e.path or e.destX ~= cx then self:setDest(e, cx, cy) end
     if self:followPath(e, dt, self:buildRangeOf(e) * 0.6) then
       -- could not get close enough; check again next frame (path ends nearest reachable)
-      if U.dist2(e.x, e.y, cx, cy) > reach * reach * 1.6 then
+      if U.dist2(e.x, e.y, cx, cy) > reach * reach then
         o.fail = (o.fail or 0) + 1
         e.path = nil
         if o.fail > 3 then self:popOrder(e) end
@@ -1521,7 +1532,7 @@ function W:produce(f, key)
   else
     self:issue(u, { type = "move", x = x + math.random(-60, 60), y = y + 70 })
   end
-  if self.craft and u.def.worker and not (f.rally and f.rally.x) then CRAFT.autoGather(self, u) end
+  if self.craft and u.def.worker then CRAFT.autoGather(self, u, f.rally) end
   if self.onProduce then self.onProduce(u, f) end
 end
 

@@ -294,7 +294,7 @@ function love.update(dt)
   MUSIC.update(dt, state == "menu" and "menu" or nil)
   if state == "menu" then
     love.mouse.setGrabbed(false)
-    MUSIC.menu()
+    MUSIC.menu(menu and menu.mode)
     menu:update(dt)
   else
     game:update(dt)

@@ -331,7 +331,7 @@ function G.new(opts)
   if not self.opts.autotest then
     MUSIC.reset()
     -- a different soundtrack each match
-    MUSIC.match()
+    MUSIC.match(self.craft and "craft" or (self.arena and "arena" or "rts"))
     local ok, lg = pcall(MatchLog.start, self)
     if ok then self.log = lg else print("match log disabled:", lg) end
   end
@@ -774,6 +774,25 @@ function G:placeBuilding(wx, wy, queue)
     return false
   end
   local builders = self:selectedBuilders()
+  if self.craft then
+    -- Warcraft style: the nearest selected worker goes; afterwards he returns to what he was gathering
+    local ok, why = require("src.craft").canOrder(self.world, 1, key)
+    if not ok then self:notice(why, 1.6); return false end
+    local cx, cy = (tx + D.units[key].w / 2) * self.world.T, (ty + D.units[key].h / 2) * self.world.T
+    local best, bd
+    for _, b in ipairs(builders) do
+      local o = b.orders[1]
+      local d = U.dist(b.x, b.y, cx, cy) + (b.carry and 200 or 0) + ((o and (o.type == "build" or o.type == "assist")) and 5000 or 0)
+      if not bd or d < bd then best, bd = b, d end
+    end
+    if not best then return false end
+    local prev = best.orders[1]
+    self.world:issue(best, { type = "build", key = key, tx = tx, ty = ty }, queue)
+    if not queue and prev and prev.type == "harvest" then
+      self.world:issue(best, { type = "harvest", kind = prev.kind, target = prev.target, tree = prev.tree }, true)
+    end
+    return true
+  end
   local dp = key == "mex" and self.world.map.deposit[self.world.map:idx(tx, ty)]
   local any = false
   for _, b in ipairs(builders) do
@@ -1008,7 +1027,8 @@ function G:update(dt)
         local ais, levels = {}, {}
         for i, p in ipairs(self.players) do
           if not p.human then
-            local nm = self.arena and (w.teams[i].commander.class or "?") or (p.profileName or p.profile)
+            local nm = self.craft and (tostring(w.teams[i].race) .. " " .. tostring(w.teams[i].commander.class))
+              or (self.arena and (w.teams[i].commander.class or "?") or (p.profileName or p.profile))
             ais[#ais + 1] = (w:hostile(i, 1) and "" or "ally ") .. nm .. " " .. p.level
             levels[i] = p.level
           end
@@ -1022,7 +1042,7 @@ function G:update(dt)
           self.highRank = require("src.scores").add({
             pts = total, result = f.won and "Win" or "Loss", date = os.date("%Y-%m-%d"),
             desc = string.format("%dp vs %s, %d:%02d", w.np, f.lineup, math.floor(w.time / 60), math.floor(w.time % 60)),
-          }, self.arena and "arena" or nil)
+          }, self.arena and "arena" or (self.craft and "craft" or nil))
         end
       end
     end
@@ -1677,8 +1697,11 @@ function G:keypressed(key)
   end
 
   -- build / produce slots
-  for i, hk in ipairs(D.hotkeys) do
-    if key == hk then self:activateSlot(i, shift); return end
+  for i, hk in ipairs(self.craft and UI.CRAFT_KEYS or D.hotkeys) do
+    if key == hk then
+      if self.craft and not self:commandContext() then break end
+      self:activateSlot(i, shift); return
+    end
   end
 
   if key == "a" then

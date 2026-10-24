@@ -14,6 +14,8 @@ local THEMES = {
     active = { 0.2, 0.42, 0.62 }, btn = { 0.13, 0.17, 0.23 }, hover = { 0.2, 0.26, 0.34 }, line = { 0.4, 0.55, 0.7 } },
   arena = { bg = { 0.08, 0.04, 0.08 }, title = { 1, 0.86, 0.6 }, sub = { 0.85, 0.62, 0.72 }, field = { 0.16, 0.08, 0.14 },
     active = { 0.62, 0.2, 0.38 }, btn = { 0.2, 0.1, 0.18 }, hover = { 0.32, 0.15, 0.27 }, line = { 0.8, 0.45, 0.62 } },
+  craft = { bg = { 0.05, 0.07, 0.04 }, title = { 1, 0.85, 0.45 }, sub = { 0.75, 0.82, 0.6 }, field = { 0.1, 0.13, 0.08 },
+    active = { 0.45, 0.36, 0.12 }, btn = { 0.13, 0.16, 0.1 }, hover = { 0.22, 0.26, 0.16 }, line = { 0.75, 0.65, 0.35 } },
 }
 local ATEMPLATES = {
   { "classic", "Classic", "Classic: three lanes, two towers each. The standard match." },
@@ -50,6 +52,7 @@ function Menu.new(prev)
     slots = { { human = true, class = 0 }, { class = 0, level = 5 }, { class = 0, level = 5 }, { class = 0, level = 5 } },
   }
   for i = #self.arena.slots + 1, 10 do self.arena.slots[i] = { class = 0, level = 5 } end
+  self.craft = prev and prev.craftSetup or { race = 0, hero = 0, enemy = 0, level = 5 }
   self.mods = prev and prev.mods or { alien = false, drops = false, score = false, groovy = false }
   self.maps = Maps.load()
   self.t = 0
@@ -74,8 +77,9 @@ end
 function Menu:tabRects(r)
   local x0, y, w, h = self:layout()
   local ty = math.max(14, y - 240)
-  r[#r + 1] = { x = w / 2 - 316, y = ty, w = 310, h = 50, label = "RTS", tab = "rts", big = true, active = self.mode ~= "arena" }
-  r[#r + 1] = { x = w / 2 + 6, y = ty, w = 310, h = 50, label = "COMMANDER ARENA", tab = "arena", big = true, active = self.mode == "arena" }
+  r[#r + 1] = { x = w / 2 - 466, y = ty, w = 300, h = 50, label = "RTS", tab = "rts", big = true, active = self.mode == "rts" }
+  r[#r + 1] = { x = w / 2 - 150, y = ty, w = 300, h = 50, label = "COMMANDER ARENA", tab = "arena", big = true, active = self.mode == "arena" }
+  r[#r + 1] = { x = w / 2 + 166, y = ty, w = 300, h = 50, label = "COMMANDER CRAFT", tab = "craft", big = true, active = self.mode == "craft" }
 end
 
 -- which arena slots are in play for the chosen format: you, ally, enemy 1, enemy 2
@@ -185,8 +189,123 @@ function Menu:updateRect(r, w)
   end
 end
 
+-- Commander Craft setup: your race and hero, the enemy's race and strength
+function Menu:craftRects()
+  local x0, y, w, h = self:layout()
+  local r = {}
+  self:tabRects(r)
+  local CS = self.craft
+  local races = D.CRAFT.races
+  for i, rc in ipairs(races) do
+    r[#r + 1] = { x = x0 + (i - 1) * 132, y = y, w = 126, h = 34, label = rc.name, cfield = "race", value = i, active = CS.race == i, rowLabel = i == 1 and "Your race" or nil, craceHover = i }
+  end
+  r[#r + 1] = { x = x0 + #races * 132, y = y, w = 126, h = 34, label = "Random", cfield = "race", value = 0, active = CS.race == 0, rowLabel = nil }
+  -- heroes of your race (or every class when your race is random)
+  local list = {}
+  if CS.race > 0 then list = races[CS.race].heroes end
+  for i, ck in ipairs(list) do
+    r[#r + 1] = { x = x0 + (i - 1) * 100, y = y + 46, w = 96, h = 34, label = ARENA.byClass[ck].name, cfield = "hero", value = i,
+      active = CS.hero == i, rowLabel = i == 1 and "Your hero" or nil, heroKey = ck, small = true }
+  end
+  r[#r + 1] = { x = x0 + #list * 100, y = y + 46, w = 96, h = 34, label = "Random", cfield = "hero", value = 0, active = CS.hero == 0,
+    rowLabel = #list == 0 and "Your hero" or nil, small = true }
+  for i, rc in ipairs(races) do
+    r[#r + 1] = { x = x0 + (i - 1) * 132, y = y + 92, w = 126, h = 34, label = rc.name, cfield = "enemy", value = i, active = CS.enemy == i, rowLabel = i == 1 and "Enemy race" or nil, craceHover = i }
+  end
+  r[#r + 1] = { x = x0 + #races * 132, y = y + 92, w = 126, h = 34, label = "Random", cfield = "enemy", value = 0, active = CS.enemy == 0 }
+  r[#r + 1] = { x = x0, y = y + 138, w = 32, h = 34, label = "-", kind = "clvdown", rowLabel = "Difficulty" }
+  r[#r + 1] = { x = x0 + 36, y = y + 138, w = 160, h = 34, label = CS.level .. "  " .. LEVEL_NAMES[CS.level], kind = "lvlabel", clevel = true }
+  r[#r + 1] = { x = x0 + 200, y = y + 138, w = 32, h = 34, label = "+", kind = "clvup" }
+  local by = y + 290
+  self.craftStartY = by
+  r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
+  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
+  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  self:updateRect(r, w)
+  return r
+end
+
+function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
+  local lg = love.graphics
+  local CS = self.craft
+  lg.setFont(R.font(12))
+  lg.setColor(0.62, 0.68, 0.55)
+  lg.print("Map: the Horseshoe (1v1) - a U of land around a lake, a rich gold mine on the peninsula in the middle.", x0, y + 182)
+  lg.print("Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 200)
+  lg.setFont(R.font(14))
+  lg.setColor(0.75, 0.8, 0.65)
+  local desc
+  if hoverHero then
+    local cls = ARENA.byClass[hoverHero]
+    desc = cls.name .. ": " .. cls.tag
+  elseif hoverRace then
+    local rc = D.CRAFT.races[hoverRace]
+    desc = rc.name .. ": " .. rc.tag .. "  Heroes: " .. table.concat((function()
+      local t = {}
+      for _, k in ipairs(rc.heroes) do t[#t + 1] = ARENA.byClass[k].name end
+      return t end)(), ", ") .. "."
+  elseif self.hoverLevel then
+    desc = "Difficulty " .. self.hoverLevel .. " (" .. LEVEL_NAMES[self.hoverLevel] .. ")"
+  else
+    desc = "Destroy every enemy building. Hover a race or hero to read about it."
+  end
+  lg.printf(desc, x0, y + 232, 520)
+  -- right column: the race you picked
+  local rc = CS.race > 0 and D.CRAFT.races[CS.race]
+  local px = x0 + 580
+  lg.setFont(R.font(13))
+  lg.setColor(0.6, 0.66, 0.5)
+  lg.print(rc and (rc.name:upper() .. "  - units by building") or "RACES", px, y - 22)
+  lg.setFont(R.font(12))
+  local yy = y
+  local function line(t, col)
+    lg.setColor(col[1], col[2], col[3])
+    lg.printf(t, px, yy, 340)
+    local _, ls = R.font(12):getWrap(t, 340)
+    yy = yy + #ls * 16 + 3
+  end
+  if rc then
+    local function names(keys)
+      local t = {}
+      for _, k in ipairs(keys) do local d = D.units[k]; if d and not d.research and not d.heroRecruit then t[#t + 1] = d.name .. (d.tier and d.tier > 1 and (" (T" .. d.tier .. ")") or "") end end
+      return table.concat(t, ", ")
+    end
+    local hall = D.units[rc.hall]
+    line(rc.tierNames[1] .. " > " .. rc.tierNames[2] .. " > " .. rc.tierNames[3] .. ": " .. names(hall.builds), { 1, 0.85, 0.45 })
+    for _, bk in ipairs(D.units[rc.worker].builds) do
+      local d = D.units[bk]
+      if d.factory and bk ~= rc.hall and not d.altar then
+        local u = names(d.builds)
+        local res = {}
+        for _, k in ipairs(d.builds) do if D.units[k].research then res[#res + 1] = D.units[k].name end end
+        line(d.name .. (d.tier and d.tier > 1 and (" (T" .. d.tier .. ")") or "") .. ": " .. (u ~= "" and u or "") ..
+          (#res > 0 and ((u ~= "" and "  |  " or "") .. "researches " .. table.concat(res, ", ")) or ""), { 0.82, 0.86, 0.75 })
+      end
+    end
+  else
+    for _, r2 in ipairs(D.CRAFT.races) do line(r2.name .. ": " .. r2.tag, { 0.82, 0.86, 0.75 }) end
+  end
+  -- high scores
+  self.craftScores = self.craftScores or require("src.scores").load("craft")
+  local hy = math.max(yy + 14, y + 250)
+  lg.setFont(R.font(13))
+  lg.setColor(0.6, 0.66, 0.5)
+  lg.print("CRAFT HIGH SCORES  season " .. D.SEASON, px, hy)
+  lg.setFont(R.font(12))
+  if #self.craftScores == 0 then
+    lg.setColor(0.45, 0.5, 0.42)
+    lg.print("None yet - win a game.", px, hy + 20)
+  end
+  for i, sc in ipairs(self.craftScores) do
+    if i > 5 then break end
+    lg.setColor(i == 1 and 1 or 0.85, i == 1 and 0.85 or 0.88, i == 1 and 0.35 or 0.8)
+    lg.print(string.format("%d. %s  %s  %s", i, U_fmt(sc.pts), sc.result, sc.date), px, hy + 2 + i * 18)
+  end
+end
+
 function Menu:rects()
   if self.mode == "arena" then return self:arenaRects() end
+  if self.mode == "craft" then return self:craftRects() end
   local x0, y, w, h = self:layout()
   local r = {}
   self:tabRects(r)
@@ -246,7 +365,7 @@ function Menu:activeCount()
 end
 
 function Menu:validTeams()
-  if self.mode == "arena" then return true end
+  if self.mode == "arena" or self.mode == "craft" then return true end
   if self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2 then return false end
   local teams, n = {}, 0
   for _, s in ipairs(self.slots) do
@@ -272,7 +391,7 @@ end
 function Menu:draw()
   local lg = love.graphics
   local x0, y, w, h = self:layout()
-  local th = THEMES[self.mode == "arena" and "arena" or "rts"]
+  local th = THEMES[self.mode] or THEMES.rts
   lg.clear(th.bg[1], th.bg[2], th.bg[3])
   for _, s in ipairs(self.shapes) do
     local c = D.teamColor[s.team]
@@ -296,14 +415,17 @@ function Menu:draw()
   lg.setFont(R.font(18))
   lg.setColor(th.sub[1], th.sub[2], th.sub[3])
   local sub = self.mode == "arena" and "Commander Arena: no base, no army. Your Commander, three lanes and endless creeps."
-    or "A small real-time strategy game of land, sea and air. Shapes included."
+    or (self.mode == "craft" and "Commander Craft: gold, lumber, heroes and three tiers. Warcraft rules, our heroes."
+    or "A small real-time strategy game of land, sea and air. Shapes included.")
   lg.print(sub, w / 2 - R.font(18):getWidth(sub) / 2, y - 78)
 
   -- column headers for player slots
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
   local ty = y + 160
-  if self.mode == "arena" then
+  if self.mode == "craft" then
+    -- (rows carry their own labels)
+  elseif self.mode == "arena" then
     local fm = AFORMATS[self.arena.format]
     if not fm.ffa and fm[2] + fm[3] > 6 then
       lg.print("Your side  (class / difficulty)", x0 - 130, ty - 22)
@@ -324,7 +446,7 @@ function Menu:draw()
 
   local mx, my = love.mouse.getPosition()
   local hoverProf, hoverMod, hoverClass, hoverTmpl
-  self.hoverLevel = nil
+  self.hoverLevel, self.hoverRace, self.hoverHero = nil, nil, nil
   for _, r in ipairs(self:rects()) do
     if r.rowLabel then
       lg.setFont(R.font(16))
@@ -343,6 +465,10 @@ function Menu:draw()
     if r.afield then active = r.active end
     if hover and r.tmpl then hoverTmpl = r.tmpl end
     if hover and r.alevel and self.mode == "arena" then self.hoverLevel = self.arena.slots[r.aslot].level end
+    if hover and r.clevel then self.hoverLevel = self.craft.level end
+    if hover and r.craceHover then self.hoverRace = r.craceHover end
+    if hover and r.heroKey then self.hoverHero = r.heroKey end
+    if r.cfield then active = r.active end
     if r.kind == "chip" then
       local c = D.teamColor[r.slot]
       local on = r.on
@@ -379,7 +505,7 @@ function Menu:draw()
       lg.rectangle("fill", r.x, r.y, r.w, r.h, 6)
       lg.setColor(th.line[1], th.line[2], th.line[3], 0.8)
       lg.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 6)
-      local fs = r.action == "start" and 24 or (r.big and 20 or 15)
+      local fs = r.action == "start" and 24 or (r.big and 20 or (r.small and 13 or 15))
       if r.big and r.active then
         lg.setColor(0.95, 0.75, 0.3)
         lg.rectangle("line", r.x - 2.5, r.y - 2.5, r.w + 5, r.h + 5, 8)
@@ -398,7 +524,9 @@ function Menu:draw()
       end
     end
   end
-  if self.mode == "arena" then
+  if self.mode == "craft" then
+    self:drawCraftInfo(x0, y, w, h, self.hoverRace, self.hoverHero)
+  elseif self.mode == "arena" then
     -- captions under the two map groups
     lg.setFont(R.font(11))
     lg.setColor(0.62, 0.66, 0.74)
@@ -482,13 +610,14 @@ function Menu:draw()
   lg.setColor(0.5, 0.56, 0.64)
   local tip = self.mode == "arena"
     and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
+    or self.mode == "craft" and "Tip: keep five workers on gold and a few on wood, build Farms before you need them, and creep with your hero early."
     or "Tip: build Metal Extractors on the yellow deposits and Solar Collectors for energy, then a Vehicle Plant. Kill enemy Commanders to win."
   -- (skipped when the buttons reach the bottom of a small screen)
   if not (self.mode == "arena" and self.arenaStartY and self.arenaStartY + 104 > h - 44) then
     lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 40)
   end
   self:drawDropdown()
-  if self.showHelp then UI.drawHelp(self.mode == "arena") end
+  if self.showHelp then UI.drawHelp(self.mode == "craft" and "craft" or self.mode == "arena") end
 end
 
 function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
@@ -615,6 +744,12 @@ function Menu:mousepressed(x, y, b)
       local dir = (b == 2) and -1 or 1
       local as = r.aslot and self.arena.slots[r.aslot]
       if r.tab then self.mode = r.tab
+      elseif r.cfield then
+        self.craft[r.cfield] = r.value
+        if r.cfield == "race" then self.craft.hero = 0 end
+      elseif r.kind == "clvdown" then self.craft.level = math.max(1, self.craft.level - 1)
+      elseif r.kind == "clvup" then self.craft.level = math.min(10, self.craft.level + 1)
+      elseif r.kind == "lvlabel" and r.clevel then self.craft.level = (self.craft.level - 1 + dir) % 10 + 1
       elseif r.afield then self.arena[r.afield] = r.value
         -- ten Commanders need room: 5v5 starts on a Huge map (you can still pick another)
         if r.afield == "format" and AFORMATS[r.value][1] == "5v5" then self.arena.size = #ASIZES end
@@ -671,6 +806,16 @@ function Menu:keypressed(k)
 end
 
 function Menu:options()
+  if self.mode == "craft" then
+    local CS = self.craft
+    local races = D.CRAFT.races
+    local myRace = CS.race > 0 and races[CS.race].key or nil
+    local hero = (CS.race > 0 and CS.hero > 0) and races[CS.race].heroes[CS.hero] or nil
+    local enemy = CS.enemy > 0 and races[CS.enemy].key or nil
+    return { mode = "craft", size = 88, menuMode = "craft", craftSetup = CS, arenaSetup = self.arena,
+      players = { { human = true, ally = 1, race = myRace, class = hero }, { ally = 2, level = CS.level, race = enemy } },
+      sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
+  end
   if self.mode == "arena" then
     local A = self.arena
     local act = self:arenaActive()
@@ -683,7 +828,7 @@ function Menu:options()
           class = sl.class > 0 and ARENA.CLASSES[sl.class].key or nil }
       end
     end
-    return { mode = "arena", size = ASIZES[A.size][2], players = players, menuMode = "arena", arenaSetup = A,
+    return { mode = "arena", size = ASIZES[A.size][2], players = players, menuMode = "arena", arenaSetup = A, craftSetup = self.craft,
       template = ATEMPLATES[A.template or 1][1],
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end
@@ -697,7 +842,7 @@ function Menu:options()
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
     mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy },
-    menuMode = "rts", arenaSetup = self.arena,
+    menuMode = "rts", arenaSetup = self.arena, craftSetup = self.craft,
   }
   if self.savedMap then
     o.seed = self.savedMap.seed

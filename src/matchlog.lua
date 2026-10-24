@@ -34,7 +34,10 @@ function L.start(game)
   local water, total = 0, w.map.w * w.map.h
   for i = 0, total - 1 do if w.map.terrain[i] == 0 then water = water + 1 end end
   self:raw("PARTIAL ANNIHILATION MATCH LOG  v" .. D.VERSION .. "   " .. os.date("%Y-%m-%d %H:%M"))
-  if w.arena then
+  if w.craft then
+    self:raw(string.format("Mode: COMMANDER CRAFT   map %s %dx%d seed %d, official score: %s", w.map.template or "horseshoe",
+      w.map.w, w.map.h, w.map.seed, w.official and "yes" or "no"))
+  elseif w.arena then
     self:raw(string.format("Mode: COMMANDER ARENA   map %s %dx%d seed %d, %d sides%s, official score: %s", w.map.template or "classic",
       w.map.w, w.map.h, w.map.seed, w.arena.nSides, w.arena.ffa and " (free-for-all)" or "", w.official and "yes" or "no"))
   else
@@ -50,10 +53,14 @@ function L.start(game)
   for i, p in ipairs(game.players) do
     self:raw(string.format("  P%d %-7s team %d  %s%s", i, D.teamName[i] or "?", p.team or w.ally[i],
       p.human and "HUMAN" or (tostring(p.profileName or p.profile) .. " level " .. tostring(p.level)),
-      w.arena and ("  class " .. tostring(w.teams[i].commander.class)) or ""))
+      w.craft and ("  race " .. tostring(w.teams[i].race) .. "  hero " .. tostring(w.teams[i].commander.class))
+      or (w.arena and ("  class " .. tostring(w.teams[i].commander.class)) or "")))
   end
   self:raw("")
-  if w.arena then
+  if w.craft then
+    self:raw("Snapshots every minute: gold/wood banked and income per minute, food/upkeep, tier, workers on gold/wood,")
+    self:raw("army (food in fighting units), K/L = kills/losses so far, heroes (class, level, skills, cards), unit and building counts.")
+  elseif w.arena then
     self:raw("Snapshots every minute: each Commander's class, level, health, deaths, skills and upgrades.")
   else
   self:raw("Snapshots every minute: income m/e per second, banked metal, unit and building counts,")
@@ -90,7 +97,7 @@ function L:onKill(o, attacker)
   if attacker and attacker.team and attacker.team >= 1 and w:hostile(attacker.team, o.team) then
     self.kills[attacker.team] = (self.kills[attacker.team] or 0) + 1
   end
-  if o.key == "commander" then
+  if o.key == "commander" and not w.craft then
     self:event(string.format("%s's Commander destroyed by %s", D.teamName[o.team] or "?",
       attacker and ((D.teamName[attacker.team] or "?") .. " " .. attacker.key) or "self-destruct/unknown"))
   end
@@ -100,6 +107,46 @@ function L:snapshot()
   local w = self.game.world
   local g = self.game
   self:raw(string.format("--- %s ---", mmss(w.time)))
+  if w.craft then
+    local C = require("src.craft")
+    if g.stats then self:raw(string.format("  actions/min %d", g.stats.actions or 0)); g.stats.actions = 0 end
+    for t = 1, w.np do
+      local tm = w.teams[t]
+      if not tm.dead then
+        local kinds, onG, onW, army = {}, 0, 0, 0
+        for _, e in ipairs(w.entities) do
+          if e.alive and e.team == t then
+            kinds[e.key] = (kinds[e.key] or 0) + 1
+            local o = e.orders and e.orders[1]
+            if (o and o.type == "harvest" and o.kind == "gold") or e.inMine then onG = onG + 1
+            elseif o and o.type == "harvest" then onW = onW + 1 end
+            if not e.def.building and not e.def.worker and e.key ~= "commander" and e.def.cost and e.def.cost.food then army = army + e.def.cost.food end
+          end
+        end
+        local ks = {}
+        for k, n in pairs(kinds) do if k ~= "commander" then ks[#ks + 1] = k .. " " .. n end end
+        table.sort(ks)
+        local _, upk = C.upkeep(tm)
+        local r = C.raceOf(w, t)
+        self:raw(string.format("  %-7s %s %s | gold %d (+%d/min) wood %d (+%d/min) | food %d/%d %s | workers gold %d wood %d | army food %d | K %d L %d",
+          D.teamName[t] or "?", tm.race, r.tierNames[tm.tier or 1], tm.gold, tm.goldRate or 0, tm.wood, tm.woodRate or 0,
+          tm.foodUsed or 0, tm.foodCap or 0, upk, onG, onW, army, self.kills[t] or 0, self.losses[t] or 0))
+        for _, h in ipairs(C.heroesOf(w, t, true)) do
+          local sk, ups = {}, {}
+          for i = 1, 4 do if h.skills and h.skills[i] then sk[#sk + 1] = h.skills[i].key end end
+          for _, u in ipairs(h.upgrades or {}) do ups[#ups + 1] = u.name end
+          self:raw(string.format("          hero %-12s L%d %s | skills %s | %s", h.class or "?", h.clevel or 0,
+            h.alive and ("hp " .. math.floor(h.hp) .. "/" .. h.maxhp) or "DEAD", table.concat(sk, ","), table.concat(ups, ", ")))
+        end
+        local res = {}
+        for k in pairs(tm.research or {}) do res[#res + 1] = k end
+        table.sort(res)
+        self:raw("          " .. table.concat(ks, ", ") .. (#res > 0 and ("  | research: " .. table.concat(res, ",")) or ""))
+      end
+    end
+    self:flush()
+    return
+  end
   if w.arena then
     local st = w.arena
     local towers, kills = {}, {}

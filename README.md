@@ -12,6 +12,22 @@ Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of 
 
 ## What makes it different
 
+### Commander Craft: a Warcraft-style mode
+Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset with our heroes.
+- **Two asymmetric races.**
+  - **Vanguard** (order and steel): Footmen, Riflemen, Knights, Clerics, Magi, Mortar Teams and Gryphon Riders.
+  - **Warband** (tribes and beasts): Grunts, Headhunters, Raiders, Shamans, Mystics, Demolishers, Wyvern Riders and Ironhides.
+  - Each race has its own workers, farms, barracks, altar, smithy, tower and tech buildings, and its own hero classes taken from the Arena: Warden, Ranger, Elementalist, Ascetic and Infiltrator for the Vanguard; Juggernaut, Shifter, Hexer, Spiritcaller and Reclaimer for the Warband.
+- **Gold and wood.** Workers mine gold (one at a time inside a mine, about five per mine) and chop trees, carrying it home to a hall or mill. Mines run dry.
+- **Food and upkeep.** Every unit costs food (farms and halls provide it, up to 80). Above 40 food your gold income drops 30%, above 60 it drops 60%.
+- **Three tiers.** Town Hall → Keep → Castle (Great Hall → Stronghold → Fortress) unlock units, buildings, research and your 2nd and 3rd hero.
+- **No free upgrades.** Units never level up. Every improvement is bought: weapons and armor (three levels) at the Blacksmith / War Mill, and each production building researches upgrades for its own units (Defend, Long Rifles, Berserker Strength, Ensnare, Pulverize and more).
+- **Heroes.** You start with your class's hero and one skill. Levels come from enemies and creeps dying nearby, each with a card (skills at 2 and 4, the ultimate at 6). Heroes heal fast by your halls and rise again at your altar. Flee (F) works for them too.
+- **The Horseshoe map** (1v1): a U of land around a lake. Each player starts at the top of an arm with a gold mine; expansion mines sit in the bottom corners, and a rich mine waits on the peninsula in the middle, guarded by gnolls and an Ogre Warlord.
+- **Melee matters.** Swords, axes and cavalry have to reach their target; ranged units and towers can hit flyers; siege wrecks buildings; casters heal, slow and bloodlust on their own.
+- **A computer opponent (difficulty 1-10)** that works its economy, creeps with its heroes, expands, techs up and attacks. Levels 8-10 also mine 10-30% faster.
+- **Its own soundtrack**: three fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove). The RTS keeps its five; the Arena mixes all eight.
+
 ### Commander Arena: a single-player lane battler
 Switch the title screen to **COMMANDER ARENA** for a different game. There's no base and no army: just your Commander, three lanes, towers, a Core to protect, and endless waves of creeps marching at the enemy.
 - **Ten classes inspired by classic action-RPG archetypes, each with five skills and an ultimate:**

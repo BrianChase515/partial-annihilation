@@ -9,6 +9,9 @@ UI.PANEL_H = 200
 
 local BTN = 74
 local COLS = 4
+local CU -- Commander Craft HUD (loaded on demand)
+local function craftUI() CU = CU or require("src.craft_ui"); return CU end
+UI.CRAFT_KEYS = { "q", "w", "e", "r", "t", "y", "u", "i", "o", "p" }
 
 local function layout(w, h)
   local L = {}
@@ -51,7 +54,8 @@ end
 
 -- Draw a little icon of a unit/building type centered at x,y fitting size s
 function UI.drawIcon(key, x, y, s, team)
-  local d = D.units[key]
+  if D.units[key] and D.units[key].heroRecruit then key = "cls_" .. D.units[key].heroRecruit end
+  local d = D.units[key] or (key:match("^cls_") and D.units.commander)
   local cr, cg, cb = R.teamColor(team or 1)
   lg.setLineWidth(1.5)
   if d.building then
@@ -174,13 +178,15 @@ function UI.drawTop(game)
   lg.rectangle("fill", 0, 0, w, UI.TOP_H)
   lg.setColor(0.25, 0.32, 0.4, 0.8)
   lg.line(0, UI.TOP_H, w, UI.TOP_H)
-  if game.arena then
+  if game.craft then
+    craftUI().drawTop(game)
+  elseif game.arena then
     UI.drawArenaTop(game)
   else
   resourceBar(14, 7, "METAL", tm.metal, tm.mStore, tm.mIncome, tm.mSpend, { 0.82, 0.86, 0.95 })
   resourceBar(370, 7, "ENERGY", tm.energy, tm.eStore, tm.eIncome, tm.eSpend, { 1, 0.85, 0.3 })
   end
-  if tm.stalled and not game.arena then
+  if tm.stalled and not game.arena and not game.craft then
     -- under the bar, centered, so it never collides with the bar's contents
     lg.setFont(font(13))
     local msg = "LOW RESOURCES - building slowed"
@@ -383,7 +389,7 @@ function UI.drawCommanderCard(game)
   end
   lg.setFont(font(13))
   lg.setColor(0.95, 0.85, 0.5)
-  local A = world.arena and require("src.arena")
+  local A = world.heroes and require("src.arena")
   local cls = A and c.class and A.byClass[c.class]
   local L = c.clevel or 0
   lg.print(string.format("%s  Lv %d", cls and cls.name or "COMMANDER", L), x + 10, y + 6)
@@ -518,11 +524,15 @@ local TILE = 58
 function UI.sidebarItems(game)
   if game.arena then return {} end
   local facs, blds = {}, {}
+  if game.craft then
+    facs, blds = craftUI().sidebarLists(game)
+  else
   for _, e in ipairs(game.world.entities) do
     if e.alive and e.team == 1 and e.built >= 1 then
       if e.def.factory then facs[#facs + 1] = e
       elseif e.def.builds then blds[#blds + 1] = e end
     end
+  end
   end
   table.sort(facs, function(a, b) return a.id < b.id end)
   table.sort(blds, function(a, b)
@@ -554,8 +564,8 @@ function UI.drawSidebar(game)
   local mx, my = love.mouse.getPosition()
   lg.setFont(font(11))
   lg.setColor(0.6, 0.66, 0.74)
-  lg.print("PLANTS", 8, UI.TOP_H + 6)
-  lg.print("BUILD", 6 + TILE + 8, UI.TOP_H + 6)
+  lg.print(game.craft and "MAKE" or "PLANTS", 8, UI.TOP_H + 6)
+  lg.print(game.craft and "HEROES" or "BUILD", 6 + TILE + 8, UI.TOP_H + 6)
   for _, it in ipairs(items) do
     if it.more then
       lg.setColor(0.6, 0.66, 0.74)
@@ -596,7 +606,9 @@ function UI.drawSidebar(game)
           lg.print("G" .. e.assignGroup, it.x + 4, it.y + it.h - 15)
         end
       else
-        UI.drawIcon(e.key, it.x + it.w / 2, it.y + 24, 34, 1)
+        local ik = e.key
+        if e.key == "commander" and e.class and require("src.icons").has("cls_" .. e.class) then ik = "cls_" .. e.class end
+        UI.drawIcon(ik, it.x + it.w / 2, it.y + 24, 34, 1)
         lg.setFont(font(10))
         local o = e.orders[1]
         local txt = idle and "idle" or (o.type == "build" and D.units[o.key].short or (o.type == "repairzone" and "zone" or o.type))
@@ -758,16 +770,20 @@ function UI.drawInfo(game, L)
   if #list == 1 then
     local e = list[1]
     local d = e.def
-    UI.drawIcon(e.key, x + 32, y + 32, 56, 1)
+    UI.drawIcon((e.key == "commander" and e.class and require("src.icons").has("cls_" .. e.class)) and ("cls_" .. e.class) or e.key, x + 32, y + 32, 56, 1)
     lg.setFont(font(17))
     lg.setColor(1, 1, 1)
-    lg.print(d.name, x + 72, y + 2)
+    local title = d.name
+    if e.key == "commander" and e.class and game.craft then
+      title = "Hero: " .. (require("src.arena").byClass[e.class] or { name = e.class }).name
+    end
+    lg.print(title, x + 72, y + 2)
     lg.setFont(font(12))
     lg.setColor(0.75, 0.8, 0.86)
     local hpTxt = string.format("HP %d / %d", math.max(0, e.hp), e.maxhp)
     if e.built < 1 then hpTxt = hpTxt .. string.format("    Under construction %d%%", e.built * 100) end
     if e.disarmed then hpTxt = hpTxt .. "    WEAPONS OFFLINE until fully repaired" end
-    if e.key == "commander" and game.world.arena then
+    if e.key == "commander" and game.world.heroes then
       e.arenaDesc = true
       local A = require("src.arena")
       local L = e.clevel or 0
@@ -780,6 +796,10 @@ function UI.drawInfo(game, L)
       local L = e.clevel or 0
       if L >= CMD.MAX_LEVEL then hpTxt = hpTxt .. "    Commander level 5 (max)"
       else hpTxt = hpTxt .. string.format("    Commander level %d   XP %d / %d (earn it with his own kills)", L, e.cxp or 0, CMD.THRESHOLDS[L + 1]) end
+    elseif game.craft then
+      if e.key == "goldmine" then hpTxt = string.format("%d / %d gold left", e.gold, e.goldMax) end
+      if e.carry then hpTxt = hpTxt .. string.format("    carrying %d %s", e.carry.amount, e.carry.kind) end
+      if d.food and d.building then hpTxt = hpTxt .. string.format("    +%d food", d.food) end
     elseif d.weapon and e.built >= 1 then
       local L = e.level or 0
       if L >= game.world.MAX_LEVEL then
@@ -792,10 +812,10 @@ function UI.drawInfo(game, L)
     lg.print(hpTxt, x + 72, y + 26)
     lg.setColor(0.62, 0.68, 0.75)
     local desc = d.desc or ""
-    local arenaCmd = game.world.arena and e.key == "commander"
+    local arenaCmd = game.world.heroes and e.key == "commander"
     if arenaCmd then
       local cls = require("src.arena").byClass[e.class]
-      desc = cls and (cls.name .. ": " .. cls.tag .. "  He respawns at your Core when destroyed.") or desc
+      desc = cls and (cls.name .. ": " .. cls.tag .. (game.craft and "  Rises again at your altar when slain." or "  He respawns at your Core when destroyed.")) or desc
     end
     lg.printf(desc, x + 72, y + 44, w - 80)
     local info = {}
@@ -808,7 +828,13 @@ function UI.drawInfo(game, L)
         local dmg = d.weapon.damage * (m.dmg or 1)
         info[#info + 1] = string.format("%s: %d dmg, range %d", m.melee and "Melee" or "Ranged", dmg, game.world:rangeOf(e))
       else
+        if game.craft then
+          local m = e.mods or {}
+          info[#info + 1] = string.format("%s: %d dmg, range %d%s", d.melee and "Melee" or (d.weapon.ballistic and "Siege" or "Ranged"),
+            d.weapon.damage * (m.craftDmg or 1), game.world:rangeOf(e), d.weapon.targets.air and ", hits air" or "")
+        else
         info[#info + 1] = string.format("Weapon: %d dmg, range %d, hits %s", d.weapon.damage, d.weapon.range, table.concat(tg, "/"))
+        end
       end
     end
     if d.income and not arenaCmd then
@@ -818,7 +844,7 @@ function UI.drawInfo(game, L)
     if d.speed then info[#info + 1] = string.format("Speed %d   Sight %d", d.speed, d.sight) end
     lg.setColor(0.55, 0.75, 0.95)
     lg.print(table.concat(info, "     "), x + 72, y + 84)
-    if e.key == "commander" and e.upgrades and game.world.arena then
+    if e.key == "commander" and e.upgrades and game.world.heroes then
       local names = {}
       for _, u in ipairs(e.upgrades) do names[#names + 1] = u.name end
       lg.setFont(font(13))
@@ -917,6 +943,18 @@ end
 function UI.cardButtons(game, L)
   local btns = {}
   local ctx, list = game:commandContext()
+  if ctx and game.craft then
+    -- Commander Craft: a 5 x 3 grid of smaller buttons
+    local bs, cols = 56, 5
+    local cx = L.cardX + L.cardW - cols * (bs + 5) + 5
+    for i, key in ipairs(list) do
+      local col = (i - 1) % cols
+      local row = math.floor((i - 1) / cols)
+      btns[#btns + 1] = { x = cx + col * (bs + 5), y = L.cardY - 4 + row * (bs + 5), w = bs, h = bs,
+        kind = ctx, key = key, slot = i, hotkey = UI.CRAFT_KEYS[i] }
+    end
+    return btns
+  end
   if ctx then
     for i, key in ipairs(list) do
       local col = (i - 1) % COLS
@@ -967,6 +1005,7 @@ local ARENA_ORDERS = {
 
 function UI.orderButtons(game)
   local w, h = lg.getDimensions()
+  if game.craft then return craftUI().orderButtons(game) end
   if game.arena then
     local A = require("src.arena")
     local c = game.world.teams[1].commander
@@ -1088,7 +1127,9 @@ function UI.drawCard(game, L)
   for _, b in ipairs(btns) do
     local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
     if hover then game.hoverBtn = b end
-    if b.kind == "cmd" then
+    if game.craft and b.key then
+      craftUI().drawCardButton(game, b)
+    elseif b.kind == "cmd" then
       local active = (b.action == game.mode)
       if b.action == "repeat" then
         for _, f in ipairs(game:selectedFactories()) do if f.repeatMode then active = true end end
@@ -1139,11 +1180,14 @@ function UI.drawCard(game, L)
   if b and b.key then
     local d = D.units[b.key]
     local text = d.name .. "\n" .. string.format("Cost: %d metal, %d energy", d.cost.metal, d.cost.energy)
+    if game.craft then text = craftUI().tooltip(game, b) end
+    if not game.craft then
     local power = b.kind == "factory" and 10 or 12
     text = text .. string.format("\nBuild time ~%ds", math.ceil(d.cost.work / power))
     if d.weapon then text = text .. string.format("\nDamage %d, range %d", d.weapon.damage, d.weapon.range) end
     text = text .. "\n" .. (d.desc or "")
     if b.kind == "factory" then text = text .. "\nClick = 1, Shift-click = 5, right-click removes" end
+    end
     lg.setFont(font(13))
     local tw = 290
     local _, lines = font(13):getWrap(text, tw)
@@ -1274,7 +1318,7 @@ Classes
 
 function UI.drawHelp(arena)
   local w, h = lg.getDimensions()
-  local text = arena and ARENA_HELP or HELP
+  local text = arena == "craft" and craftUI().HELP or (arena and ARENA_HELP or HELP)
   local f = font(12)
   local lines = {}
   for l in (text .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = l end
@@ -1403,6 +1447,7 @@ function UI.drawOver(game)
   lg.setColor(0.7, 0.76, 0.84)
   local sub = win and "Every enemy Commander has been annihilated. Partially." or "Your side has been annihilated. Completely."
   if world.arena then sub = win and "The enemy Core is rubble." or "Your Core has fallen." end
+  if world.craft then sub = win and "Not one enemy building is left standing." or "Your last building has fallen." end
   lg.print(sub, w / 2 - font(14):getWidth(sub) / 2, py + 68)
 
   local f = game.finalScore
@@ -1422,7 +1467,24 @@ function UI.drawOver(game)
   end
   head(lx, ly, "THE MATCH")
   local rows
-  if world.arena then
+  if world.craft then
+    local C = require("src.craft")
+    local cst = world.craft
+    local tm = world.teams[1]
+    local hs = {}
+    for _, h in ipairs(C.heroesOf(world, 1, true)) do hs[#hs + 1] = (require("src.arena").byClass[h.class] or {}).name .. " L" .. (h.clevel or 0) end
+    rows = {
+      { "Game time", mmss(world.time) .. "   (par " .. mmss(world.parTime) .. ")" },
+      { "Opponents", f and f.lineup or "" },
+      { "Your race", C.raceOf(world, 1).name .. "  (" .. C.raceOf(world, 1).tierNames[tm.tier or 1] .. ")" },
+      { "Heroes", table.concat(hs, ", ") },
+      { "Enemies killed", tostring(cst.kills[1] or 0) },
+      { "Your losses", tostring(cst.lost[1] or 0) },
+      { "Units trained", tostring(st.built) },
+      { "Research done", tostring((function() local n = 0; for _ in pairs(tm.research or {}) do n = n + 1 end; return n end)()) },
+      { "Best kill streak", sc and (sc.bestStreak .. " kills  (x" .. string.format("%.1f", sc.bestMult) .. ")") or "-" },
+    }
+  elseif world.arena then
     local ast = world.arena
     local towersDown = 0
     for _, s2 in ipairs(ast.structures) do if not s2.alive and s2.side ~= 1 and s2.key ~= "core" then towersDown = towersDown + 1 end end
@@ -1540,6 +1602,11 @@ function UI.drawOver(game)
   local how = world.arena and ("How Arena scoring works: points come from what your Commander and his summons destroy (creeps by their metal cost, "
     .. "Commanders 800, towers 450, the Core 1125) plus 150 x level for each level-up. Kill streaks multiply them up to x3. Then the total is scaled "
     .. "by enemy difficulty, how many enemies you faced, and how fast you won: par time divided by your time (up to x3).") or nil
+  if world.craft then
+    how = "How Craft scoring works: every enemy you destroy is worth its gold + wood cost (a hero 900), plus 10% of what you build "
+      .. "and 150 x level for each hero level-up. Kill streaks multiply them up to x3. Then the total is scaled by enemy difficulty "
+      .. "and how fast you won: par (16:00) divided by your time, up to x3."
+  end
   if how then lg.printf(how, px + 30, py + OVER_H - 150, OVER_W - 60) else
   lg.printf("How scoring works: every enemy you destroy is worth its metal cost (a Commander is 3000, veterans more). "
     .. "Each kill soon after the last raises your multiplier by 0.1, up to x3; it resets after 10 seconds without an enemy death "
@@ -1569,7 +1636,7 @@ end
 -- Arena: hover any Commander to read his class, level and the skills he has learned
 function UI.drawCommanderHover(game)
   local world = game.world
-  if not world.arena then return end
+  if not world.heroes then return end
   local mx, my = love.mouse.getPosition()
   local w, h = lg.getDimensions()
   if my < UI.TOP_H or my > h - UI.PANEL_H - UI.ORDERS_H then return end
@@ -1758,7 +1825,7 @@ function UI.draw(game)
     end
   end
 
-  if game.showHelp then UI.drawHelp(game.arena) end
+  if game.showHelp then UI.drawHelp(game.craft and "craft" or game.arena) end
   if game.menuOpen then UI.drawMenu() end
   if game.world.over and game.overShown then UI.drawOver(game) end
   if game.naming then
@@ -1844,7 +1911,12 @@ function UI.click(game, x, y, b)
           for _, f in ipairs(game:selectedFactories()) do f.repeatMode = not f.repeatMode end
         else game.mode = btn.action end
       elseif btn.kind == "builder" then
-        if b == 1 then game.mode = "build"; game.buildKey = btn.key end
+        if b == 1 then
+          local ok, why = true, nil
+          if game.craft then ok, why = require("src.craft").canOrder(game.world, 1, btn.key) end
+          if ok then game.mode = "build"; game.buildKey = btn.key
+          else game:notice(why, 1.6) end
+        end
       elseif btn.kind == "factory" then
         game:queueUnit(btn.key, shift and 5 or 1, b == 2)
       end

@@ -61,6 +61,8 @@ function CM.generate(opts)
   local centerMine = { x = math.floor(cx) - 1, y = jutTop + 3 }
   -- corner creep camps (small, for hero experience)
   local campL = { x = math.floor(armW * 0.5), y = math.floor(N * 0.84) }
+  -- a corner expansion at the bottom of each arm, guarded by that camp
+  local expL = { x = math.floor(armW * 0.35), y = math.floor(N * 0.75) }
   local midCamp = { x = math.floor(cx), y = jutTop + 8 }
 
   -- forests: the outer edge of each arm, the bottom edge, the top of each arm, a grove
@@ -122,12 +124,15 @@ function CM.generate(opts)
   clear(hallL.x - 3, hallL.y - 2, hallL.x + 7, hallL.y + 8)
   clear(centerMine.x - 3, centerMine.y - 2, centerMine.x + 5, centerMine.y + 10)
   clear(campL.x - 3, campL.y - 3, campL.x + 3, campL.y + 3)
+  clear(expL.x - 2, expL.y - 2, expL.x + 9, expL.y + 9)
 
   self.deposits, self.deposit, self.blocked = {}, {}, {}
   self.mines = {
-    { x = mineL.x, y = mineL.y, gold = 6000, side = 1 },
-    { x = w - 3 - mineL.x, y = mineL.y, gold = 6000, side = 2 },
-    { x = centerMine.x, y = centerMine.y, gold = 9000, center = true },
+    { x = mineL.x, y = mineL.y, gold = 9000, side = 1 },
+    { x = w - 3 - mineL.x, y = mineL.y, gold = 9000, side = 2 },
+    { x = centerMine.x, y = centerMine.y, gold = 12000, center = true },
+    { x = expL.x, y = expL.y, gold = 6000, corner = 1 },
+    { x = w - 3 - expL.x, y = expL.y, gold = 6000, corner = 2 },
   }
   self.halls = { { x = hallL.x, y = hallL.y }, { x = w - 4 - hallL.x, y = hallL.y } }
   self.camps = {
