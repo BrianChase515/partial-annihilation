@@ -215,15 +215,21 @@ function Menu:craftRects()
   end
   r[#r + 1] = { x = x0 + #races * 132, y = y + 92, w = 126, h = 34, label = "Random", cfield = "enemy", value = 0, active = CS.enemy == 0 }
   local CMAPS = require("src.craft_map").TEMPLATES
+  -- two rows of four (the last slot is Random)
   for i, t in ipairs(CMAPS) do
-    r[#r + 1] = { x = x0 + (i - 1) * 104, y = y + 184, w = 100, h = 34, label = t[2], cfield = "map", value = i, active = CS.map == i,
+    local col, row = (i - 1) % 4, math.floor((i - 1) / 4)
+    r[#r + 1] = { x = x0 + col * 130, y = y + 184 + row * 38, w = 126, h = 34, label = t[2], cfield = "map", value = i, active = CS.map == i,
       rowLabel = i == 1 and "Map" or nil, small = true, cmapHover = i }
   end
-  r[#r + 1] = { x = x0 + #CMAPS * 104, y = y + 184, w = 80, h = 34, label = "Random", cfield = "map", value = 0, active = CS.map == 0, small = true }
+  do
+    local i = #CMAPS + 1
+    local col, row = (i - 1) % 4, math.floor((i - 1) / 4)
+    r[#r + 1] = { x = x0 + col * 130, y = y + 184 + row * 38, w = 126, h = 34, label = "Random (1v1)", cfield = "map", value = 0, active = CS.map == 0, small = true }
+  end
   r[#r + 1] = { x = x0, y = y + 138, w = 32, h = 34, label = "-", kind = "clvdown", rowLabel = "Difficulty" }
   r[#r + 1] = { x = x0 + 36, y = y + 138, w = 160, h = 34, label = CS.level .. "  " .. LEVEL_NAMES[CS.level], kind = "lvlabel", clevel = true }
   r[#r + 1] = { x = x0 + 200, y = y + 138, w = 32, h = 34, label = "+", kind = "clvup" }
-  local by = y + 316
+  local by = y + 348
   self.craftStartY = by
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
@@ -237,7 +243,10 @@ function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
   local CS = self.craft
   lg.setFont(R.font(12))
   lg.setColor(0.62, 0.68, 0.55)
-  lg.print("1v1. Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 226)
+  local CMAPS = require("src.craft_map").TEMPLATES
+  local twoV = CS.map > 0 and CMAPS[CS.map].players == 4
+  lg.printf((twoV and "2v2 with a computer ally (your race) against two enemies (the enemy race). " or "1v1. ") ..
+    "Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 262, 520)
   lg.setFont(R.font(14))
   lg.setColor(0.75, 0.8, 0.65)
   local desc
@@ -261,7 +270,7 @@ function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
   else
     desc = "Destroy every enemy building. Hover a race or hero to read about it."
   end
-  lg.printf(desc, x0, y + 250, 520)
+  lg.printf(desc, x0, y + 296, 520)
   -- right column: the race you picked
   local rc = CS.race > 0 and D.CRAFT.races[CS.race]
   local px = x0 + 580
@@ -826,9 +835,17 @@ function Menu:options()
     local hero = (CS.race > 0 and CS.hero > 0) and races[CS.race].heroes[CS.hero] or nil
     local enemy = CS.enemy > 0 and races[CS.enemy].key or nil
     local CMAPS = require("src.craft_map").TEMPLATES
+    local players = { { human = true, ally = 1, race = myRace, class = hero }, { ally = 2, level = CS.level, race = enemy } }
+    if CS.map > 0 and CMAPS[CS.map].players == 4 then
+      -- 2v2: each team is one race (settle a random race now so both teammates share it)
+      myRace = myRace or races[love.math.random(#races)].key
+      enemy = enemy or races[love.math.random(#races)].key
+      players = { { human = true, ally = 1, race = myRace, class = hero }, { ally = 2, level = CS.level, race = enemy },
+        { ally = 1, level = CS.level, race = myRace }, { ally = 2, level = CS.level, race = enemy } }
+    end
     return { mode = "craft", size = 88, menuMode = "craft", craftSetup = CS, arenaSetup = self.arena,
       template = CS.map > 0 and CMAPS[CS.map][1] or "random",
-      players = { { human = true, ally = 1, race = myRace, class = hero }, { ally = 2, level = CS.level, race = enemy } },
+      players = players,
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end
   if self.mode == "arena" then

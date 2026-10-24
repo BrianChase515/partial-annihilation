@@ -7,6 +7,7 @@
 --   love . --battlesim duels <level> [runs]                 every hero against every other, equal level
 --   love . --battlesim army <class|all> <level> <spec> [runs] hero + army vs the same army without a hero
 --   love . --battlesim caught <class|all> <level> <spec> [runs] a lone hero meets an army: survive?
+--   love . --battlesim rts [budget] [runs]   Annihilation: equal-cost unit matchups (metal + energy/10)
 -- Heroes are played by the Arena AI's skill logic (the same brain the computer uses).
 local U = require("src.util")
 local S = {}
@@ -325,6 +326,42 @@ local function unitsFight(specA, specB, seed)
   return { win = b <= 0 and a > 0, loss = a <= 0, hp = a / am, hpB = b / bm, t = w.time - t0 }
 end
 
+-- Annihilation (the RTS): two groups bought with the same budget meet in the middle of the map
+local function rtsFight(ka, kb, budget, seed)
+  local D = require("src.defs")
+  local game = startFn({ size = 72, water = 0.15, seed = seed, autotest = true, players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
+  game.ais = {}
+  local w = game.world
+  local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+  local function value(k) local c = D.units[k].cost; return c.metal + (c.energy or 0) / 10 end
+  local function place(k, team, dx)
+    local list = {}
+    local n = math.max(1, math.floor(budget / value(k) + 0.5))
+    local d = D.units[k]
+    for i = 1, n do
+      local x, y = spot(w, cx + dx + ((i - 1) % 3) * 40 * (dx > 0 and 1 or -1), cy - 90 + math.floor((i - 1) / 3) * 45)
+      if d.building then
+        local tx, ty = w.map:tileAt(x, y)
+        x, y = w.map:center(tx, ty)
+      end
+      list[#list + 1] = w:spawn(k, team, x, y)
+    end
+    return list, n
+  end
+  local A, na = place(ka, 1, D.units[ka].building and -60 or -260)
+  local B, nb = place(kb, 2, D.units[kb].building and 60 or 260)
+  for _, u in ipairs(A) do if not u.def.building then w:issue(u, { type = "amove", x = cx + 500, y = cy }) end end
+  for _, u in ipairs(B) do if not u.def.building then w:issue(u, { type = "amove", x = cx - 500, y = cy }) end end
+  local t0 = w.time
+  while w.time - t0 < 90 do
+    for _ = 1, 15 do w:update(1 / 30) end
+    if hpOf(A) <= 0 or hpOf(B) <= 0 then break end
+  end
+  local a, am = hpOf(A)
+  local b, bm = hpOf(B)
+  return (b <= 0 and a > 0) and 1 or (a <= 0 and 0 or 0.5), a / am, b / bm, na, nb
+end
+
 local function run()
   frame()
   -- what-if: scale the creeps (BS_HP=1.2 BS_DMG=1.5)
@@ -333,6 +370,11 @@ local function run()
   for _, k in ipairs({ "gnoll", "gnollarcher", "ogrelord" }) do
     D.units[k].hp = math.floor(D.units[k].hp * hm)
     D.units[k].weapon.damage = D.units[k].weapon.damage * dm
+  end
+  -- what-if on any unit: BS_SET="scout.damage=4,tank.hp=700" (damage/range/reload go to the weapon)
+  for k, f, v in (os.getenv("BS_SET") or ""):gmatch("(%w+)%.(%w+)=([%d%.]+)") do
+    local d = D.units[k]
+    if f == "damage" or f == "range" or f == "reload" then d.weapon[f] = tonumber(v) else d[f] = tonumber(v) end
   end
   local what = args[1] or "camp"
   if what == "camp" then
@@ -352,6 +394,27 @@ local function run()
       end
       print(string.format("CAMP %-13s %s L%d  wins %d/%d  hero hp left %3.0f%%  time %4.1fs  camp hp left %3.0f%%",
         c, kind, lvl, wins, runs, 100 * hp / runs, t / runs, 100 * left / runs))
+      io.stdout:flush()
+    end
+  elseif what == "rts" then
+    local budget = tonumber(args[2]) or 1200
+    local runs = tonumber(args[3]) or 4
+    local pairsList = {
+      { "tank", "scout" }, { "tank", "artillery" }, { "artillery", "scout" }, { "tank", "gunship" }, { "flak", "gunship" },
+      { "flak", "bomber" }, { "fighter", "gunship" }, { "fighter", "bomber" }, { "gunship", "scout" }, { "bomber", "tank" },
+      { "turret", "tank" }, { "turret", "scout" }, { "turret", "artillery" }, { "aaturret", "gunship" }, { "aaturret", "bomber" },
+      { "tank", "flak" },
+    }
+    for _, pr in ipairs(pairsList) do
+      local sw, sa, sb, na, nb = 0, 0, 0
+      for r = 1, runs do
+        math.randomseed(r * 211)
+        local res, fa, fb, n1, n2 = rtsFight(pr[1], pr[2], budget, 9700 + r)
+        sw, sa, sb, na, nb = sw + res, sa + fa, sb + fb, n1, n2
+        frame()
+      end
+      print(string.format("RTS %2d %-9s vs %2d %-9s  A wins %3.0f%%  | A hp left %3.0f%%  B hp left %3.0f%%",
+        na, pr[1], nb, pr[2], 100 * sw / runs, 100 * sa / runs, 100 * sb / runs))
       io.stdout:flush()
     end
   elseif what == "stats" then

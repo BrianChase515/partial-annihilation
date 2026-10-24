@@ -92,6 +92,14 @@ function love.load(args)
       }
       local tmpl
       for k, x in ipairs(args) do if x == "--template" then tmpl = args[k + 1] end end
+      if tmpl == "cross" then
+        -- 2v2: teammates share a race
+        local r1 = races[1] or "vanguard"
+        local r2 = races[2] or "warband"
+        players[1].race, players[2].race = r1, r2
+        players[3] = { ally = 1, level = players[1].level, race = r1, bench = players[1].bench, legacy = players[1].legacy }
+        players[4] = { ally = 2, level = players[2].level, race = r2, bench = players[2].bench, legacy = players[2].legacy }
+      end
       startGame({ size = 88, seed = autotest.seed, autotest = true, players = players, mode = "craft", template = tmpl })
       return
     end
@@ -147,6 +155,7 @@ function love.load(args)
     if a == "--uishot" then
       smoke = require("tools.uishot")
       menu = Menu.new()
+      PA_MENU = menu -- the screenshot tool can photograph the title screen
       state = "menu"
       smoke.start(function(opts) startGame(opts) return game end, args[i + 1] or "rts", tonumber(args[i + 2]) or 300)
       return

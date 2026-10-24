@@ -5,6 +5,17 @@ local co, game, startFn, pending
 local function frame() coroutine.yield() end
 local function script(mode, secs)
   frame()
+  if mode == "menu" then
+    -- the title screen on a tab (PA_TAB=craft|arena|rts), optionally with a map picked (PA_MAPI)
+    local menu = PA_MENU
+    menu.mode = os.getenv("PA_TAB") or "craft"
+    if os.getenv("PA_MAPI") then menu.craft.map = tonumber(os.getenv("PA_MAPI")) end
+    for _ = 1, 4 do frame() end
+    pending = "uishot_menu.png"
+    frame(); frame()
+    print("UISHOT menu")
+    return
+  end
   local opts = { size = mode == "arena" and 80 or 112, water = 0.3, seed = 31, autotest = true,
     players = { { ally = 1, level = 5 }, { ally = 2, level = 5 }, { ally = 1, level = 5 }, { ally = 2, level = 5 } } }
   if mode == "arena" then opts.mode = "arena"; opts.players[1].class = os.getenv("PA_CLASS") or "ranger" end
@@ -130,6 +141,10 @@ local function script(mode, secs)
   if mode == "craft" then
     opts = { mode = "craft", size = 88, seed = tonumber(os.getenv("PA_SEED") or "31"), autotest = true, template = os.getenv("PA_TEMPLATE"),
       players = { { ally = 1, level = 5, race = os.getenv("PA_RACE") or "vanguard", class = os.getenv("PA_CLASS") }, { ally = 2, level = 5, race = "warband" } } }
+    if opts.template == "cross" then
+      opts.players[3] = { ally = 1, level = 5, race = opts.players[1].race }
+      opts.players[4] = { ally = 2, level = 5, race = "warband" }
+    end
   end
   local tmpl = mode:match("^arena%-(%a+)")
   if tmpl then

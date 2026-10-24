@@ -11,30 +11,36 @@ M.TREE = 4
 
 CM.TEMPLATES = {
   { "horseshoe", "Horseshoe", "The Horseshoe: a U of land around a lake. Bases at the top of each arm, corner expansions, a rich mine on the peninsula in the middle." },
+  { "classic", "Horseshoe Classic", "Horseshoe Classic: smaller and quicker. Only three gold mines - yours, theirs, and the rich one on the peninsula across the contested beach." },
   { "temple", "Old Temple", "Old Temple: open ground, bases in opposite corners, a natural expansion beside each, and a walled plaza in the middle with a rich mine and a boss." },
   { "isles", "Shallow Isles", "Shallow Isles: two big islands joined by shallow fords; each has a base and an outer expansion, and a small island in the middle holds the rich mine." },
   { "glade", "Serpent Glade", "Serpent Glade: one long road winds through deep forest between the bases, past pocket expansions; a narrow hunters' trail cuts across." },
+  { "wild", "Wildlands", "Wildlands: creeps everywhere. Eleven camps in forest clearings guard every expansion and the roads between them - lots of experience for heroes that hunt." },
+  { "cross", "Crossroads 2v2", "Crossroads (2v2): you and an ally share the west against two enemies in the east. Each team is one race; heroes may repeat across players. Contested mines north, south and in the middle.", players = 4 },
 }
 
 function CM.generate(opts)
   local t = opts.template
   if t == "random" or not t then
-    local list = { "horseshoe", "temple", "isles", "glade" }
+    local list = { "horseshoe", "classic", "temple", "isles", "glade", "wild" }
     t = list[love.math.newRandomGenerator(opts.seed or os.time()):random(#list)]
   end
   if t == "horseshoe" then return CM.horseshoe(opts) end
+  if t == "classic" then opts.classic = true; return CM.horseshoe(opts) end
+  if t == "cross" then return CM.quad(opts) end
   return CM.carved(opts, t)
 end
 
 function CM.horseshoe(opts)
   local self = setmetatable({}, M)
-  local N = opts.size or 88
+  local classic = opts.classic
+  local N = classic and 72 or (opts.size or 88)
   local w, h = N, N
   self.w, self.h = w, h
   self.T = D.TILE
   self.seed = opts.seed or os.time()
   self.craft = true
-  self.template = "horseshoe"
+  self.template = classic and "classic" or "horseshoe"
   local rng = love.math.newRandomGenerator(self.seed)
   self.rng = rng
 
@@ -141,16 +147,19 @@ function CM.horseshoe(opts)
   clear(hallL.x - 3, hallL.y - 2, hallL.x + 7, hallL.y + 8)
   clear(centerMine.x - 3, centerMine.y - 2, centerMine.x + 5, centerMine.y + 10)
   clear(campL.x - 3, campL.y - 3, campL.x + 3, campL.y + 3)
-  clear(expL.x - 2, expL.y - 2, expL.x + 9, expL.y + 9)
+  if not classic then clear(expL.x - 2, expL.y - 2, expL.x + 9, expL.y + 9) end
 
   self.deposits, self.deposit, self.blocked = {}, {}, {}
   self.mines = {
     { x = mineL.x, y = mineL.y, gold = 9000, side = 1 },
     { x = w - 3 - mineL.x, y = mineL.y, gold = 9000, side = 2 },
     { x = centerMine.x, y = centerMine.y, gold = 12000, center = true },
-    { x = expL.x, y = expL.y, gold = 6000, corner = 1 },
-    { x = w - 3 - expL.x, y = expL.y, gold = 6000, corner = 2 },
   }
+  if not classic then
+    -- the full Horseshoe also has an expansion in each bottom corner (Classic has only three mines)
+    self.mines[#self.mines + 1] = { x = expL.x, y = expL.y, gold = 6000, corner = 1 }
+    self.mines[#self.mines + 1] = { x = w - 3 - expL.x, y = expL.y, gold = 6000, corner = 2 }
+  end
   self.halls = { { x = hallL.x, y = hallL.y }, { x = w - 4 - hallL.x, y = hallL.y } }
   self.camps = {
     { x = campL.x, y = campL.y, kind = "small" },
@@ -306,6 +315,32 @@ function CM.carved(opts, template)
     mine(math.floor(c) - 1, math.floor(c) - 1, 12000, { center = true })
     camp(natural[1] + 2, natural[2] - 4, "small")
     camp(math.floor(c) + 4, math.floor(c) + 3, "big", true)
+  elseif template == "wild" then
+    -- Wildlands: open-ish forest full of clearings, a creep camp in nearly every one
+    base = { P(0.16, 0.18) }
+    natural = { P(0.42, 0.12) }
+    nat2 = { P(0.12, 0.46) }
+    local glen1, glen2, glen3 = { P(0.32, 0.34) }, { P(0.62, 0.3) }, { P(0.26, 0.64) }
+    blob(base[1], base[2], 11 * q)
+    blob(natural[1], natural[2], 7 * q)
+    blob(nat2[1], nat2[2], 7 * q)
+    blob(glen1[1], glen1[2], 5 * q); blob(glen2[1], glen2[2], 5 * q); blob(glen3[1], glen3[2], 5.5 * q)
+    blob(c, c, 11 * q)
+    road({ { base[1], base[2] }, { natural[1], natural[2] }, { glen2[1], glen2[2] }, { c, c } }, 3.2 * q)
+    road({ { base[1], base[2] }, { nat2[1], nat2[2] }, { glen3[1], glen3[2] }, { c, c } }, 3.2 * q)
+    road({ { base[1], base[2] }, { glen1[1], glen1[2] }, { c, c } }, 2.8 * q)
+    -- the long lanes that run past the enemy's third base
+    road({ { natural[1], natural[2] }, { P(0.72, 0.14) }, { P(0.88, 0.54) } }, 2.6 * q)
+    mine(base[1] - 6, base[2] - 7, 9000, { side = 1 })
+    mine(natural[1] - 1, natural[2] - 5, 6000)
+    mine(nat2[1] - 5, nat2[2] - 1, 6000)
+    mine(math.floor(c) - 1, math.floor(c) - 1, 12000, { center = true })
+    camp(natural[1] + 3, natural[2] + 3, "medium")
+    camp(nat2[1] + 3, nat2[2] + 3, "medium")
+    camp(glen1[1], glen1[2], "small")
+    camp(glen2[1], glen2[2], "small")
+    camp(glen3[1], glen3[2], "medium")
+    camp(math.floor(c) + 4, math.floor(c) + 4, "big", true)
   else -- glade
     base = { P(0.15, 0.16) }
     natural = { P(0.18, 0.55) }
@@ -349,6 +384,122 @@ function CM.carved(opts, template)
     local side = ((t - 1) % 2) + 1
     local hl = halls[side]
     self.starts[t] = { x = hl.x + 2, y = hl.y + 6, side = side }
+  end
+  self:labelComponents()
+  return self
+end
+
+---------------------------------------------------------------------------
+-- Crossroads (2v2): four corner bases, mirrored both ways. The west pair (players 1 and 3)
+-- face the east pair (2 and 4); each team shares an expansion on its own edge, and three
+-- contested mines sit north, south and in the middle.
+function CM.quad(opts)
+  local self = setmetatable({}, M)
+  local N = 112
+  local w, h = N, N
+  self.w, self.h = w, h
+  self.T = D.TILE
+  self.seed = opts.seed or os.time()
+  self.craft = true
+  self.template = "cross"
+  local rng = love.math.newRandomGenerator(self.seed)
+  self.rng = rng
+  local terrain, height = {}, {}
+  self.wood = {}
+  for i = 0, w * h - 1 do height[i] = 0.5; terrain[i] = 4; self.wood[i] = 100 end
+  self.terrain, self.height = terrain, height
+  self.waterLevel = 0.55
+  local ph = rng:random() * 6.28
+  local function set(x, y, t)
+    if x < 2 or y < 2 or x > w - 3 or y > h - 3 then return end
+    local i = y * w + x
+    terrain[i] = t
+    if t == 4 then self.wood[i] = 100 else self.wood[i] = nil end
+  end
+  local function sym(x, y) return { { x, y }, { w - 1 - x, y }, { x, h - 1 - y }, { w - 1 - x, h - 1 - y } } end
+  local function blob(cx, cy, r, t)
+    t = t or M.LAND
+    for _, c in ipairs(sym(cx, cy)) do
+      for y = math.floor(c[2] - r - 3), math.ceil(c[2] + r + 3) do
+        for x = math.floor(c[1] - r - 3), math.ceil(c[1] + r + 3) do
+          local a = math.atan2(y - c[2], x - c[1])
+          local rr = r + 1.3 * math.sin(a * 3 + ph) + 0.8 * math.sin(a * 5 - ph)
+          if (x - c[1]) ^ 2 + (y - c[2]) ^ 2 <= rr * rr then set(x, y, t) end
+        end
+      end
+    end
+  end
+  local function road(pts, hw)
+    for i = 1, #pts - 1 do
+      local a, b = pts[i], pts[i + 1]
+      local len = math.max(1, U.dist(a[1], a[2], b[1], b[2]))
+      for k = 0, len, 0.5 do
+        local f = k / len
+        local x, y = a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f
+        blob(x, y, hw + 0.8 * math.sin((x + y) * 0.3 + ph))
+      end
+    end
+  end
+  local function P(fx, fy) return math.floor(fx * N + 0.5), math.floor(fy * N + 0.5) end
+  local c = (N - 1) / 2
+  local bx, by = P(0.14, 0.15)
+  local ex, ey = P(0.1, 0.5)       -- the team's shared expansion on its own edge
+  local nx, ny = P(0.5, 0.12)      -- contested, north (and south)
+  local gx, gy = P(0.3, 0.33)      -- a glade between your base and the middle
+  blob(bx, by, 11)
+  blob(ex, ey, 7)
+  blob(nx, ny, 7)
+  blob(gx, gy, 5)
+  blob(c, c, 11)
+  road({ { bx, by }, { ex, ey } }, 3.2)
+  road({ { bx, by }, { nx, ny } }, 3.2)
+  road({ { bx, by }, { gx, gy }, { c, c } }, 3)
+  road({ { ex, ey }, { c - 12, c } }, 2.8)
+  road({ { nx, ny }, { c, c - 12 } }, 2.8)
+  -- border
+  for y = 0, h - 1 do for x = 0, w - 1 do
+    if x < 2 or y < 2 or x > w - 3 or y > h - 3 then terrain[y * w + x] = M.ROCK; self.wood[y * w + x] = nil end
+  end end
+  local mines, camps = {}, {}
+  local function clear(x0, y0, x1, y1)
+    for y = math.max(2, y0), math.min(h - 3, y1) do for x = math.max(2, x0), math.min(w - 3, x1) do
+      if terrain[y * w + x] ~= M.LAND then terrain[y * w + x] = M.LAND; self.wood[y * w + x] = nil end
+    end end
+  end
+  -- mines: a 3x3 footprint, so mirrored copies shift by two tiles
+  local function mine4(x, y, gold)
+    for _, p in ipairs({ { x, y }, { w - 3 - x, y }, { x, h - 3 - y }, { w - 3 - x, h - 3 - y } }) do
+      mines[#mines + 1] = { x = p[1], y = p[2], gold = gold }
+    end
+  end
+  mine4(bx - 7, by - 6, 9000)
+  -- shared team expansions (one per side: west and east)
+  mines[#mines + 1] = { x = ex - 6, y = math.floor(c) - 1, gold = 7000 }
+  mines[#mines + 1] = { x = w - 3 - (ex - 6), y = math.floor(c) - 1, gold = 7000 }
+  -- contested north and south, and the rich middle
+  mines[#mines + 1] = { x = math.floor(c) - 1, y = ny - 5, gold = 7000 }
+  mines[#mines + 1] = { x = math.floor(c) - 1, y = h - 3 - (ny - 5), gold = 7000 }
+  mines[#mines + 1] = { x = math.floor(c) - 1, y = math.floor(c) - 1, gold = 14000, center = true }
+  for _, p in ipairs(sym(gx, gy)) do camps[#camps + 1] = { x = p[1], y = p[2], kind = "small" } end
+  camps[#camps + 1] = { x = ex + 3, y = math.floor(c) + 3, kind = "medium" }
+  camps[#camps + 1] = { x = w - 1 - (ex + 3), y = math.floor(c) - 3, kind = "medium" }
+  camps[#camps + 1] = { x = math.floor(c) + 3, y = ny + 3, kind = "medium" }
+  camps[#camps + 1] = { x = math.floor(c) - 3, y = h - 1 - (ny + 3), kind = "medium" }
+  camps[#camps + 1] = { x = math.floor(c) + 4, y = math.floor(c) + 4, kind = "big" }
+  for _, m in ipairs(mines) do clear(m.x - 2, m.y - 2, m.x + 4, m.y + 4) end
+  -- halls: top-left, top-right, bottom-left, bottom-right (4x4 footprint)
+  local hx, hy = bx - 2, by - 2
+  local halls = { { x = hx, y = hy }, { x = w - 4 - hx, y = hy }, { x = hx, y = h - 4 - hy }, { x = w - 4 - hx, y = h - 4 - hy } }
+  for _, hl in ipairs(halls) do clear(hl.x - 3, hl.y - 3, hl.x + 7, hl.y + 7) end
+  for _, cp in ipairs(camps) do clear(cp.x - 3, cp.y - 3, cp.x + 3, cp.y + 3) end
+  self.deposits, self.deposit, self.blocked = {}, {}, {}
+  self.mines, self.halls, self.camps = mines, halls, camps
+  -- players 1 & 3 (west) against 2 & 4 (east)
+  self.starts = {}
+  local players = opts.players or { {}, {}, {}, {} }
+  for t = 1, #players do
+    local hl = halls[t]
+    self.starts[t] = { x = hl.x + 2, y = hl.y + 6, side = t }
   end
   self:labelComponents()
   return self

@@ -121,9 +121,10 @@ function W.new(opts)
     end
   end
   -- Commander Craft 1v1: the two (mirror-image) bases swap sides at random
-  if opts.craft and not opts.fixedStarts and not opts.autotest and self.np == 2 and love.math.random() < 0.5 then
+  if opts.craft and not opts.fixedStarts and not opts.autotest and love.math.random() < 0.5 then
     local st = self.map.starts
-    st[1], st[2] = st[2], st[1]
+    if self.np == 2 then st[1], st[2] = st[2], st[1]
+    elseif self.np == 4 then st[1], st[2], st[3], st[4] = st[2], st[1], st[4], st[3] end -- 2v2: the teams swap east and west
   end
   -- commanders
   for t = 1, self.np do

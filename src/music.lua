@@ -28,11 +28,14 @@ end
 -- three fantasy suites for Commander Craft: "_f" Banners of Dawn (D major), "_g" Drums of the
 -- Warband (D dorian), "_h" Moonlit Grove (E minor). The RTS plays the original five, Craft its
 -- own three, and the Arena (a mashup) any of the eight.
-M.SUITES = { "", "_b", "_c", "_d", "_e", "_f", "_g", "_h" }
-M.POOLS = { rts = { "", "_b", "_c", "_d", "_e" }, craft = { "_f", "_g", "_h" } }
+-- and four more for Craft: "_i" Frostpeak Vigil (A minor), "_j" Caravan of Sands (D phrygian),
+-- "_k" The Elven Watch (F lydian), "_l" Siege of Ironhold (C minor)
+M.SUITES = { "", "_b", "_c", "_d", "_e", "_f", "_g", "_h", "_i", "_j", "_k", "_l" }
+M.POOLS = { rts = { "", "_b", "_c", "_d", "_e" }, craft = { "_f", "_g", "_h", "_i", "_j", "_k", "_l" } }
 M.LOOPS_PER_SUITE = 2
 M.NAMES = { [""] = "Annihilation", _b = "Iron Tide", _c = "Ashfall", _d = "Overdrive", _e = "Last Light",
-  _f = "Banners of Dawn", _g = "Drums of the Warband", _h = "Moonlit Grove" }
+  _f = "Banners of Dawn", _g = "Drums of the Warband", _h = "Moonlit Grove",
+  _i = "Frostpeak Vigil", _j = "Caravan of Sands", _k = "The Elven Watch", _l = "Siege of Ironhold" }
 M.changedAt = nil   -- love.timer time of the last soundtrack change (for the "Music:" label)   -- during a match, move on to another suite after this many loops
 
 -- a shuffled order of all suites, starting with `first`

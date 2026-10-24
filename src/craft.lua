@@ -95,7 +95,8 @@ function C.setup(w, opts)
   -- neutral creep camps (hero experience, and the middle mine's guards)
   for _, cp in ipairs(map.camps or {}) do
     local x, y = (cp.x + 0.5) * w.T, (cp.y + 0.5) * w.T
-    local comp = cp.kind == "big" and { "ogrelord", "gnoll", "gnoll", "gnollarcher", "gnollarcher" } or { "gnoll", "gnoll", "gnollarcher" }
+    local comp = cp.kind == "big" and { "ogrelord", "gnoll", "gnoll", "gnollarcher", "gnollarcher" }
+      or (cp.kind == "medium" and { "gnoll", "gnoll", "gnoll", "gnollarcher", "gnollarcher" } or { "gnoll", "gnoll", "gnollarcher" })
     local camp = { x = x, y = y, units = {} }
     for i, key in ipairs(comp) do
       local a = i / #comp * math.pi * 2
