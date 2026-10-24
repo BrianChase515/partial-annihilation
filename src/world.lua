@@ -1339,9 +1339,16 @@ function W:kiteThreat(e)
       -- no point running from something much faster (a Scout swarm on artillery): stand and fight
       if theirR + 40 < myR and self:speedOf(o) < self:speedOf(e) * 1.7 then
         local d = U.dist(e.x, e.y, o.x, o.y)
-        local edge = d - theirR - o.def.radius - e.def.radius
         local minR = e.def.weapon.minRange or 0
-        if (edge < 60 or d < minR + 30) and (not bd or edge < bd) then best, bd = o, edge end
+        -- the band: out of its reach, inside ours. Only step back when it is about to reach us;
+        -- never so far that we can't shoot it any more
+        local danger = theirR + e.def.radius
+        local reach = self:canTarget(e, o) and (myR + o.def.radius - 10) or (danger + 140)
+        if reach - danger >= 30 then
+          local trigger = danger + math.min(40, (reach - danger) / 2)
+          local edge = d - danger
+          if (d < trigger or d < minR + 30) and (not bd or edge < bd) then best, bd = o, edge end
+        end
       end
     end
   end)
@@ -1352,8 +1359,10 @@ end
 function W:kitePoint(e, threat)
   local theirR = (threat.mods and threat.mods.melee or threat.def.melee) and math.min(self:rangeOf(threat), 100) or self:rangeOf(threat)
   local d = U.dist(e.x, e.y, threat.x, threat.y)
-  local want = theirR + threat.def.radius + e.def.radius + 90
-  local step = U.clamp(want - d, 50, 150)
+  local danger = theirR + e.def.radius
+  local reach = self:canTarget(e, threat) and (self:rangeOf(e) + threat.def.radius - 10) or (danger + 140)
+  local want = math.min(danger + 70, reach)
+  local step = U.clamp(want - d, 20, 150)
   local ax, ay = U.norm(e.x - threat.x, e.y - threat.y)
   if ax == 0 and ay == 0 then ax = 1 end
   local tm = self.teams[e.team]
@@ -1400,6 +1409,8 @@ function W:updateKite(e, dt, o)
       e.kiteScan = 0 -- still chased? look again at once
       return false
     end
+    -- an idle unit that stepped back stays where it is now (no walking back into the enemy)
+    if not o then e.homeX, e.homeY = e.x, e.y end
     local dx, dy = k.x - e.x, k.y - e.y
     local nx, ny, len = U.norm(dx, dy)
     if len < 10 then e.kite = nil; e.path, e.destX = nil, nil; return false end
