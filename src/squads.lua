@@ -555,8 +555,41 @@ end
 ---------------------------------------------------------------------------
 -- Drawing: capture points (world) and on the minimap
 
-function S.draw(world, cam)
+function S.draw(world, cam, game)
   local lg = love.graphics
+  -- the ACTIVE squad (whose skills Q / W fire): a gold beacon on its leader, the reach of his
+  -- skills, and a gold ring under every member
+  local act = game and game.activeSquad and game:activeSquad()
+  if act and act.team == world.playerTeam then
+    local L = act.leader
+    local pulse = 0.5 + 0.5 * math.sin(world.time * 5)
+    for _, u in ipairs(act.members) do
+      if u.alive then
+        lg.setColor(1, 0.8, 0.25, 0.55)
+        lg.setLineWidth(2)
+        lg.circle("line", u.x, u.y, u.def.radius + 7)
+      end
+    end
+    if L and L.alive then
+      lg.setColor(1, 0.8, 0.25, 0.08)
+      lg.circle("fill", L.x, L.y, S.RADIUS)
+      lg.setColor(1, 0.8, 0.25, 0.5)
+      lg.setLineWidth(2)
+      for i = 0, 35 do
+        local a = i * math.pi / 18 + world.time * 0.2
+        lg.arc("line", "open", L.x, L.y, S.RADIUS, a, a + math.pi / 36)
+      end
+      lg.setColor(1, 0.82, 0.25, 0.6 + 0.4 * pulse)
+      lg.setLineWidth(3)
+      lg.circle("line", L.x, L.y, L.def.radius + 12 + pulse * 4)
+      -- a chevron above him, scaled to stay readable when zoomed out
+      local sc = 1 / math.max(cam.zoom or 1, 0.45)
+      local y = L.y - L.def.radius - 40 * sc - pulse * 4 * sc
+      lg.setColor(1, 0.82, 0.25, 0.95)
+      lg.polygon("fill", L.x - 11 * sc, y, L.x + 11 * sc, y, L.x, y + 13 * sc)
+    end
+    lg.setLineWidth(1)
+  end
   local cols = (world.mods and world.mods.groovy) and D.groovyColor or D.teamColor
   for _, p in ipairs(world.capPoints or {}) do
     local oc = { 0.85, 0.85, 0.85 }

@@ -924,6 +924,18 @@ function UI.drawMinimap(game, L)
     end
   end
   if world.arena and world.arena.jungle then require("src.jungle").drawMinimap(world, mm, s) end
+  -- Commander of Heroes: the active squad's leader in gold
+  if world.squads then
+    local act = game:activeSquad()
+    local L = act and act.leader
+    if L and L.alive then
+      local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 5)
+      lg.setColor(1, 0.82, 0.25, 0.7 + 0.3 * pulse)
+      lg.setLineWidth(2)
+      lg.circle("line", mm.x + L.x / T * s, mm.y + L.y / T * s, 6 + pulse * 1.5)
+      lg.setLineWidth(1)
+    end
+  end
   -- Commander of Heroes: capture points as flags in their owner's color
   for _, p in ipairs(world.capPoints or {}) do
     local c = { 0.85, 0.85, 0.85 }

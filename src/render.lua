@@ -839,7 +839,7 @@ function R.drawWorld(cam, game)
   end
 
   -- Commander of Heroes: capture points and flares
-  if world.capPoints then require("src.squads").draw(world, cam) end
+  if world.capPoints then require("src.squads").draw(world, cam, game) end
 
   -- Alien Tech landing zone (everyone sees it)
   local a = world.alien
