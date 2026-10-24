@@ -178,7 +178,7 @@ function S.update(world, dt)
       local u = sq.members[i]
       if not u.alive and not u.squadLeader then
         table.remove(sq.members, i)
-        sq.queue[#sq.queue + 1] = { key = u.key, at = t + S.REINFORCE }
+        sq.queue[#sq.queue + 1] = { key = u.key, at = t + (D.units[u.key].weapon and D.units[u.key].weapon.targets.air and not D.units[u.key].weapon.targets.land and S.REINFORCE / 2 or S.REINFORCE) }
       elseif not u.alive and u.squadLeader and u ~= sq.leader then
         table.remove(sq.members, i) -- an old leader's body
       end

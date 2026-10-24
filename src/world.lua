@@ -817,6 +817,9 @@ function W:gainXP(e, amount)
   if not e or not e.alive or not e.def.weapon then return end
   if self.craft then return end -- Commander Craft: units only improve through research
   if e.key == "commander" or e.creep then return end
+  -- Squad Tactics: small maps and nonstop fighting - veterancy comes slower (artillery slowest:
+  -- its splash would otherwise make Generals of a whole battery in a minute)
+  if self.mods and self.mods.squads then amount = amount * (e.key == "artillery" and 0.2 or 0.35) end
   e.xp = (e.xp or 0) + amount
   local L = e.level or 0
   while L < W.MAX_LEVEL and e.xp >= self:xpForLevel(e, L + 1) do
@@ -935,7 +938,9 @@ function W:findTarget(e, range)
       if d <= range and d >= w.minRange then
         -- prefer armed units, then units, then buildings
         local isUnit = not o.def.building
-        local score = d - (isUnit and 150 or 0) - (o.def.weapon and 100 or 0) - (o.key == "battleship" and 400 or 0)
+        -- armed units first, but only those that can actually hurt us (a Flak truck is no threat to a tank)
+        local threat = o.def.weapon and D.canHit(o.def.weapon, e.def.domain)
+        local score = d - (isUnit and 150 or 0) - (threat and 100 or (o.def.weapon and 30 or 0)) - (o.key == "battleship" and 400 or 0)
         if o.decoy or o.key == "decoy" then score = score - 600 end
         if e.creep and e.key == "artillery" and o.def.building then score = score - 400 end -- siege creeps go for towers
         if e.arenaTower and o.key == "commander" and not (o.towerAggro and self.time < o.towerAggro) then score = score + 900 end
@@ -1270,7 +1275,8 @@ function W:findChaseTarget(e)
     if self:canTarget(e, o) and (not e.def.needsSpotter or self:spotted(e, o)) then
       local d = U.dist(e.x, e.y, o.x, o.y)
       if d <= look and (not layer or d <= self:rangeOf(e) or self.map:canReach(layer, e.x, e.y, o.x, o.y, w.range * 0.9)) then
-        local score = d - (o.def.weapon and 120 or 0) - (o.def.building and 0 or 60)
+        local threat = o.def.weapon and D.canHit(o.def.weapon, e.def.domain)
+        local score = d - (threat and 120 or (o.def.weapon and 40 or 0)) - (o.def.building and 0 or 60)
         if o.decoy or o.key == "decoy" then score = score - 600 end
         if not bd or score < bd then best, bd = o, score end
       end
@@ -1320,12 +1326,15 @@ end
 -- the nearest hostile fighter that is out-ranged by e and closing on it
 function W:kiteThreat(e)
   local myR = self:rangeOf(e)
+  -- anti-air only (Flak): it also backs away from ground attackers it can't shoot, toward friends
+  local tg = e.def.weapon.targets
+  local aaOnly = tg and tg.air and not tg.land and not tg.sea
   local best, bd
   self:query(e.x, e.y, myR + 40, function(o)
     -- Arena: a Commander kites enemy Commanders only (backing off from creep waves would starve him)
     if o.alive and o ~= e and o.team and not o.def.building and o.def.weapon and not o.neutral and not o.disarmed
       and not (self.arena and e.key == "commander" and o.key ~= "commander")
-      and self:hostile(o.team, e.team) and self:canTarget(o, e) and self:canTarget(e, o) then
+      and self:hostile(o.team, e.team) and self:canTarget(o, e) and (self:canTarget(e, o) or aaOnly) then
       local theirR = (o.mods and o.mods.melee or o.def.melee) and math.min(self:rangeOf(o), 100) or self:rangeOf(o)
       -- no point running from something much faster (a Scout swarm on artillery): stand and fight
       if theirR + 40 < myR and self:speedOf(o) < self:speedOf(e) * 1.7 then
