@@ -937,6 +937,7 @@ function A.commanderXP(w, e, amount)
     hpUp(e, 1.06)
     e.hp = math.min(e.maxhp, e.hp + e.maxhp * 0.15)
     mulMod(e, "dmg", 1.05)
+    if e.mods.levelDmg then mulMod(e, "dmg", e.mods.levelDmg) end -- carries grow faster
     fx(w, "levelup", e.x, e.y, 46, 1.2)
     require("src.mods").onCommanderLevel(w, e)
     if L == A.ULT_LEVEL then

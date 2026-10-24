@@ -53,24 +53,25 @@ local function think(w, h, brain)
   end
   if h.offers and #h.offers > 0 then brain:pickOffer(h) end
   brain:useSkills(h, eh, n >= 4 or eh ~= nil)
-  -- BS_KITE=1: ranged heroes step back from melee attackers, like a player would
-  if os.getenv("BS_KITE") and not (h.mods and h.mods.melee) and not w:isFleeing(h) then
+  -- BS_KITE=1: a hero that outranges the enemy keeps it at the edge of its range, like a player would
+  if os.getenv("BS_KITE") and not w:isFleeing(h) and (h.kiteT or 0) <= w.time then
+    local myR = w:rangeOf(h)
     local m, md
     for _, o in ipairs(w.entities) do
       if o.alive and o.team and o.team ~= h.team and o.def.weapon and not o.def.building then
-        local melee = o.def.melee or (o.mods and o.mods.melee)
         local d = U.dist(o.x, o.y, h.x, h.y)
-        if melee and d < 110 and (not md or d < md) then m, md = o, d end
+        if d < myR and (not md or d < md) then m, md = o, d end
       end
     end
-    if m then
+    if m and w:rangeOf(m) < myR - 25 and md < myR - 30 then
       local dx, dy = U.norm(h.x - m.x, h.y - m.y)
-      local x, y = spot(w, h.x + dx * 140, h.y + dy * 140)
+      local back = math.min(140, myR - 15 - md)
+      local x, y = spot(w, h.x + dx * back, h.y + dy * back)
       w:issue(h, { type = "move", x = x, y = y })
       w:issue(h, { type = "attack", target = m }, true)
+      h.kiteT = w.time + 0.9
     end
   end
-end
 
 local function levelUp(w, h, L, brain)
   local A = require("src.arena")
@@ -156,6 +157,12 @@ local function duel(a, b, L, seed)
     return l
   end
   local t = fight(w, { { ha }, { hb } }, { { ha, ba }, { hb, bb } }, 90, function()
+    if os.getenv("BS_DBG") then
+      local sk = {}
+      for i = 1, 4 do if ha.skills[i] then sk[#sk + 1] = ha.skills[i].key end end
+      print(string.format("D %.1f %s %d/%d (%s) dist %d  |  %s %d/%d  o=%s chase=%s", w.time, a, ha.hp, ha.maxhp, table.concat(sk, ","),
+        U.dist(ha.x, ha.y, hb.x, hb.y), b, hb.hp, hb.maxhp, ha.orders[1] and ha.orders[1].type or "-", ha.chase and ha.chase.key or "-"))
+    end
     if not ha.alive or not hb.alive then return true end
     if ha.orders[1] == nil then w:issue(ha, { type = "amove", x = hb.x, y = hb.y }) end
     if hb.orders[1] == nil then w:issue(hb, { type = "amove", x = ha.x, y = ha.y }) end
@@ -346,6 +353,8 @@ local function run()
         c, kind, lvl, wins, runs, 100 * hp / runs, t / runs, 100 * left / runs))
       io.stdout:flush()
     end
+  elseif what == "duel" then
+    print("RESULT", duel(args[2], args[3], tonumber(args[4]) or 6, 9500))
   elseif what == "duels" then
     local L = tonumber(args[2]) or 3
     local runs = tonumber(args[3]) or 4

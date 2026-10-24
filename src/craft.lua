@@ -138,12 +138,32 @@ function C.makeHero(w, c, cls)
   c.maxhp, c.hp = 1150, 1150
   c.mods.dmg = 0.62
   ARENA.byClass[cls].base(w, c)
+  -- Craft heroes fight next to armies, not instead of them: Arena skills and attacks are tuned to
+  -- take on whole lanes, so here they're scaled down (set with tools/battlesim.lua: a lone level-3
+  -- hero should survive a 6-unit army only about half the time if it stands and fights)
+  c.mods.dmg = (c.mods.dmg or 1) * 0.75
+  c.mods.skillDmg = (c.mods.skillDmg or 1) * 0.6
+  c.maxhp = math.floor(c.maxhp * 0.9); c.hp = c.maxhp
+  -- and each hero leans into its role
+  local role = C.ROLE_TUNING[cls]
+  if role then role(c) end
   c.respawnX, c.respawnY = c.x, c.y
   -- a hero starts with one skill from his class
   local off = ARENA.offer(w, c, "skill")
   if off[1] then ARENA.learn(w, c, off[1].key) end
   return c
 end
+
+-- per-class Craft adjustments (Arena keeps its own numbers)
+C.ROLE_TUNING = {
+  -- the tank: holds the line, doesn't win fights alone
+  juggernaut = function(c) c.mods.dmg = c.mods.dmg * 0.72; c.mods.skillDmg = (c.mods.skillDmg or 1) * 0.8 end,
+  -- the support: less personal punch, but his army hits harder from the start (Aura: Might)
+  warden = function(c) c.mods.dmg = c.mods.dmg * 0.75; c.mods.auraMight = true; c.taken.might = true end,
+  -- the ranged carry: weak early, grows more per level than anyone
+  ranger = function(c) c.mods.dmg = c.mods.dmg * 1.1; c.mods.levelDmg = 1.05
+    local sp = tonumber(os.getenv("BS_RSPEED") or ""); if sp then c.mods.speed = (c.mods.speed or 1) * sp end end,
+}
 
 function C.heroesOf(w, team, includeDead)
   local out = {}
