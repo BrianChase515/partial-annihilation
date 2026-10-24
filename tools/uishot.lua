@@ -165,6 +165,36 @@ local function script(mode, secs)
     game = startFn(opts)
     local w = game.world
     local nextOrder, nextLog = 0, 0
+    if os.getenv("PA_SMOKE") then
+      -- an enemy tank parks 230 away from our Armor squad; does Smoke Screen stop it shooting?
+      for _ = 1, 30 do game:update(1 / 30) end
+      local sq = SQ.squadsOf(w, 1)[1]
+      local L = sq.leader
+      for _, u in ipairs(sq.members) do u.orders = {} ; u.x, u.y = L.x + (u.x - L.x) * 0.3, L.y + (u.y - L.y) * 0.3 end
+      game.ais = {}
+      for _, e in ipairs(w.entities) do if e.team == 2 and not e.def.building then e.alive = false end end
+      for _, e in ipairs(w.entities) do if e.team == 2 and e.def.building then e.def = setmetatable({ weapon = false }, { __index = e.def }) end end
+      local foe = w:spawn("tank", 2, L.x + 196, L.y)
+      foe.holdPos = true; foe.maxhp, foe.hp = 1e6, 1e6
+      for _ = 1, 60 do game:update(1 / 30); foe.orders = {} ; foe.homeX, foe.homeY = L.x + 196, L.y end
+      local function hp() local h = 0; for _, u in ipairs(sq.members) do if u.alive then h = h + u.hp end end; return h end
+      local h0 = hp()
+      for _ = 1, 90 do game:update(1 / 30); foe.orders = {}; foe.homeX, foe.homeY = L.x + 196, L.y end
+      print("SMOKE no smoke: squad lost", math.floor(h0 - hp()), "in 3s; foe target", foe.autoTarget and foe.autoTarget.key, "built", foe.built, "reload", foe.reload, "dist", math.floor(((foe.x-L.x)^2+(foe.y-L.y)^2)^0.5), "chase", foe.chase and foe.chase.key, "disarmed", foe.disarmed)
+      if os.getenv("PA_SMOKE") == "flee" then
+        game:select({ L }); game:keypressed("f")
+        for _ = 1, 30 do game:update(1 / 30) end
+        local hq = w.teams[1].hq
+        print("FLEE order", L.orders[1] and L.orders[1].type, "to", L.orders[1] and math.floor(L.orders[1].x), L.orders[1] and math.floor(L.orders[1].y), "hq", math.floor(hq.x), math.floor(hq.y))
+      else
+        print("cast", SQ.cast(w, sq, 2))
+        for _ = 1, 10 do game:update(1 / 30); foe.orders = {}; foe.homeX, foe.homeY = L.x + 196, L.y end
+        local h1 = hp()
+        for _ = 1, 90 do game:update(1 / 30); foe.orders = {}; foe.homeX, foe.homeY = L.x + 196, L.y end
+        print("SMOKE smoked: squad lost", math.floor(h1 - hp()), "in 3s; foe alive", foe.alive, foe.hp, "smoked", L.smoked)
+      end
+      return
+    end
     while w.time < secs2 and not w.over do
       for _ = 1, 15 do game:update(1 / 30) end
       if w.time >= nextOrder then

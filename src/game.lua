@@ -2262,7 +2262,9 @@ function G:retreat(where)
   if #list == 0 then return end
   local c = self.world.teams[1].commander
   local x, y
+  local hq = self.world.squads and self.world.teams[1].hq
   if where == "flag" and self.flag then x, y = self.flag.x, self.flag.y
+  elseif hq and hq.alive then x, y = hq.x, hq.y + 90 -- Commander of Heroes: flee to the HQ (it heals)
   elseif c and c.alive then x, y = c.x, c.y
   else x, y = self.world.teams[1].startX, self.world.teams[1].startY end
   local slots = self:formation(list, x, y)
@@ -2270,7 +2272,7 @@ function G:retreat(where)
     self.world:issue(u, { type = "retreat", x = slots[u][1], y = slots[u][2] })
   end
   self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.6, r = 1, g = 0.85, b = 0.3 }
-  local name = (where == "flag" and self.flag) and "the flag" or "the Commander"
+  local name = (where == "flag" and self.flag) and "the flag" or (hq and hq.alive and "the HQ" or "the Commander")
   self:notice("Retreating " .. #list .. " units to " .. name, 1.2)
 end
 

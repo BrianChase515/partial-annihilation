@@ -35,7 +35,7 @@ S.SKILLS = {
   hulldown = { name = "Hull Down", aim = "self", dur = 12, cd = 35,
     desc = "12 s: the squad digs in - 35% less damage taken, half speed." },
   smoke = { name = "Smoke Screen", aim = "self", dur = 8, cd = 40,
-    desc = "8 s: smoke hides the squad from anything further than point-blank." },
+    desc = "8 s: smoke hides the squad - nothing further than 90 away can target it, and whatever was shooting at it loses it." },
   barrage = { name = "Barrage", aim = "point", range = 950, cd = 45, needSight = true,
     desc = "Six shells on a spot your side can see (within 950 of the leader)." },
   spotter = { name = "Spotter Drone", aim = "self", dur = 15, cd = 35,
@@ -559,6 +559,19 @@ function S.draw(world, cam)
     lg.setColor(1, 1, 1)
     lg.print(p.name, p.x - f:getWidth(p.name) / 2, p.y + 24)
   end
+  -- smoke: a drifting grey cloud on every unit inside it
+  for _, sq in ipairs(world.squads and world.squads.list or {}) do
+    for _, u in ipairs(sq.members) do
+      if u.alive and u.smoked and world:isVisible(u) then
+        for k = 0, 4 do
+          local a = world.time * 0.6 + k * 1.26 + u.id
+          local r = 22 + 6 * math.sin(world.time * 1.3 + k)
+          lg.setColor(0.72, 0.74, 0.76, 0.22)
+          lg.circle("fill", u.x + math.cos(a) * 16, u.y + math.sin(a) * 12, r)
+        end
+      end
+    end
+  end
   -- flares
   for _, v in ipairs(world.visionSources or {}) do
     if v.flare and v.ally == world.ally[world.playerTeam] then
@@ -667,7 +680,7 @@ function AI:update(dt)
       local foe, fd
       for _, o in ipairs(w.entities) do
         if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and (o.def.weapon or o.key == "hq")
-          and not (o.smoked and U.dist(L.x, L.y, o.x, o.y) > 170) then
+          and not (o.smoked and U.dist(L.x, L.y, o.x, o.y) > 90) then
           local d = U.dist(L.x, L.y, o.x, o.y)
           if not o.def.building then d = d * 0.8 end
           if not fd or d < fd then foe, fd = o, d end

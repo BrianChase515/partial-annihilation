@@ -914,7 +914,7 @@ function W:canTarget(e, o)
   if e.passive and not (e.aggro and e.aggro[o] and self.time < e.aggro[o]) then return false end
   if o.fadeUntil and self.time < o.fadeUntil then return false end
   -- Squad Tactics smoke: hidden from anything further than point-blank
-  if o.smoked and U.dist2(e.x, e.y, o.x, o.y) > 170 * 170 then return false end
+  if o.smoked and U.dist2(e.x, e.y, o.x, o.y) > 90 * 90 then return false end
   if o.def.domain == "air" and e.mods and e.mods.hitsAir then return true end
   return D.canHit(e.def.weapon, o.def.domain)
 end
@@ -1246,6 +1246,7 @@ function W:updateWeapon(e, dt, focus)
     tgt = focus
   else
     if e.autoTarget and (not e.autoTarget.alive or not self:inRange(e, e.autoTarget, 10)
+      or (e.autoTarget.smoked and not self:canTarget(e, e.autoTarget))
       or (e.scanTimer <= 0 and not self:spotted(e, e.autoTarget))) then
       e.autoTarget = nil
     end
@@ -1471,7 +1472,7 @@ function W:updateUnit(e, dt)
     -- idle: retaliate / defend area, then return home
     if e.def.weapon then
       local t = e.chase
-      if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > self:lookOf(e) + 220) then t = nil end
+      if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > self:lookOf(e) + 220 or (t.smoked and not self:canTarget(e, t))) then t = nil end
       if not t and e.retaliate and e.retaliate.alive and self:canTarget(e, e.retaliate) then t = e.retaliate end
       e.retaliate = nil
       if not t then
@@ -1502,7 +1503,7 @@ function W:updateUnit(e, dt)
     if self:followPath(e, dt, o.arrive or 8) then self:popOrder(e) end
   elseif o.type == "amove" or o.type == "patrol" then
     local t = e.chase
-    if t and (not t.alive or U.dist(e.x, e.y, t.x, t.y) > self:lookOf(e) + 160) then t = nil; e.path = nil end
+    if t and (not t.alive or U.dist(e.x, e.y, t.x, t.y) > self:lookOf(e) + 160 or (t.smoked and not self:canTarget(e, t))) then t = nil; e.path = nil end
     if not t and e.def.weapon then
       e.amScan = (e.amScan or 0) - dt
       if e.amScan <= 0 then
