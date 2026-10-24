@@ -545,7 +545,7 @@ end
 -- Orders
 
 -- Spread units around a point in a loose grid, preserving their relative positions
-function G:formation(units, x, y)
+function G:formation(units, x, y, ranked)
   local n = #units
   if n == 0 then return {} end
   if n == 1 then return { [units[1]] = { x, y } } end
@@ -571,10 +571,39 @@ function G:formation(units, x, y)
     local oy = (r - (rows - 1) / 2) * spacing
     slots[#slots + 1] = { x + px * ox - dx * oy, y + py * ox - dy * oy }
   end
-  -- greedy assignment: each unit takes the nearest free slot (relative to group centroid)
   local result = {}
   local free = {}
   for i = 1, #slots do free[i] = true end
+  if ranked then
+    -- attack-move: shortest reach up front, artillery and other long guns in the back rows
+    local w = self.world
+    local function reach(u) return u.def.weapon and w:rangeOf(u) or 9999 end
+    local order = {}
+    for _, u in ipairs(units) do order[#order + 1] = u end
+    table.sort(order, function(a, b)
+      local ra, rb = reach(a), reach(b)
+      if ra ~= rb then return ra < rb end
+      return a.id < b.id
+    end)
+    for _, u in ipairs(order) do
+      local relx, rely = u.x - cx + x, u.y - cy + y
+      local row, best, bd
+      for i, sl in ipairs(slots) do
+        if free[i] then
+          local r = math.floor((i - 1) / cols)
+          if not row then row = r end
+          if r == row then
+            local d = U.dist2(relx, rely, sl[1], sl[2])
+            if not bd or d < bd then best, bd = i, d end
+          end
+        end
+      end
+      free[best] = false
+      result[u] = slots[best]
+    end
+    return result
+  end
+  -- greedy assignment: each unit takes the nearest free slot (relative to group centroid)
   local order = {}
   for _, u in ipairs(units) do order[#order + 1] = u end
   table.sort(order, function(a, b)
@@ -597,18 +626,21 @@ end
 
 function G:commandMove(x, y, kind, queue)
   local units = self:selectedMobile()
-  local slots = self:formation(units, x, y)
-  -- group move: everyone walks at the slowest unit's pace so the army arrives together
-  local groupSpeed
-  if kind == "gmove" then
+  local slots = self:formation(units, x, y, kind == "amove")
+  -- group move: everyone walks at the slowest unit's pace so the army arrives together.
+  -- Attack-move marches the same way, in ranks (short reach in front), until anyone in the
+  -- group makes contact; then the march breaks and everyone fights (and kites) freely
+  local groupSpeed, march
+  if kind == "gmove" or (kind == "amove" and #units > 1) then
     for _, u in ipairs(units) do
       local sp = self.world:speedOf(u)
       if not groupSpeed or sp < groupSpeed then groupSpeed = sp end
     end
   end
+  if kind == "amove" and groupSpeed then march = { speed = groupSpeed }; groupSpeed = nil end
   for _, u in ipairs(units) do
     local s = slots[u]
-    local o = { type = kind == "gmove" and "move" or kind, x = s[1], y = s[2], groupSpeed = groupSpeed }
+    local o = { type = kind == "gmove" and "move" or kind, x = s[1], y = s[2], groupSpeed = groupSpeed, march = march }
     if kind == "patrol" then
       local last = queue and u.orders[#u.orders]
       o.fromX, o.fromY = last and last.x or u.x, last and last.y or u.y

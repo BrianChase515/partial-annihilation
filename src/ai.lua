@@ -1594,12 +1594,24 @@ function AI:thinkArmy()
     self.waveSpots = self.rng:random() < self.spotChance
     self.waves = self.waves + 1
     self.lastWave = t
+    -- better players march the land army together (slowest pace) until first contact
+    local march
+    if ((world.kiteSkill or {})[self.team] or 0) >= 0.4 then
+      for _, u in ipairs(home) do
+        if u.def.domain == "land" then
+          local sp = world:speedOf(u)
+          march = march or { speed = sp }
+          march.speed = math.min(march.speed, sp)
+        end
+      end
+    end
     for _, u in ipairs(home) do
       local dom = (u.def.domain == "sea" or u.def.domain == "sub") and "sea" or u.def.domain
       local tx, ty = self:pickTarget(dom)
       if tx then
         local j = dom == "sea" and 20 or 80
-        world:issue(u, { type = "amove", x = tx + self.rng:random(-j, j), y = ty + self.rng:random(-j, j) })
+        world:issue(u, { type = "amove", x = tx + self.rng:random(-j, j), y = ty + self.rng:random(-j, j),
+          march = dom == "land" and march or nil })
         self.wave[u] = true
       end
     end

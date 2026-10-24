@@ -398,6 +398,53 @@ local function rtsFight(ka, kb, budget, seed)
   return (b <= 0 and a > 0) and 1 or (a <= 0 and 0 or 0.5), a / am, b / bm, na, nb
 end
 
+
+-- Annihilation: two mixed armies, each in ranks (short reach in front), attack-moving together
+-- like a player's army. Reports who lives, who gets the kills and how much veterancy they earn.
+local function mixFight(specA, specB, seed)
+  local game = startFn({ size = 96, water = 0.1, seed = seed, autotest = true, players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
+  game.ais = {}
+  local w = game.world
+  w.kiteSkill = nil
+  local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+  local kills = {}
+  w.onKill = function(o, a) if a and a.team == 1 then kills[a.key] = (kills[a.key] or 0) + 1 end end
+  local function place(spec, team, dir)
+    local list = {}
+    for k, n in spec:gmatch("(%w+):(%d+)") do for _ = 1, tonumber(n) do list[#list + 1] = w:spawn(k, team, cx, cy) end end
+    table.sort(list, function(a, b) return w:rangeOf(a) < w:rangeOf(b) end)
+    local cols = 6
+    local slow
+    for i, u in ipairs(list) do
+      local c, r = (i - 1) % cols, math.floor((i - 1) / cols)
+      u.x, u.y = spot(w, cx + dir * (420 + r * 34), cy + (c - (cols - 1) / 2) * 34)
+      u.homeX, u.homeY = u.x, u.y
+      slow = math.min(slow or 999, w:speedOf(u))
+    end
+    local march = os.getenv("BS_NOMARCH") == nil and { speed = slow } or nil
+    for i, u in ipairs(list) do
+      local c = (i - 1) % cols
+      w:issue(u, { type = "amove", x = cx - dir * 700, y = cy + (c - (cols - 1) / 2) * 34, march = march })
+    end
+    return list
+  end
+  local A = place(specA, 1, -1)
+  local B = place(specB, 2, 1)
+  local t0 = w.time
+  while w.time - t0 < 150 do
+    for _ = 1, 15 do w:update(1 / 30) end
+    local a, b = hpOf(A), hpOf(B)
+    if a <= 0 or b <= 0 then break end
+    frame()
+  end
+  local surv, cnt, lvl = {}, {}, {}
+  for _, u in ipairs(A) do
+    cnt[u.key] = (cnt[u.key] or 0) + 1
+    if u.alive then surv[u.key] = (surv[u.key] or 0) + 1; lvl[u.key] = (lvl[u.key] or 0) + (u.level or 0) end
+  end
+  return hpOf(A) > 0 and hpOf(B) <= 0 and 1 or 0, surv, cnt, lvl, kills
+end
+
 local function run()
   frame()
   -- what-if: scale the creeps (BS_HP=1.2 BS_DMG=1.5)
@@ -452,6 +499,28 @@ local function run()
       print(string.format("RTS %2d %-9s vs %2d %-9s  A wins %3.0f%%  | A hp left %3.0f%%  B hp left %3.0f%%",
         na, pr[1], nb, pr[2], 100 * sw / runs, 100 * sa / runs, 100 * sb / runs))
       io.stdout:flush()
+    end
+  elseif what == "mix" then
+    local specA = args[2] or "tank:8+scout:2+flak:2+artillery:4"
+    local specB = args[3] or specA
+    local runs = tonumber(args[4]) or 6
+    local wins, S, C, L, K = 0, {}, {}, {}, {}
+    for r = 1, runs do
+      math.randomseed(r * 577)
+      local win, surv, cnt, lvl, kills = mixFight(specA, specB, 9800 + r)
+      wins = wins + win
+      for k, v in pairs(cnt) do C[k] = (C[k] or 0) + v end
+      for k, v in pairs(surv) do S[k] = (S[k] or 0) + v end
+      for k, v in pairs(lvl) do L[k] = (L[k] or 0) + v end
+      for k, v in pairs(kills) do K[k] = (K[k] or 0) + v end
+      frame()
+    end
+    local tk = 0
+    for _, v in pairs(K) do tk = tk + v end
+    print(string.format("MIX %s vs %s: A wins %d/%d", specA, specB, wins, runs))
+    for k, c in pairs(C) do
+      print(string.format("MIX   %-10s survived %3.0f%%  kills %3.0f%% of all  avg level of survivors %.1f",
+        k, 100 * (S[k] or 0) / c, 100 * (K[k] or 0) / math.max(1, tk), (L[k] or 0) / math.max(1, S[k] or 0)))
     end
   elseif what == "ghost" then
     -- Mirror / Nemesis from five made-up games (all tanks, no anti-air, slow expansion), then a match

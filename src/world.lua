@@ -431,6 +431,7 @@ function W:issue(e, order, queue)
   if cur and cur.type == "retreat" and cur.holdHome and e.hp < e.maxhp - 0.5 then return end
   if cur and cur.type == "retreat" and self.time - (cur.issued or self.time) < 45
     and not (self.arena and e.hp >= e.maxhp - 0.5) then return end -- (Arena: healed up on the way? back to the fight)
+  order.issued = order.issued or self.time
   if order.type == "retreat" then
     order.issued = self.time
     local tm = self.teams[e.team]
@@ -773,6 +774,7 @@ function W:speedOf(e)
   end
   local o = e.orders[1]
   if o and o.groupSpeed and not e.retreating then sp = math.min(sp, o.groupSpeed) end
+  if o and o.march and not o.march.contact and not e.retreating then sp = math.min(sp, o.march.speed) end
   return sp
 end
 
@@ -1483,6 +1485,10 @@ function W:updateUnit(e, dt)
       end
     end
     e.chase = t
+    -- attack-move march: the first one to find a fight (or take a hit) breaks ranks for all
+    if o.march and not o.march.contact and (t or (e.lastHit and o.issued and e.lastHit > o.issued)) then
+      o.march.contact = true
+    end
     if t then
       focus = t
       self:approach(e, t, dt)
