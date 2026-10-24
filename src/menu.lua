@@ -115,7 +115,7 @@ function Menu.new(prev)
       COH_SETUP.size = mem.coh.size or COH_SETUP.size
       COH_SETUP.format = COH_FORMATS[mem.coh.format or 0] and mem.coh.format or 1
       COH_SETUP.level = mem.coh.level or COH_SETUP.level
-      if mem.coh.squads and #mem.coh.squads == 3 then
+      if mem.coh.squads and #mem.coh.squads == require("src.squads").SLOTS then
         COH_SETUP.squads = mem.coh.squads
         for _, ds in ipairs(COH_SETUP.squads) do SQ.fixDesign(ds) end
       end
@@ -532,25 +532,19 @@ function Menu:cohRects()
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
-  -- the squads
+  -- the squads: five slots, each one kind of unit
   local SQ = require("src.squads")
   local px = x0 + 580
-  local cur = C.squads[C.squadTab] or C.squads[1]
-  for i = 1, 3 do
+  for i = 1, SQ.SLOTS do
     local sq = C.squads[i]
-    r[#r + 1] = { x = px + (i - 1) * 104, y = y, w = 100, h = 30, label = "Squad " .. i .. (sq.on and "" or " (off)"), kind = "sqtab", sqi = i,
-      active = C.squadTab == i, small = true }
-  end
-  if C.squadTab > 1 then
-    r[#r + 1] = { x = px, y = y + 38, w = 100, h = 28, label = cur.on and "In the game" or "Not used", kind = "sqon", active = cur.on, small = true }
-  end
-  local ty = SQ.byType[cur.type] or SQ.TYPES[1]
-  r[#r + 1] = { x = px + 108, y = y + 38, w = 204, h = 28, label = "Type: " .. ty.name .. "  v", kind = "sqtype", small = true }
-  for i, k in ipairs(SQ.UNITS) do
-    local yy = y + 76 + (i - 1) * 30
-    r[#r + 1] = { x = px + 150, y = yy, w = 26, h = 26, label = "-", kind = "squ", sqkey = k, sqd = -1, small = true }
-    r[#r + 1] = { x = px + 178, y = yy, w = 40, h = 26, label = tostring(cur.units[k] or 0), kind = "squ", sqkey = k, sqd = 0, small = true }
-    r[#r + 1] = { x = px + 220, y = yy, w = 26, h = 26, label = "+", kind = "squ", sqkey = k, sqd = 1, small = true }
+    local yy = y + (i - 1) * 40
+    r[#r + 1] = { x = px, y = yy, w = 96, h = 32, label = "Squad " .. i, kind = "sqtab", sqi = i, active = C.squadTab == i, small = true }
+    r[#r + 1] = { x = px + 102, y = yy, w = 70, h = 32, label = sq.on and "On" or "Off", kind = "sqon", sqi = i, active = sq.on, small = true }
+    local ty = SQ.byType[sq.type] or SQ.TYPES[1]
+    local un = D.units[ty.unit].name
+    if not un:match("y$") then un = un .. "s" end
+    r[#r + 1] = { x = px + 178, y = yy, w = 200, h = 32, label = ty.name .. "  (" .. ty.size .. " " .. un .. ")  v",
+      kind = "sqtype", sqi = i, small = true }
   end
   self:updateRect(r, w)
   return r
@@ -560,36 +554,35 @@ function Menu:drawCohInfo(x0, y)
   local lg = love.graphics
   local SQ = require("src.squads")
   local C = COH_SETUP
-  local cur = C.squads[C.squadTab]
+  local cur = C.squads[C.squadTab] or C.squads[1]
   local px = x0 + 580
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("YOUR SQUADS  (each one is led by a veteran of its type)", px, y - 22)
-  for i, k in ipairs(SQ.UNITS) do
-    lg.setColor(0.8, 0.85, 0.92)
-    lg.print(D.units[k].name .. "  (" .. SQ.COST[k] .. ")", px, y + 76 + (i - 1) * 30 + 5)
-  end
-  local used = SQ.cost(cur.units)
-  lg.setColor(used <= SQ.BUDGET and 0.6 or 1, 0.85, 0.6)
-  lg.print(string.format("Points: %d / %d", used, SQ.BUDGET), px + 260, y + 76 + 5)
+  lg.print("YOUR SQUADS  (2 to 5; each is one kind of unit, led by a veteran)", px, y - 22)
+  local ok, n, air = SQ.validSetup(C.squads)
   local ty = SQ.byType[cur.type] or SQ.TYPES[1]
-  local yy = y + 76 + #SQ.UNITS * 30 + 6
+  local yy = y + SQ.SLOTS * 40 + 10
   lg.setColor(0.95, 0.85, 0.5)
-  lg.printf(ty.name .. ": " .. ty.desc, px, yy, 400)
-  yy = yy + 38
+  lg.printf("Squad " .. C.squadTab .. ": " .. ty.name .. " - " .. ty.desc, px, yy, 400)
+  yy = yy + 40
   for slot, key in ipairs(ty.skills) do
     local sk = SQ.SKILLS[key]
+    local text = (slot == 1 and "Q  " or "W  ") .. sk.name .. ": " .. sk.desc
     lg.setColor(0.75, 0.85, 1)
-    lg.printf((slot == 1 and "Q  " or "W  ") .. sk.name .. ": " .. sk.desc, px, yy, 400)
-    local _, lines = R.font(13):getWrap((slot == 1 and "Q  " or "W  ") .. sk.name .. ": " .. sk.desc, 400)
+    lg.printf(text, px, yy, 400)
+    local _, lines = R.font(13):getWrap(text, 400)
     yy = yy + #lines * 16 + 4
+  end
+  if not ok then
+    lg.setColor(1, 0.5, 0.4)
+    lg.print(n < 2 and "Field at least 2 squads." or "Only one air squad (Gunships) a side.", px, yy + 6)
   end
   -- how it plays, under the setup on the left
   lg.setColor(0.6, 0.66, 0.74)
   lg.printf("Five capture points. Ground units standing on a point take it (aircraft can't). "
     .. "Hold more points than the enemy and their tickets drain; every unit you lose costs tickets too. "
     .. "Run them out of tickets, or destroy their HQ, to win.\n\n"
-    .. "Click any unit to command its whole squad (Alt for one unit). Fallen members are replaced at your HQ - "
+    .. "1-5 always select that squad (twice: jump to it); click any unit for its whole squad (Alt: one unit). Fallen members are replaced at your HQ and walk back out to their leader - "
     .. "faster the more points you hold - and units heal fast there. A fallen leader returns after 45 s. Never scored (yet).",
     x0, y + 140, 520)
 end
@@ -601,7 +594,8 @@ function Menu:activeCount()
 end
 
 function Menu:validTeams()
-  if self.mode == "arena" or self.mode == "craft" or self.mode == "coh" then return true end
+  if self.mode == "arena" or self.mode == "craft" then return true end
+  if self.mode == "coh" then return (require("src.squads").validSetup(COH_SETUP.squads)) end
   if self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2 then return false end
   local teams, n = {}, 0
   for _, s in ipairs(self.slots) do
@@ -779,7 +773,8 @@ function Menu:draw()
       lg.setColor(1, 1, 1)
       local label = r.label
       if r.action == "start" and not self:validTeams() then
-        label = (self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2) and "That saved map is 2-player only" or "Put someone on another team"
+        label = self.mode == "coh" and "Fix your squads (see right)"
+          or ((self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2) and "That saved map is 2-player only" or "Put someone on another team")
       end
       lg.print(label, r.x + r.w / 2 - R.font(fs):getWidth(label) / 2, r.y + r.h / 2 - fs * 0.62)
       if r.roster then
@@ -882,7 +877,7 @@ function Menu:draw()
   local tip = self.mode == "arena"
     and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
     or self.mode == "craft" and "Tip: keep five workers on gold and a few on wood, build Farms before you need them, and creep with your hero early."
-    or self.mode == "coh" and "Tip: click any unit to command its whole squad. Q / W fire the leader's skills at the mouse. C cycles your leaders."
+    or self.mode == "coh" and "Tip: 1-5 grab a squad wherever it is. Q / W fire its leader's skills at the mouse. Keep the Battery behind the Armor."
     or (require("src.ghost").unlocked() and "Tip: Mirror (plays like you) and Nemesis (plays against your habits) are in the personality list."
       or string.format("Finish %d more Annihilation games (win or lose, no gameplay modifiers) to unlock two opponents that learn from you.",
         math.max(0, require("src.ghost").NEEDED - require("src.ghost").completed())))
@@ -1057,23 +1052,16 @@ function Menu:mousepressed(x, y, b)
       elseif r.gametype then RTS_SETUP.game = r.gametype
       elseif r.kind == "sqtab" then COH_SETUP.squadTab = r.sqi
       elseif r.kind == "sqon" then
-        local sq = COH_SETUP.squads[COH_SETUP.squadTab]
+        local sq = COH_SETUP.squads[r.sqi]
         sq.on = not sq.on
+        COH_SETUP.squadTab = r.sqi
       elseif r.kind == "sqtype" then
         local SQ = require("src.squads")
-        local sq = COH_SETUP.squads[COH_SETUP.squadTab]
+        COH_SETUP.squadTab = r.sqi
+        local sq = COH_SETUP.squads[r.sqi]
         local idx = 1
         for i, ty in ipairs(SQ.TYPES) do if ty.key == sq.type then idx = i end end
         sq.type = SQ.TYPES[(idx - 1 + dir) % #SQ.TYPES + 1].key
-      elseif r.kind == "squ" then
-        local SQ = require("src.squads")
-        local sq = COH_SETUP.squads[COH_SETUP.squadTab]
-        local d = r.sqd ~= 0 and r.sqd or dir
-        local n = math.max(0, (sq.units[r.sqkey] or 0) + d)
-        local test = {}
-        for k, v in pairs(sq.units) do test[k] = v end
-        test[r.sqkey] = n
-        if SQ.cost(test) <= SQ.BUDGET then sq.units[r.sqkey] = n end
       elseif r.kind == "cohsize" then COH_SETUP.size = r.value
       elseif r.kind == "cohfmt" then COH_SETUP.format = r.value
       elseif r.kind == "cohlv" then COH_SETUP.level = math.max(1, math.min(10, COH_SETUP.level + (r.d ~= 0 and r.d or dir)))

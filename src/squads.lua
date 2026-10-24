@@ -10,24 +10,23 @@ local D = require("src.defs")
 
 local S = {}
 
--- what a squad can hold: points per unit, from a budget per squad (the leader is free)
-S.BUDGET = 12
-S.COST = { scout = 1, tank = 2, flak = 2, artillery = 3, fighter = 2, gunship = 3, bomber = 4 }
-S.UNITS = { "scout", "tank", "artillery", "flak", "fighter", "gunship", "bomber" }
-
--- squad types: who leads it and the two skills he brings
+-- Squads are all one kind of unit, led by a veteran of that kind: a tank squad is all tanks.
+-- size counts the leader. Aircraft can't take points; only one air squad a side.
+S.SLOTS = 5             -- squads you can field (at least 2)
+S.MAX_AIR = 1
 S.TYPES = {
-  { key = "armor", name = "Armor", leader = "tank", skills = { "hulldown", "smoke" },
-    desc = "Led by a veteran Tank. Holds ground and soaks fire.", default = { tank = 3, artillery = 1, scout = 1, flak = 1 } },
-  { key = "battery", name = "Battery", leader = "artillery", skills = { "barrage", "spotter" },
-    desc = "Led by a veteran Artillery piece. Breaks up defences from afar.", default = { tank = 2, artillery = 2, scout = 1 } },
-  { key = "recon", name = "Recon", leader = "scout", skills = { "flare", "sprint" },
-    desc = "Led by a veteran Scout. Fast, sees far, takes points.", default = { scout = 4, tank = 2, flak = 1 } },
-  { key = "aa", name = "Air Defense", leader = "flak", skills = { "flakburst", "repair" },
-    desc = "Led by a veteran Flak Truck. Shuts down aircraft and patches up the squad.", default = { flak = 2, tank = 2, scout = 2 } },
-  { key = "air", name = "Air Wing", leader = "gunship", skills = { "strafe", "afterburner" },
-    desc = "Led by a veteran Gunship. Hits anywhere fast - but aircraft can't take points.", default = { gunship = 2, fighter = 2, scout = 1 } },
+  { key = "armor", name = "Armor", unit = "tank", size = 4, skills = { "hulldown", "smoke" },
+    desc = "Four Tanks. Holds ground, soaks fire, takes points." },
+  { key = "battery", name = "Battery", unit = "artillery", size = 3, skills = { "barrage", "spotter" },
+    desc = "Three Artillery pieces. Breaks up anything your side can see - keep them behind the tanks." },
+  { key = "recon", name = "Recon", unit = "scout", size = 5, skills = { "flare", "sprint" },
+    desc = "Five Scouts. Fast, sees far: spotting, flanking and grabbing empty points." },
+  { key = "aa", name = "Air Defense", unit = "flak", size = 3, skills = { "flakburst", "repair" },
+    desc = "Three Flak Trucks. Shuts down aircraft; Field Repair patches up whoever stands nearby." },
+  { key = "air", name = "Gunships", unit = "gunship", size = 3, skills = { "strafe", "afterburner" },
+    desc = "Three Gunships. Hit anywhere fast - but they can't take points (one air squad a side)." },
 }
+for _, t in ipairs(S.TYPES) do t.leader = t.unit end
 S.byType = {}
 for _, t in ipairs(S.TYPES) do S.byType[t.key] = t end
 
@@ -67,42 +66,44 @@ S.CAP_R = 160           -- capture radius
 S.CAP_TIME = 10         -- seconds for one unit to take a neutral point
 S.HQ_HP = 16000
 
-function S.cost(units)
-  local p = 0
-  for k, n in pairs(units or {}) do p = p + (S.COST[k] or 0) * n end
-  return p
-end
-
--- older saved setups (Squad Tactics) carried an ability instead of a type
+-- saved setups from older versions (mixed squads) keep only their type
 function S.fixDesign(ds)
   if not S.byType[ds.type or ""] then ds.type = "armor" end
-  ds.units = ds.units or {}
-  if S.cost(ds.units) > S.BUDGET then ds.units = {} ; for k, v in pairs(S.byType[ds.type].default) do ds.units[k] = v end end
+  ds.units = nil
   return ds
 end
 
 function S.defaults()
   return {
-    { on = true, type = "armor", units = { tank = 3, artillery = 1, scout = 1, flak = 1 } },
-    { on = true, type = "battery", units = { tank = 2, artillery = 2, scout = 1 } },
-    { on = true, type = "recon", units = { scout = 4, tank = 2, flak = 1 } },
+    { on = true, type = "armor" },
+    { on = true, type = "armor" },
+    { on = true, type = "battery" },
+    { on = true, type = "recon" },
+    { on = false, type = "aa" },
   }
 end
 
--- a random squad within the budget (for the computer's side)
-function S.randomSquad(rng, idx)
-  local ty = S.TYPES[rng:random(#S.TYPES)]
-  if idx == 1 then ty = S.byType.armor end -- a solid core first
-  local units = {}
-  local left = S.BUDGET
-  units.tank = 2; left = left - 4
-  local pool = { "scout", "artillery", "flak", "tank", "tank", "gunship", "fighter" }
-  for _ = 1, 20 do
-    local k = pool[rng:random(#pool)]
-    if S.COST[k] <= left then units[k] = (units[k] or 0) + 1; left = left - S.COST[k] end
-    if left <= 0 then break end
+-- the setup is legal: 2-5 squads, at most one air squad
+function S.validSetup(list)
+  local n, air = 0, 0
+  for _, ds in ipairs(list or {}) do
+    if ds.on then n = n + 1; if ds.type == "air" then air = air + 1 end end
   end
-  return { type = ty.key, units = units }
+  return n >= 2 and air <= S.MAX_AIR, n, air
+end
+
+-- the computer's squads: a tank core, then a mix (an air squad now and then, flak if we fly)
+function S.randomSquads(rng, n)
+  local out = { { type = "armor" } }
+  local pool = { "armor", "armor", "battery", "recon", "battery", "aa", "air" }
+  local air = false
+  while #out < n do
+    local k = pool[rng:random(#pool)]
+    if k == "air" and air then k = "armor" end
+    if k == "air" then air = true end
+    out[#out + 1] = { type = k }
+  end
+  return out
 end
 
 ---------------------------------------------------------------------------
@@ -195,32 +196,29 @@ function S.setup(world, opts)
     if human and opts.squadSetup then
       for _, sq in ipairs(opts.squadSetup) do if sq.on then designs[#designs + 1] = S.fixDesign(sq) end end
     else
-      for i = 1, math.max(2, nOn > 0 and nOn or 3) do designs[i] = S.randomSquad(rng, i) end
+      designs = S.randomSquads(rng, math.max(2, nOn > 0 and nOn or 4))
     end
     -- toward the middle of the map: that's where the squads stand ready
     local mx, my = map.w * world.T / 2, map.h * world.T / 2
     local dx, dy = U.norm(mx - tm.startX, my - tm.startY)
     local px, py = -dy, dx
     for i, ds in ipairs(designs) do
-      local off = (i - (#designs + 1) / 2) * 200
+      local off = (i - (#designs + 1) / 2) * 170
       local cx, cy = tm.startX + dx * 260 + px * off, tm.startY + dy * 260 + py * off
       local ty2 = S.byType[ds.type]
       local sq = { team = t, idx = i, type = ds.type, members = {},
         skills = { { key = ty2.skills[1], readyAt = 0, untilT = 0 }, { key = ty2.skills[2], readyAt = 0, untilT = 0 } } }
       local lx, ly = place(world, cx, cy, D.units[ty2.leader].domain == "air" and nil or "land")
       makeLeader(world, sq, t, lx, ly)
-      local n = 0
-      for _, k in ipairs(S.UNITS) do
-        for _ = 1, (ds.units and ds.units[k] or 0) do
-          n = n + 1
-          local a = n * 1.9
-          local d = D.units[k]
-          local x, y = place(world, cx + math.cos(a) * (50 + n * 6), cy + math.sin(a) * (50 + n * 6), d.domain == "air" and nil or "land")
-          local u = world:spawn(k, t, x, y)
-          u.homeX, u.homeY = x, y
-          u.squad = sq
-          sq.members[#sq.members + 1] = u
-        end
+      -- the rest of the squad: the same kind of unit, around the leader
+      local d = D.units[ty2.unit]
+      for n = 1, ty2.size - 1 do
+        local a = n * 2.1
+        local x, y = place(world, cx + math.cos(a) * (55 + n * 6), cy + math.sin(a) * (55 + n * 6), d.domain == "air" and nil or "land")
+        local u = world:spawn(ty2.unit, t, x, y)
+        u.homeX, u.homeY = x, y
+        u.squad = sq
+        sq.members[#sq.members + 1] = u
       end
       world.squads.list[#world.squads.list + 1] = sq
     end
@@ -233,6 +231,13 @@ function S.squadsOf(world, team)
   local out = {}
   for _, sq in ipairs(world.squads and world.squads.list or {}) do if sq.team == team then out[#out + 1] = sq end end
   return out
+end
+
+-- members still to come: waiting at the HQ, or walking out to the leader
+function S.coming(sq)
+  local n = #(sq.queue or {})
+  for _, u in ipairs(sq.members) do if u.alive and u.rejoining then n = n + 1 end end
+  return n
 end
 
 function S.held(world, ally)
@@ -398,8 +403,23 @@ function S.update(world, dt)
         local u = world:spawn(q.key, sq.team, x, y)
         u.homeX, u.homeY = x, y
         u.squad = sq
+        u.rejoining = true
         sq.members[#sq.members + 1] = u
         if sq.leader and sq.leader.alive then world:issue(u, { type = "move", x = sq.leader.x, y = sq.leader.y }) end
+        if world.onSquadReinforced then world.onSquadReinforced(sq, u) end
+      end
+    end
+    -- replacements walk out to wherever the leader is now, then they're back in the squad
+    if sq.leader and sq.leader.alive then
+      local L = sq.leader
+      for _, u in ipairs(sq.members) do
+        if u.alive and u.rejoining then
+          if U.dist2(u.x, u.y, L.x, L.y) < 260 * 260 then
+            u.rejoining = nil
+          elseif #u.orders == 0 or (u.orders[1].type == "move" and U.dist2(u.orders[1].x, u.orders[1].y, L.x, L.y) > 250 * 250) then
+            world:issue(u, { type = "move", x = L.x, y = L.y, arrive = 120 })
+          end
+        end
       end
     end
     -- skill effects on the squad around the leader

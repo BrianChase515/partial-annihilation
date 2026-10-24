@@ -457,7 +457,9 @@ function UI.drawSquadPanel(game)
     lg.setFont(font(12))
     lg.setColor(up and 1 or 0.55, up and 0.92 or 0.55, up and 0.6 or 0.55)
     local nm = string.format("%d  %s  (%d)", i, SQ.byType[sq.type].name, alive)
-    if not up and sq.respawnAt then nm = nm .. string.format("  - leader back in %ds", math.max(0, math.ceil(sq.respawnAt - t))) end
+    local inc = SQ.coming(sq)
+    if inc > 0 then nm = nm .. string.format("  +%d coming", inc) end
+    if not up and sq.respawnAt then nm = nm .. string.format("  leader %ds", math.max(0, math.ceil(sq.respawnAt - t))) end
     lg.print(nm, x + 10, ry + 2)
     local frac = max > 0 and hp / max or 0
     lg.setColor(0.12, 0.14, 0.18)
@@ -1054,7 +1056,8 @@ function UI.drawSquadInfo(game, L, sqs)
     lg.setColor(1, 0.85, 0.4)
     local n = 0
     for _, u in ipairs(sq.members) do if u.alive then n = n + 1 end end
-    lg.print(string.format("Squad %d  -  %s  (%d)", sq.idx, ty.name, n), x, y)
+    local inc = SQ.coming(sq)
+    lg.print(string.format("Squad %d  -  %s  (%d)%s", sq.idx, ty.name, n, inc > 0 and string.format("   +%d on the way from the HQ", inc) or ""), x, y)
     lg.setFont(font(12))
     if Ld and Ld.alive then
       lg.setColor(0.85, 0.88, 0.92)
@@ -1712,7 +1715,7 @@ local COH_HELP = [[
 COMMANDER OF HEROES - CONTROLS
 
   Left-click a unit ......... selects its whole squad (Alt-click: just that unit)
-  1 / 2 / 3 ................. select squad 1, 2, 3 (tap twice to jump there)
+  1 - 5 ..................... always select that squad (tap twice to jump to its leader)
   C ......................... cycle through your squad leaders
   Right-click ............... move (each squad keeps its own pace) / attack a target
   A then click .............. attack-move: the squad forms ranks, marches, then fights and kites
@@ -1728,12 +1731,12 @@ HOW TO WIN
   Units heal fast at your HQ. Fallen members are replaced there - faster the more points
   you hold. A fallen leader returns after 45 seconds (his squad has no skills meanwhile).
 
-SQUAD TYPES
-  Armor (Tank leader) ........ Hull Down, Smoke Screen
-  Battery (Artillery leader) . Barrage, Spotter Drone
-  Recon (Scout leader) ....... Flare, Sprint
-  Air Defense (Flak leader) .. Flak Barrage, Field Repair
-  Air Wing (Gunship leader) .. Strafing Run, Afterburner
+SQUAD TYPES (each squad is one kind of unit; the leader is a veteran of it)
+  Armor - 4 Tanks .............. Hull Down, Smoke Screen
+  Battery - 3 Artillery ........ Barrage, Spotter Drone
+  Recon - 5 Scouts ............. Flare, Sprint
+  Air Defense - 3 Flak Trucks .. Flak Barrage, Field Repair
+  Gunships - 3 (one a side) .... Strafing Run, Afterburner
 
   Esc = menu,  F3 = pause,  M = sound,  Shift+M = music,  F1 = close this]]
 UI.COH_HELP = COH_HELP

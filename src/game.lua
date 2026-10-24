@@ -293,6 +293,12 @@ function G.new(opts)
         self:notice(string.format("%s: %s", SQ.byType[sq.type].name, sk.name), 1.4)
       end
     end
+    world.onSquadReinforced = function(sq, u)
+      if sq.team == 1 and world.time - (sq.lastReinfNote or -99) > 12 then
+        sq.lastReinfNote = world.time
+        self:notice(string.format("Squad %d (%s): replacements leaving the HQ to rejoin", sq.idx, SQ.byType[sq.type].name), 2)
+      end
+    end
     world.onSquadLeaderDown = function(sq)
       if sq.team == 1 then self:notice(string.format("%s Leader down - back at the HQ in 45s", SQ.byType[sq.type].name), 2.5) end
     end
@@ -1911,6 +1917,23 @@ function G:keypressed(key)
     if #facs > 0 then
       self:notice(n > 0 and ("New units from " .. #facs .. " factory(s) will join group " .. n) or "Factory group cleared", 1.6)
     end
+    return
+  end
+  if n and n >= 1 and n <= 9 and self.world.squads then
+    -- Commander of Heroes: 1-5 always pick that squad (tap twice to jump to its leader)
+    local SQ = require("src.squads")
+    local sq = SQ.squadsOf(self.world, 1)[n]
+    if not sq then return end
+    local alive = {}
+    for _, e in ipairs(sq.members) do if e.alive then alive[#alive + 1] = e end end
+    self:select(alive)
+    local now = love.timer.getTime()
+    if self.lastGroupTap.n == n and now - self.lastGroupTap.t < 0.4 and #alive > 0 then
+      local L = sq.leader
+      if L and L.alive then self:centerOn(L.x, L.y) else self:centerOn(alive[1].x, alive[1].y) end
+    end
+    self.lastGroupTap = { n = n, t = now }
+    if #alive == 0 then self:notice(string.format("Squad %d is gone for now - replacements are on the way from the HQ", n), 1.8) end
     return
   end
   if n and n >= 1 and n <= 9 then

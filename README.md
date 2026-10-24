@@ -82,12 +82,12 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
 
 ### Commander of Heroes: squads, skills and capture points
 
-A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units. There's no economy and no base building: each side has a Field HQ and two or three squads you design before the match (12 points each: Scouts 1, Tanks/Flak/Fighters 2, Artillery/Gunships 3, Bombers 4).
+A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units. There's no economy and no base building: each side has a Field HQ and two to five squads you pick before the match. Every squad is one kind of unit, led by a veteran of that kind.
 
-- **Squads, not armies.** Click any unit and its whole squad answers (Alt-click for one unit). Squads move at their own pace, march in ranks on attack-move, and start on control groups 1-3.
-- **Leaders by type, two skills each (Q / W, at the mouse):** Armor (led by a veteran Tank): Hull Down and Smoke Screen. Battery (Artillery): Barrage and Spotter Drone. Recon (Scout): Flare and Sprint. Air Defense (Flak): Flak Barrage and Field Repair. Air Wing (Gunship): Strafing Run and Afterburner. Skills run on cooldowns, and the squad panel shows them (click one to cast).
+- **Squads, not armies.** 1-5 always select that squad wherever it is (twice jumps to its leader); clicking any unit selects its whole squad (Alt-click for one unit). Squads move at their own pace and march in ranks on attack-move.
+- **Squad types, two skills each (Q / W, at the mouse):** Armor (4 Tanks): Hull Down and Smoke Screen. Battery (3 Artillery): Barrage and Spotter Drone. Recon (5 Scouts): Flare and Sprint. Air Defense (3 Flak Trucks): Flak Barrage and Field Repair. Gunships (3, one air squad a side; aircraft can't take points): Strafing Run and Afterburner. Skills run on cooldowns; the squad panels show them (click one to cast).
 - **Capture points and tickets.** Five points: one near each base, three across the middle. Ground units standing on a point take it (aircraft can't). Hold more than the enemy and their tickets drain; every unit lost costs tickets too. Win when they run out, or when their HQ falls.
-- **Fall back, come again.** Units heal fast at the HQ; fallen members are replaced there (faster the more points you hold) and a fallen leader returns after 45 seconds.
+- **Fall back, come again.** Units heal fast at the HQ; fallen members are replaced there (faster the more points you hold) and walk back out to their leader on their own (the panel shows "+N coming"); a fallen leader returns after 45 seconds.
 - 1v1 or 2v2 on a small or medium map, difficulty 1-10. Not scored yet (mode version 0.1).
 
 ### Your Commander is a roguelike hero with a nuke
