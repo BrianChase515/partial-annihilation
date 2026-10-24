@@ -161,7 +161,10 @@ C.ROLE_TUNING = {
   -- the support: less personal punch, but his army hits harder from the start (Aura: Might)
   warden = function(c) c.mods.dmg = c.mods.dmg * 0.75; c.mods.auraMight = true; c.taken.might = true end,
   -- the ranged carry: weak early, grows more per level than anyone
-  ranger = function(c) c.mods.dmg = c.mods.dmg * 1.1; c.mods.levelDmg = 1.05
+  ranger = function(c)
+    local k = tonumber(os.getenv("BS_RDMG") or "1.1")
+    c.mods.dmg = c.mods.dmg * k; c.mods.levelDmg = 1.05
+    local hk = tonumber(os.getenv("BS_RHP") or ""); if hk then c.maxhp = math.floor(c.maxhp * hk); c.hp = c.maxhp end
     local sp = tonumber(os.getenv("BS_RSPEED") or ""); if sp then c.mods.speed = (c.mods.speed or 1) * sp end end,
 }
 
