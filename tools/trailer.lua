@@ -507,11 +507,87 @@ local function battleScript()
   end)
 end
 
+
+---------------------------------------------------------------------------
+-- Commander of Heroes: squads, points, tickets and skills (both sides played by the computer)
+local function cohScript()
+  frame()
+  local SQ = require("src.squads")
+  game = startFn({ mode = "rts", coh = true, size = 96, water = 0.15, seed = 77, mods = { squads = true },
+    squadSetup = SQ.defaults(), cohLength = "standard",
+    players = { { human = true, ally = 1 }, { ally = 2, level = 8 } } })
+  local w = game.world
+  w.noFog = true
+  game.ais[#game.ais + 1] = SQ.newAI(w, 1, 8)
+  local function mine(k) for _, sq in ipairs(SQ.squadsOf(w, 1)) do if sq.type == k then return sq end end end
+  local function mid(sq)
+    local x, y, n = 0, 0, 0
+    for _, u in ipairs(sq.members) do if u.alive then x, y, n = x + u.x, y + u.y, n + 1 end end
+    if n == 0 then return w.capPoints[3].x, w.capPoints[3].y end
+    return x / n, y / n
+  end
+  local function pick(sq) local l = {}; for _, u in ipairs(sq.members) do if u.alive then l[#l + 1] = u end end; game:select(l); game.activeSq = sq end
+  -- 1. the field
+  simFast(8)
+  local vw, vh = love.graphics.getWidth(), love.graphics.getHeight() - 240
+  game.cam.zoom = math.min(vw / (w.map.w * w.T), vh / (w.map.h * w.T)) * 1.3
+  game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
+  pick(mine("armor"))
+  scene("Commander of Heroes: lead squads, not armies", 4, function() game.notices = {} end)
+  -- 2. a squad up close
+  game.cam.zoom = 1.0
+  local arm = mine("armor")
+  scene("Each squad is one kind of unit, led by a veteran - 1-5 grab them anywhere", 4.5, function()
+    game.notices = {}; pick(arm); local x, y = mid(arm); center(x, y) end)
+  -- 3. a fight over a point
+  for _ = 1, 40 do
+    simFast(3)
+    local hot
+    for _, p in ipairs(w.capPoints) do if p.contested then hot = p end end
+    if hot then break end
+  end
+  local hot = w.capPoints[3]
+  for _, p in ipairs(w.capPoints) do if p.contested then hot = p end end
+  game.cam.zoom = 0.85
+  scene("Hold more capture points and the enemy's tickets bleed away", 5, function()
+    game.notices = {}; center(hot.x, hot.y) end)
+  -- 4. a barrage
+  local bat = mine("battery")
+  local foe
+  for _ = 1, 60 do
+    if bat and bat.leader and bat.leader.alive then
+      local L = bat.leader
+      for _, o in ipairs(w.entities) do
+        if o.alive and o.team == 2 and not o.def.building and o.def.domain ~= "air" and U.dist(o.x, o.y, L.x, L.y) < 900 then foe = o; break end
+      end
+    end
+    if foe then break end
+    simFast(2)
+  end
+  if foe and bat then
+    bat.skills[1].readyAt = 0
+    pick(bat)
+    local tx, ty = foe.x, foe.y
+    local L = bat.leader
+    -- (let the battery see it for the shot)
+    w.visionSources[#w.visionSources + 1] = { x = tx, y = ty, r = 200, untilT = w.time + 6, ally = w.ally[1] }
+    SQ.cast(w, bat, 1, tx, ty)
+    game.cam.zoom = 0.95
+    scene("Leader skills on cooldowns: Barrage, Smoke, Flare, Hull Down, Rapid Fire...", 5.5, function()
+      game.notices = {}; center((tx + L.x) / 2 * 0.3 + tx * 0.7, (ty + L.y) / 2 * 0.3 + ty * 0.7) end)
+  end
+  -- 5. outro: the whole battle
+  simFast(20)
+  game.cam.zoom = math.min(vw / (w.map.w * w.T), vh / (w.map.h * w.T)) * 1.05
+  game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
+  scene("Partial Annihilation - free on GitHub, play in your browser", 4, function() game.notices = {} end)
+end
+
 function S.start(fn, m)
   startFn = fn
   mode = m or "rts"
   co = coroutine.create(function()
-    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() elseif mode == "battle" then battleScript() else rtsScript() end
+    if mode == "arena" then arenaScript() elseif mode == "craft" then craftScript() elseif mode == "battle" then battleScript() elseif mode == "coh" then cohScript() else rtsScript() end
     log("DONE frames", frameNo)
   end)
 end
