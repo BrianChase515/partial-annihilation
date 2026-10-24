@@ -72,6 +72,7 @@ local function think(w, h, brain)
       h.kiteT = w.time + 0.9
     end
   end
+end
 
 local function levelUp(w, h, L, brain)
   local A = require("src.arena")

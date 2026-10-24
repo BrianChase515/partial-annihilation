@@ -465,7 +465,7 @@ function C.nearestDropoff(w, team, x, y, kind)
 end
 
 -- nearest standing tree to a point (tile coords), searching outward
-function C.nearestTree(w, tx, ty, maxR)
+function C.nearestTree(w, tx, ty, maxR, bad)
   local map = w.map
   for r = 0, maxR or 14 do
     local best, bd
@@ -473,7 +473,7 @@ function C.nearestTree(w, tx, ty, maxR)
       for dx = -r, r do
         if math.max(math.abs(dx), math.abs(dy)) == r then
           local x, y = tx + dx, ty + dy
-          if map:inBounds(x, y) and map.terrain[y * map.w + x] == 4 then
+          if map:inBounds(x, y) and map.terrain[y * map.w + x] == 4 and not (bad and bad[y * map.w + x]) then
             -- must have an open neighbour to stand on
             local open = false
             for _, n in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
@@ -578,15 +578,27 @@ function C.updateHarvest(w, e, o, dt)
   if not tr or w.map.terrain[tr.y * w.map.w + tr.x] ~= 4 then
     local tx, ty = w.map:tileAt(e.x, e.y)
     if tr then tx, ty = tr.x, tr.y end
-    tr = C.nearestTree(w, tx, ty, 16)
+    tr = C.nearestTree(w, tx, ty, 16, o.bad)
+    -- this grove is used up (or out of reach): look further afield before giving up
+    if not tr then tr = C.nearestTree(w, tx, ty, 40, o.bad) end
     if not tr then w:popOrder(e); return end
     o.tree = tr
     o.spot = nil
   end
   o.spot = o.spot or standSpot(w, e, tr)
-  if not o.spot then o.tree = nil; return end
+  local function giveUpOn(t)
+    -- a tree nobody can get next to (walled in by buildings or other trees): skip it from now on
+    o.bad = o.bad or {}
+    o.bad[t.y * w.map.w + t.x] = true
+    o.tree, o.spot = nil, nil
+    e.path = nil
+  end
+  if not o.spot then giveUpOn(tr); return end
   if U.dist(e.x, e.y, o.spot[1], o.spot[2]) > 18 then
-    walkTo(w, e, o.spot[1], o.spot[2], dt, 8)
+    if walkTo(w, e, o.spot[1], o.spot[2], dt, 8) and U.dist(e.x, e.y, o.spot[1], o.spot[2]) > 30 then
+      -- the path ended short of the tree: it can't be reached
+      giveUpOn(tr)
+    end
     return
   end
   e.path = nil
