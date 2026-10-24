@@ -703,6 +703,8 @@ function W:speedOf(e)
     sp = sp * (self:bv(e, "speed") or 1)
     if e.slowUntil and self.time < e.slowUntil then sp = sp * 0.6 end
   end
+  local o = e.orders[1]
+  if o and o.groupSpeed and not e.retreating then sp = math.min(sp, o.groupSpeed) end
   return sp
 end
 

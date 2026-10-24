@@ -99,6 +99,13 @@ local function script(mode, secs)
         or (pick == "barracks" and e.key:match("barracks"))) then sel[#sel + 1] = e end
     end
     if #sel > 0 then game:select(sel) end
+    if os.getenv("PA_GMOVE") then
+      local units = {}
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and not e.def.building and not e.def.worker then units[#units + 1] = e end end
+      game:select(units)
+      game:commandMove(c.x + 300, c.y, "gmove", false)
+      for _, u in ipairs(units) do print("GMOVE", u.key, u.def.speed, w:speedOf(u), u.orders[1] and u.orders[1].type) end
+    end
     if os.getenv("PA_INSPECT") then
       w.noFog = true
       local best, bd

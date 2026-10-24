@@ -543,9 +543,17 @@ end
 function G:commandMove(x, y, kind, queue)
   local units = self:selectedMobile()
   local slots = self:formation(units, x, y)
+  -- group move: everyone walks at the slowest unit's pace so the army arrives together
+  local groupSpeed
+  if kind == "gmove" then
+    for _, u in ipairs(units) do
+      local sp = self.world:speedOf(u)
+      if not groupSpeed or sp < groupSpeed then groupSpeed = sp end
+    end
+  end
   for _, u in ipairs(units) do
     local s = slots[u]
-    local o = { type = kind, x = s[1], y = s[2] }
+    local o = { type = kind == "gmove" and "move" or kind, x = s[1], y = s[2], groupSpeed = groupSpeed }
     if kind == "patrol" then
       local last = queue and u.orders[#u.orders]
       o.fromX, o.fromY = last and last.x or u.x, last and last.y or u.y
@@ -553,9 +561,9 @@ function G:commandMove(x, y, kind, queue)
     self.world:issue(u, o, queue)
   end
   for _, f in ipairs(self:selectedFactories()) do
-    self.world:issue(f, { type = kind == "patrol" and "patrol" or kind, x = x, y = y })
+    self.world:issue(f, { type = kind == "patrol" and "patrol" or (kind == "gmove" and "move" or kind), x = x, y = y })
   end
-  local col = kind == "amove" and { 1, 0.4, 0.3 } or (kind == "patrol" and { 0.4, 0.7, 1 } or { 0.3, 1, 0.4 })
+  local col = kind == "gmove" and { 0.4, 0.9, 1 } or kind == "amove" and { 1, 0.4, 0.3 } or (kind == "patrol" and { 0.4, 0.7, 1 } or { 0.3, 1, 0.4 })
   self.world.effects[#self.world.effects + 1] = { kind = "ping", x = x, y = y, t = 0, life = 0.5, r = col[1], g = col[2], b = col[3] }
 end
 
@@ -1416,7 +1424,7 @@ function G:mousepressed(x, y, button)
       -- constructors: click = patrol, drag = repair zone (decided on release)
       self.zoneStart = { wx, wy }
       return
-    elseif self.mode == "amove" or self.mode == "patrol" then
+    elseif self.mode == "amove" or self.mode == "patrol" or self.mode == "gmove" then
       self:commandMove(wx, wy, self.mode, shift)
       if not shift then self.mode = nil end
       return
@@ -1440,6 +1448,11 @@ function G:mousepressed(x, y, button)
     end
     self.boxStart = { x, y }
   elseif button == 2 then
+    if self.mode == "gmove" then
+      self:commandMove(wx, wy, "gmove", shift)
+      if not shift then self.mode = nil end
+      return
+    end
     if self.mode then self.mode = nil; return end
     -- decide on release: a drag pans the camera, a click gives an order
     self.rightDown = { x, y, self.cam.x, self.cam.y }
@@ -1832,7 +1845,12 @@ function G:keypressed(key)
       if #u.orders > 0 then table.remove(u.orders); u.path = nil end
     end
   elseif key == "g" then
-    for _, f in ipairs(self:selectedFactories()) do f.repeatMode = not f.repeatMode end
+    local facs = self:selectedFactories()
+    if #facs > 0 then
+      for _, f in ipairs(facs) do f.repeatMode = not f.repeatMode end
+    elseif #self:selectedMobile() > 1 then
+      self.mode = "gmove"
+    end
   elseif key == "m" and shift then
     MUSIC.setMuted(not MUSIC.muted)
     self:notice(MUSIC.muted and "Music off" or "Music on", 1)
