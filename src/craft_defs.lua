@@ -253,14 +253,14 @@ return function(D)
   U.goldmine = building({ name = "Gold Mine", short = "$", w = 3, h = 3, hp = 99999, sight = 0, neutralSite = true,
     cost = { gold = 0, wood = 0, food = 0, work = 1 },
     desc = "Workers mine gold here, one at a time. It runs dry eventually." })
-  U.gnoll = unit({ name = "Gnoll Brute", short = "g", radius = 10, hp = 645, speed = 70, sight = 300, melee = true,
-    weapon = { damage = 22, range = 65, reload = 1.2, speed = 900, targets = LAND },
+  U.gnoll = unit({ name = "Gnoll Brute", short = "g", radius = 10, hp = 580, speed = 70, sight = 300, melee = true,
+    weapon = { damage = 19, range = 65, reload = 1.2, speed = 900, targets = LAND },
     cost = { gold = 0, wood = 0, food = 0, work = 1 }, xp = 45, bounty = 15, desc = "A neutral creep." })
-  U.gnollarcher = unit({ name = "Gnoll Archer", short = "a", radius = 9, hp = 440, speed = 70, sight = 320,
-    weapon = { damage = 25, range = 240, reload = 1.4, speed = 700, targets = ALL },
+  U.gnollarcher = unit({ name = "Gnoll Archer", short = "a", radius = 9, hp = 395, speed = 70, sight = 320,
+    weapon = { damage = 21, range = 240, reload = 1.4, speed = 700, targets = ALL },
     cost = { gold = 0, wood = 0, food = 0, work = 1 }, xp = 40, bounty = 15, desc = "A neutral creep." })
-  U.ogrelord = unit({ name = "Ogre Warlord", short = "O", radius = 15, hp = 2185, speed = 66, sight = 320, melee = true, armor = 0.85,
-    weapon = { damage = 59, range = 75, reload = 1.4, speed = 900, targets = LAND, splash = 40 },
+  U.ogrelord = unit({ name = "Ogre Warlord", short = "O", radius = 15, hp = 1965, speed = 66, sight = 320, melee = true, armor = 0.85,
+    weapon = { damage = 50, range = 75, reload = 1.4, speed = 900, targets = LAND, splash = 40 },
     cost = { gold = 0, wood = 0, food = 0, work = 1 }, xp = 140, bounty = 100,
     desc = "The boss guarding the middle mine. Drops a gold bounty." })
 
