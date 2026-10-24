@@ -10,6 +10,7 @@ local co, game, startFn, mode
 local pending
 local frameNo = 0
 local caption, capT, capY = nil, 0, nil
+local cleanNotices = false
 local FPS = 15
 
 local function log(...) print("[trailer]", ...); io.stdout:flush() end
@@ -44,6 +45,7 @@ local function scene(text, seconds, each, opts)
   for i = 1, n do
     if not opts.still then game:update(1 / FPS * (opts.speed or 1)) end
     if each then each(i, n) end
+    if cleanNotices then game.notices = {} end
     capT = i / n
     frameNo = frameNo + 1
     pending = string.format("trailer_%s_%05d.png", mode, frameNo)
@@ -345,6 +347,8 @@ local function craftScript()
     aiGame({ mode = "craft", size = 88, seed = seed, template = tmpl, players = {
       { ally = 1, level = 7, race = "vanguard", class = "ranger" }, { ally = 2, level = 7, race = "warband", class = "juggernaut" } } })
     game.world.onCraftRefused = nil -- the computer's "not enough food" would spam the screen
+    game.world.noFog = true -- show both sides
+    cleanNotices = true
     return game.world
   end
   -- 1. the Horseshoe
@@ -353,7 +357,6 @@ local function craftScript()
   overview(w)
   scene("COMMANDER CRAFT  -  a classic fantasy-RTS ruleset, built into Partial Annihilation", 4.5, function() game.notices = {} end)
   -- 2. economy
-  w.noFog = false
   local hall
   for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.hall then hall = e end end
   game.cam.zoom = 1.25

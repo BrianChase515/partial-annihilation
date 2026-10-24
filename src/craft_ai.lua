@@ -76,6 +76,9 @@ function AI.new(world, team, level, opts)
   self.level = math.max(1, math.min(10, level or 5))
   local L = self.level
   local P = (opts and opts.bench) and AI.BENCH or AI.params(L)
+  if opts and opts.legacy then P.legacy = true end
+  local abl = os.getenv("PA_ABL") -- test harness: switch off one of the new habits
+  if abl and not P.legacy then P[abl] = true end -- test harness: this level with the old army habits
   self.P = P
   self.rng = love.math.newRandomGenerator(world.map.seed + team * 313)
   self.thinkEvery = P.think
@@ -419,11 +422,9 @@ function AI:buildings(tm)
     end
     if self.P.towers >= 2 then order[#order + 1] = { r.tower, 2, 0 } end
   end
-  local armyOk = self.P.legacy or self:armyFood() >= 14 or tm.gold > 450
-  for i, o in ipairs(order) do
+  for _, o in ipairs(order) do
     local k, want, from = o[1], o[2], o[3]
-    -- the core four always; anything past them (tier buildings, a second barracks) only with an army in the field
-    if t >= from * (L <= 3 and 1.4 or 1) and have(k) < want and (from > 0 or armyOk) then
+    if t >= from * (L <= 3 and 1.4 or 1) and have(k) < want then
       local near = k == r.mill and self:woodSpot(hall) or nil
       if near then
         if self:build(k, near[1], near[2], 2, 8) then return end
@@ -525,7 +526,7 @@ function AI:production(tm)
   local altar = self:mine(function(e) return e.def.altar and e.built >= 1 end)[1]
   if altar and #altar.queue == 0 then
     local n = #C.heroesOf(w, self.team, true)
-    if n < 3 and tm.tier >= n + 1 and (n == 0 or self.P.legacy or self:armyFood() >= 12 + 4 * n) then
+    if n < 3 and tm.tier >= n + 1 then
       local pool = {}
       for _, k in ipairs(r.heroes) do
         local ok, why = C.canOrder(w, self.team, "hero_" .. k)
@@ -539,8 +540,7 @@ function AI:production(tm)
   if (saving or self.savingHall) and tm.gold < 500 then return end
   -- research at the forge and the unit buildings, when there's spare
   local spareGold = tm.gold - (tm.tier < 3 and 250 or 100)
-  -- research is for an army we already have, not instead of one
-  if spareGold > 0 and t > 200 and (self.P.legacy or self:armyFood() >= 12 or tm.gold > 700) then
+  if spareGold > 0 and t > 200 then
     for _, f in ipairs(self:mine(function(e) return e.def.factory and e.built >= 1 and #e.queue == 0 and not e.def.hall and not e.def.altar end)) do
       for _, k in ipairs(f.def.builds) do
         local d = D.units[k]
@@ -715,10 +715,10 @@ function AI:army(tm)
         end
         for _, u in ipairs(fighters) do
           local o = u.orders[1]
-          local far = not self.P.legacy and ln >= 3 and U.dist(u.x, u.y, lead.x, lead.y) > 700
+          local far = not self.P.legacy and ln >= 3 and U.dist(u.x, u.y, lead.x, lead.y) > 700 and not self:enemyNear(u.x, u.y, 450)
           if far then
-            if not (o and o.type == "move" and o.join and U.dist(o.x, o.y, lead.x, lead.y) < 300) then
-              w:issue(u, { type = "move", x = lead.x, y = lead.y, join = true })
+            if not (o and o.join and U.dist(o.x, o.y, lead.x, lead.y) < 300) then
+              w:issue(u, { type = "amove", x = lead.x, y = lead.y, join = true })
             end
           elseif not o or (o.type == "amove" and U.dist(o.x, o.y, tgt.x, tgt.y) > 250) or o.type == "move" then
             w:issue(u, { type = "amove", x = tgt.x, y = tgt.y })

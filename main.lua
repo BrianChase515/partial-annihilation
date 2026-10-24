@@ -87,8 +87,8 @@ function love.load(args)
       for k in (args[i + 4] or ""):gmatch("[^,]+") do races[#races + 1] = k end
       for k in (args[i + 5] or ""):gmatch("[^,]+") do classes[#classes + 1] = k end
       local players = {
-        { ally = 1, level = tonumber(la) or 5, race = races[1], class = classes[1], bench = la == "B" },
-        { ally = 2, level = tonumber(lb) or 5, race = races[2], class = classes[2], bench = lb == "B" },
+        { ally = 1, level = tonumber(la) or tonumber(la:match("^(%d+)L$") or "") or 5, race = races[1], class = classes[1], bench = la == "B", legacy = la:match("L$") ~= nil },
+        { ally = 2, level = tonumber(lb) or tonumber(lb:match("^(%d+)L$") or "") or 5, race = races[2], class = classes[2], bench = lb == "B", legacy = lb:match("L$") ~= nil },
       }
       local tmpl
       for k, x in ipairs(args) do if x == "--template" then tmpl = args[k + 1] end end
