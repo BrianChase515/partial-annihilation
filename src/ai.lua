@@ -44,6 +44,10 @@ function AI.new(world, team, level, profileKey)
   self.armyTimer = 2
   self.waves = 0
   self.wave = {}          -- units currently on an attack
+  -- Scouts as artillery spotters: level 5 knows the trick and uses it now and then, level 10 always
+  local L0 = (self.diff and self.diff.level) or level or 5
+  self.spotChance = L0 >= 5 and math.min(1, 0.35 + 0.13 * (L0 - 5)) or 0
+  self.spotters = {}
   self.lastWave = -999
   local tm = world.teams[team]
   self.baseX, self.baseY = tm.startX, tm.startY
@@ -944,6 +948,14 @@ function AI:pickUnit(f)
       for _, u in ipairs(self.hunters) do if u.alive then have = have + 1 end end
       if have + self:queued("scout") < self.huntersWanted and self:countPlanned("scout") < self.huntersWanted + 3 then return "scout" end
     end
+    -- a Scout to spot for every few artillery (when this player knows the trick)
+    if self.spotChance > 0 then
+      local arty = self:countPlanned("artillery")
+      local want = arty >= 2 and math.ceil(arty / 3) or 0
+      local have = 0
+      for u in pairs(self.spotters) do if u.alive then have = have + 1 end end
+      if have + self:queued("scout") < want and rng:random() < self.spotChance then return "scout" end
+    end
     local myFlak = self:countPlanned("flak") + self:queued("flak")
     local w = {
       tank = 50,
@@ -1394,6 +1406,77 @@ function AI:defendOutposts(army, inWave)
   end
 end
 
+-- Artillery only fires at full range on what a friend can see. Spotter Scouts keep the
+-- nearest enemy at the edge of their sight, out of its reach, so the guns can shell it.
+function AI:thinkSpotters(army, inWave)
+  local world = self.world
+  for u in pairs(self.spotters) do if not u.alive then self.spotters[u] = nil end end
+  if self.spotChance <= 0 then return end
+  -- the guns that are out on the attack
+  local guns, gx, gy = 0, 0, 0
+  for _, u in ipairs(army) do
+    if u.key == "artillery" and inWave[u] then guns = guns + 1; gx, gy = gx + u.x, gy + u.y end
+  end
+  local n = 0
+  for _ in pairs(self.spotters) do n = n + 1 end
+  -- recruit idle scouts (not hunters) when this wave's guns get spotters
+  if guns > 0 and self.waveSpots then
+    local want = math.max(1, math.ceil(guns / 3))
+    for _, u in ipairs(army) do
+      if n >= want then break end
+      if u.key == "scout" and not self.spotters[u] and not self.isHunter[u] then
+        self.spotters[u] = true; n = n + 1
+        self.wave[u] = nil; inWave[u] = nil
+      end
+    end
+  end
+  if guns == 0 then
+    -- no guns out: spotters wait at the staging point
+    for u in pairs(self.spotters) do
+      if #u.orders == 0 and U.dist(u.x, u.y, self.stageX, self.stageY) > 300 then
+        world:issue(u, { type = "move", x = self.stageX + self.rng:random(-60, 60), y = self.stageY + self.rng:random(-60, 60) })
+      end
+    end
+    return
+  end
+  gx, gy = gx / guns, gy / guns
+  if os.getenv("PA_SPOTDBG") and math.floor(world.time) % 20 == 0 and self.spotDbg ~= math.floor(world.time) then
+    self.spotDbg = math.floor(world.time)
+    print("SPOT", math.floor(world.time), self.team, "guns", guns, "spotters", n, "waveSpots", tostring(self.waveSpots))
+  end
+  for u in pairs(self.spotters) do
+    u.holdFire = true
+    -- the nearest enemy to the guns (anything they could shell)
+    local best, bd
+    for _, o in ipairs(world.entities) do
+      if o.alive and o.team and self:isHostile(o.team) and o.def.domain ~= "air" then
+        local d = U.dist(gx, gy, o.x, o.y)
+        if d < 900 and (not bd or d < bd) then best, bd = o, d end
+      end
+    end
+    local sight = world:sightOf(u)
+    local x, y
+    if best then
+      -- stand back from it, on the guns' side, just inside our sight and outside its reach
+      local reach = best.def.weapon and world:rangeOf(best) or 0
+      local stand = math.max(reach + 40, math.min(sight - 40, 380))
+      local dx, dy = U.norm(gx - best.x, gy - best.y)
+      x, y = best.x + dx * stand, best.y + dy * stand
+    else
+      -- lead the guns toward their target
+      local tx, ty = self:pickTarget("land")
+      if tx then
+        local dx, dy = U.norm(tx - gx, ty - gy)
+        x, y = gx + dx * 220, gy + dy * 220
+      end
+    end
+    if x then
+      local o = u.orders[1]
+      if not o or o.type ~= "move" or U.dist(o.x, o.y, x, y) > 60 then world:issue(u, { type = "move", x = x, y = y }) end
+    end
+  end
+end
+
 function AI:thinkArmy()
   local world = self.world
   self.retarget = (self.retarget or 0) - 1
@@ -1421,12 +1504,13 @@ function AI:thinkArmy()
   self.wave = inWave
 
   self:updateKnowledge()
+  self:thinkSpotters(army, inWave)
   self:thinkHunters(army, inWave)
   self:defendOutposts(army, inWave)
 
   -- scouts wander to find things
   for _, u in ipairs(army) do
-    if u.key == "scout" and #u.orders == 0 and not inWave[u] and not self.isHunter[u] then
+    if u.key == "scout" and #u.orders == 0 and not inWave[u] and not self.isHunter[u] and not self.spotters[u] then
       local map = world.map
       local dp = map.deposits[self.rng:random(#map.deposits)]
       local x, y = map:center(dp.x, dp.y)
@@ -1502,6 +1586,7 @@ function AI:thinkArmy()
   -- don't wait forever when the army is big but slow to grow
   if not launch and #home >= math.max(5, waveSize * 0.6) and t - self.lastWave > 240 then launch = true end
   if launch and t > (self.diff.firstWave or 200) then
+    self.waveSpots = self.rng:random() < self.spotChance
     self.waves = self.waves + 1
     self.lastWave = t
     for _, u in ipairs(home) do
