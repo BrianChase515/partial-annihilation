@@ -59,7 +59,7 @@ local RTS_SETUP = { game = "standard",
   sandbox = { you = { tank = 20, artillery = 6, flak = 4 }, enemy = { tank = 20, artillery = 6, gunship = 4 } } }
 -- Commander of Heroes: map, format, difficulty and the squads you field
 local COH_FORMATS = { { "1v1", 1, 1 }, { "2v2", 2, 2 } }
-local COH_SETUP = { size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
+local COH_SETUP = { v = 2, size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
@@ -115,7 +115,8 @@ function Menu.new(prev)
       COH_SETUP.size = mem.coh.size or COH_SETUP.size
       COH_SETUP.format = COH_FORMATS[mem.coh.format or 0] and mem.coh.format or 1
       COH_SETUP.level = mem.coh.level or COH_SETUP.level
-      if mem.coh.squads and #mem.coh.squads == require("src.squads").SLOTS then
+      -- (setups saved before v2 had the anti-air squad off: start those from the new defaults)
+      if mem.coh.v == 2 and mem.coh.squads and #mem.coh.squads == require("src.squads").SLOTS then
         COH_SETUP.squads = mem.coh.squads
         for _, ds in ipairs(COH_SETUP.squads) do SQ.fixDesign(ds) end
       end
@@ -538,13 +539,13 @@ function Menu:cohRects()
   for i = 1, SQ.SLOTS do
     local sq = C.squads[i]
     local yy = y + (i - 1) * 40
-    r[#r + 1] = { x = px, y = yy, w = 96, h = 32, label = "Squad " .. i, kind = "sqtab", sqi = i, active = C.squadTab == i, small = true }
-    r[#r + 1] = { x = px + 102, y = yy, w = 70, h = 32, label = sq.on and "On" or "Off", kind = "sqon", sqi = i, active = sq.on, small = true }
+    r[#r + 1] = { x = px + 102, y = yy, w = 70, h = 32, label = sq.on and "On" or "Off", kind = "sqon", sqi = i, active = sq.on, small = true,
+      cohRow = i }
     local ty = SQ.byType[sq.type] or SQ.TYPES[1]
     local un = D.units[ty.unit].name
     if not un:match("y$") then un = un .. "s" end
     r[#r + 1] = { x = px + 178, y = yy, w = 200, h = 32, label = ty.name .. "  (" .. ty.size .. " " .. un .. ")  v",
-      kind = "sqtype", sqi = i, small = true }
+      kind = "sqtype", sqi = i, small = true, cohRow = i }
   end
   self:updateRect(r, w)
   return r
@@ -560,6 +561,16 @@ function Menu:drawCohInfo(x0, y)
   lg.setColor(0.55, 0.62, 0.7)
   lg.print("YOUR SQUADS  (2 to 5; each is one kind of unit, led by a veteran)", px, y - 22)
   local ok, n, air = SQ.validSetup(C.squads)
+  local mx, my = love.mouse.getPosition()
+  for i = 1, SQ.SLOTS do
+    local yy = y + (i - 1) * 40
+    if my >= yy and my <= yy + 32 and mx >= px and mx <= px + 380 and not self.dropdown then C.squadTab = i end
+    lg.setFont(R.font(14))
+    local on = C.squads[i].on
+    lg.setColor(C.squadTab == i and 1 or 0.8, C.squadTab == i and 0.85 or 0.84, C.squadTab == i and 0.4 or 0.9, on and 1 or 0.5)
+    lg.print("Squad " .. i, px + 4, yy + 7)
+  end
+  cur = C.squads[C.squadTab] or C.squads[1]
   local ty = SQ.byType[cur.type] or SQ.TYPES[1]
   local yy = y + SQ.SLOTS * 40 + 10
   lg.setColor(0.95, 0.85, 0.5)
@@ -576,6 +587,9 @@ function Menu:drawCohInfo(x0, y)
   if not ok then
     lg.setColor(1, 0.5, 0.4)
     lg.print(n < 2 and "Field at least 2 squads." or "Only one air squad (Gunships) a side.", px, yy + 6)
+  elseif not SQ.hasAntiAir(C.squads) then
+    lg.setColor(1, 0.75, 0.35)
+    lg.printf("No anti-air: only Air Defense and Recon (light AA) can hit the enemy's Gunships.", px, yy + 6, 400)
   end
   -- how it plays, under the setup on the left
   lg.setColor(0.6, 0.66, 0.74)
@@ -956,6 +970,17 @@ function Menu:dropdownItems()
   local items = {}
   local ih = 28
   local y0 = d.y
+  if d.coh then
+    -- Commander of Heroes: the squad types
+    local SQ = require("src.squads")
+    if y0 + #SQ.TYPES * ih > h - 10 then y0 = math.max(10, h - 10 - #SQ.TYPES * ih) end
+    for i, ty in ipairs(SQ.TYPES) do
+      local un = D.units[ty.unit].name
+      if not un:match("y$") then un = un .. "s" end
+      items[i] = { x = d.x, y = y0 + (i - 1) * ih, w = d.w, h = ih - 2, ctype = ty.key, label = ty.name .. "  (" .. ty.size .. " " .. un .. ")" }
+    end
+    return items
+  end
   if y0 + #D.profiles * ih > h - 10 then y0 = math.max(10, h - 10 - #D.profiles * ih) end
   for i, p in ipairs(D.profiles) do
     items[i] = { x = d.x, y = y0 + (i - 1) * ih, w = d.w, h = ih - 2, prof = i, label = p.key }
@@ -977,13 +1002,20 @@ function Menu:drawDropdown()
   local hoverDesc
   for _, it in ipairs(items) do
     local hover = mx >= it.x and mx <= it.x + it.w and my >= it.y and my <= it.y + it.h
-    local cur = self.slots[d.slot].prof == it.prof
+    local cur = d.coh and (COH_SETUP.squads[d.coh].type == it.ctype) or (not d.coh and self.slots[d.slot].prof == it.prof)
     if hover then lg.setColor(0.22, 0.32, 0.45) elseif cur then lg.setColor(0.16, 0.3, 0.45) else lg.setColor(0.1, 0.13, 0.18) end
     lg.rectangle("fill", it.x, it.y, it.w, it.h, 4)
     lg.setFont(R.font(15))
     lg.setColor(1, 1, 1)
     lg.print(it.label, it.x + 10, it.y + 4)
-    if hover then hoverDesc = D.profiles[it.prof].desc end
+    if hover then
+      if it.ctype then
+        local SQ = require("src.squads")
+        local ty = SQ.byType[it.ctype]
+        hoverDesc = ty.desc .. "\n\nQ  " .. SQ.SKILLS[ty.skills[1]].name .. ": " .. SQ.SKILLS[ty.skills[1]].desc
+          .. "\nW  " .. SQ.SKILLS[ty.skills[2]].name .. ": " .. SQ.SKILLS[ty.skills[2]].desc
+      else hoverDesc = D.profiles[it.prof].desc end
+    end
   end
   if hoverDesc then
     lg.setFont(R.font(13))
@@ -1001,7 +1033,8 @@ function Menu:mousepressed(x, y, b)
   if self.dropdown then
     for _, it in ipairs(self:dropdownItems()) do
       if x >= it.x and x <= it.x + it.w and y >= it.y and y <= it.y + it.h then
-        self.slots[self.dropdown.slot].prof = it.prof
+        if it.ctype then COH_SETUP.squads[self.dropdown.coh].type = it.ctype; COH_SETUP.squadTab = self.dropdown.coh
+        else self.slots[self.dropdown.slot].prof = it.prof end
       end
     end
     self.dropdown = nil
@@ -1056,12 +1089,8 @@ function Menu:mousepressed(x, y, b)
         sq.on = not sq.on
         COH_SETUP.squadTab = r.sqi
       elseif r.kind == "sqtype" then
-        local SQ = require("src.squads")
         COH_SETUP.squadTab = r.sqi
-        local sq = COH_SETUP.squads[r.sqi]
-        local idx = 1
-        for i, ty in ipairs(SQ.TYPES) do if ty.key == sq.type then idx = i end end
-        sq.type = SQ.TYPES[(idx - 1 + dir) % #SQ.TYPES + 1].key
+        self.dropdown = { coh = r.sqi, x = r.x, y = r.y + r.h + 2, w = 250 }
       elseif r.kind == "cohsize" then COH_SETUP.size = r.value
       elseif r.kind == "cohfmt" then COH_SETUP.format = r.value
       elseif r.kind == "cohlv" then COH_SETUP.level = math.max(1, math.min(10, COH_SETUP.level + (r.d ~= 0 and r.d or dir)))

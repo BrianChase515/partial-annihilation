@@ -827,7 +827,7 @@ function W:gainXP(e, amount)
   while L < W.MAX_LEVEL and e.xp >= self:xpForLevel(e, L + 1) do
     L = L + 1
     local oldMax = e.maxhp
-    e.maxhp = math.floor(e.def.hp * (1 + 0.10 * L))
+    e.maxhp = math.floor(e.def.hp * (1 + 0.10 * L) * (e.hpMul or 1))
     if e.arenaTower then
       e.hp = e.hp + (e.maxhp - oldMax) -- towers just grow; ranking up never repairs them
     else

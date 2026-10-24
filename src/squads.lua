@@ -20,7 +20,7 @@ S.TYPES = {
   { key = "battery", name = "Battery", unit = "artillery", size = 3, skills = { "barrage", "spotter" },
     desc = "Three Artillery pieces. Breaks up anything your side can see - keep them behind the tanks." },
   { key = "recon", name = "Recon", unit = "scout", size = 5, skills = { "flare", "sprint" },
-    desc = "Five Scouts. Fast, sees far: spotting, flanking and grabbing empty points." },
+    desc = "Five Scouts. Fast, sees far, and carries light anti-air guns: spotting, flanking and grabbing empty points." },
   { key = "aa", name = "Air Defense", unit = "flak", size = 3, skills = { "flakburst", "repair" },
     desc = "Three Flak Trucks. Shuts down aircraft; Field Repair patches up whoever stands nearby." },
   { key = "air", name = "Gunships", unit = "gunship", size = 3, skills = { "strafe", "afterburner" },
@@ -63,8 +63,9 @@ S.REINFORCE = 30        -- a fallen member is replaced at the HQ this long after
 S.TICKETS = 1000
 S.DRAIN = 0.4         -- tickets a second per point of difference
 S.CAP_R = 160           -- capture radius
-S.CAP_TIME = 10         -- seconds for one unit to take a neutral point
+S.CAP_TIME = 14         -- seconds for one unit to take a neutral point
 S.HQ_HP = 16000
+S.HP_MUL = 1.6          -- squad units are this much tougher than in Annihilation
 
 -- saved setups from older versions (mixed squads) keep only their type
 function S.fixDesign(ds)
@@ -79,8 +80,16 @@ function S.defaults()
     { on = true, type = "armor" },
     { on = true, type = "battery" },
     { on = true, type = "recon" },
-    { on = false, type = "aa" },
+    { on = true, type = "aa" },
   }
+end
+
+-- anything in this setup that can shoot aircraft?
+function S.hasAntiAir(list)
+  for _, ds in ipairs(list or {}) do
+    if ds.on and (ds.type == "aa" or ds.type == "recon" or ds.type == "air") then return true end
+  end
+  return false
 end
 
 -- the setup is legal: 2-5 squads, at most one air squad
@@ -118,14 +127,24 @@ local function place(world, x, y, layer)
   return x, y
 end
 
+-- every squad unit: tougher than in Annihilation (fights last long enough to use skills), Recon
+-- carries light anti-air guns, and the leader is a veteran
+local function prep(u, sq, leader)
+  u.squad = sq
+  u.hpMul = S.HP_MUL * (leader and 1.75 or 1)
+  u.maxhp = math.floor(u.def.hp * (1 + 0.10 * (u.level or 0)) * u.hpMul); u.hp = u.maxhp
+  u.mods = u.mods or {}
+  if leader then u.mods.dmg = 1.25 end
+  if sq.type == "recon" then u.mods.hitsAir = true end
+end
+
 local function makeLeader(world, sq, t, x, y)
   local ty = S.byType[sq.type]
   local L = world:spawn(ty.leader, t, x, y)
   L.homeX, L.homeY = x, y
   L.squad, L.squadLeader = sq, true
   L.genName = ty.name .. " Leader"
-  L.maxhp = math.floor(L.maxhp * 1.75); L.hp = L.maxhp
-  L.mods = { dmg = 1.25 }
+  prep(L, sq, true)
   sq.leader = L
   sq.members[#sq.members + 1] = L
   return L
@@ -197,6 +216,10 @@ function S.setup(world, opts)
       for _, sq in ipairs(opts.squadSetup) do if sq.on then designs[#designs + 1] = S.fixDesign(sq) end end
     else
       designs = S.randomSquads(rng, math.max(2, nOn > 0 and nOn or 4))
+      -- facing air (the human's setup is known): make sure something here shoots it down
+      local enemyAir = false
+      for _, ds in ipairs(opts.squadSetup or {}) do if ds.on and ds.type == "air" then enemyAir = true end end
+      if enemyAir and not S.hasAntiAir(designs) then designs[#designs].type = "aa" end
     end
     -- toward the middle of the map: that's where the squads stand ready
     local mx, my = map.w * world.T / 2, map.h * world.T / 2
@@ -217,7 +240,7 @@ function S.setup(world, opts)
         local x, y = place(world, cx + math.cos(a) * (55 + n * 6), cy + math.sin(a) * (55 + n * 6), d.domain == "air" and nil or "land")
         local u = world:spawn(ty2.unit, t, x, y)
         u.homeX, u.homeY = x, y
-        u.squad = sq
+        prep(u, sq)
         sq.members[#sq.members + 1] = u
       end
       world.squads.list[#world.squads.list + 1] = sq
@@ -402,7 +425,7 @@ function S.update(world, dt)
         local x, y = place(world, hq0.x + (math.random() - 0.5) * 160, hq0.y + 120, d.domain == "air" and nil or "land")
         local u = world:spawn(q.key, sq.team, x, y)
         u.homeX, u.homeY = x, y
-        u.squad = sq
+        prep(u, sq)
         u.rejoining = true
         sq.members[#sq.members + 1] = u
         if sq.leader and sq.leader.alive then world:issue(u, { type = "move", x = sq.leader.x, y = sq.leader.y }) end
@@ -601,6 +624,10 @@ function S.newAI(world, team, level)
   self.rng = love.math.newRandomGenerator((world.map.seed or 1) + team * 37)
   self.retreatAt = 0.25 + 0.025 * self.level   -- better players pull back earlier
   self.skillUse = 0.25 + 0.075 * self.level     -- and use their skills more often
+  -- attention: a person can only look after so many squads at once. Easy bots attend to one
+  -- squad per decision, the best to all of them
+  self.attend = self.level <= 3 and 1 or (self.level <= 6 and 2 or (self.level <= 8 and 3 or 99))
+  self.cursor = 0
   self.profileName = "Heroes"
   return self
 end
@@ -672,9 +699,18 @@ function AI:update(dt)
   local tm = w.teams[self.team]
   local hq = tm.hq
   local taken = {}
-  for _, sq in ipairs(S.squadsOf(w, self.team)) do
+  local mine = S.squadsOf(w, self.team)
+  -- which squads get attention this time (round robin); the others carry on with their orders
+  local look = {}
+  for k = 1, math.min(self.attend, #mine) do
+    self.cursor = self.cursor % #mine + 1
+    look[mine[self.cursor]] = true
+  end
+  -- points the others are already heading for stay claimed
+  for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
+  for _, sq in ipairs(mine) do
     local L = sq.leader
-    if L and L.alive then
+    if L and L.alive and look[sq] then
       local frac = squadHp(sq)
       -- nearest enemy to the leader (units first, then their HQ)
       local foe, fd
@@ -699,6 +735,7 @@ function AI:update(dt)
       local pi = self:pickPoint(sq, taken)
       local goal = pi and w.capPoints[pi]
       if pi then taken[pi] = true end
+      sq.goal = pi
       if not sq.healing then
         -- fight what's close; otherwise go take the point; everyone stays with the leader
         local tx, ty

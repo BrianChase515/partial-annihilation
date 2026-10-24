@@ -10,6 +10,9 @@ local function script(mode, secs)
     local menu = PA_MENU
     menu.mode = os.getenv("PA_TAB") or "craft"
     if os.getenv("PA_SETTINGS") then require("src.settings").open = true end
+    if os.getenv("PA_COHDROP") then
+      for _, r in ipairs(menu:rects()) do if r.kind == "sqtype" and r.sqi == 2 then menu:mousepressed(r.x + 4, r.y + 4, 1) end end
+    end
     if os.getenv("PA_GAME") then
       for _, r in ipairs(menu:rects()) do if r.gametype == os.getenv("PA_GAME") then menu:mousepressed(r.x + 2, r.y + 2, 1) end end
     end

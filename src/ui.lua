@@ -1732,6 +1732,7 @@ COMMANDER OF HEROES - CONTROLS
   S / D ..................... stop / hold fire       + / - ... game speed
 
 HOW TO WIN
+  Squad units are 60% tougher than in Annihilation: fights last long enough to use skills.
   Five capture points. Ground units standing on a point take it - aircraft can't.
   Hold more points than the enemy and their tickets drain; every unit lost costs tickets.
   Run them out of tickets, or destroy their HQ.
@@ -1741,7 +1742,7 @@ HOW TO WIN
 SQUAD TYPES (each squad is one kind of unit; the leader is a veteran of it)
   Armor - 4 Tanks .............. Hull Down, Smoke Screen
   Battery - 3 Artillery ........ Barrage, Spotter Drone
-  Recon - 5 Scouts ............. Flare, Sprint
+  Recon - 5 Scouts (light AA) .. Flare, Sprint
   Air Defense - 3 Flak Trucks .. Flak Barrage, Field Repair
   Gunships - 3 (one a side) .... Strafing Run, Afterburner
 
