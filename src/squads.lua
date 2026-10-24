@@ -37,7 +37,7 @@ S.SKILLS = {
   smoke = { name = "Smoke Screen", aim = "self", dur = 8, cd = 40,
     desc = "8 s: smoke hides the squad - nothing further than 90 away can target it, and whatever was shooting at it loses it." },
   barrage = { name = "Barrage", aim = "point", range = 950, cd = 45, needSight = true,
-    desc = "Six heavy shells (95 damage each, splash) on a spot your side can see, within 950 of the leader. A red marker shows where they'll land." },
+    desc = "Six heavy shells (150 damage each, splash) on a spot your side can see, within 950 of the leader. A red marker shows where they'll land." },
   spotter = { name = "Spotter Drone", aim = "self", dur = 15, cd = 35,
     desc = "15 s: the squad sees 60% further - artillery reaches everything it sees." },
   rapidfire = { name = "Rapid Fire", aim = "self", dur = 8, cd = 40,
@@ -308,6 +308,7 @@ local function hurt(world, src, x, y, r, dmg, pred)
     if o.alive and o.team and o.team > 0 and world:hostile(o.team, src.team) and U.dist2(o.x, o.y, x, y) <= (r + o.def.radius) ^ 2
       and (not pred or pred(o)) then hits[#hits + 1] = o end
   end)
+  dmg = dmg * S.HP_MUL -- squad units are tougher here, so skills hit as hard as they were meant to
   for _, o in ipairs(hits) do world:damage(o, o.def.building and dmg * 0.5 or dmg, src.alive and src or nil) end
 end
 
@@ -654,6 +655,29 @@ function S.draw(world, cam, game)
     lg.print(p.name, p.x - f:getWidth(p.name) / 2 + 1, p.y + 25)
     lg.setColor(1, 1, 1)
     lg.print(p.name, p.x - f:getWidth(p.name) / 2, p.y + 24)
+  end
+  -- an HQ is shielded while its side holds a point: a blue dome says so
+  for t = 1, world.np do
+    local hq = world.teams[t].hq
+    if hq and hq.alive and world:isVisible(hq) then
+      local held = S.held(world, world.ally[t]) > 0
+      local r = (hq.def.radius or 40) * 2.1 + 10
+      if held then
+        lg.setColor(0.45, 0.75, 1, 0.10 + 0.04 * math.sin(world.time * 2))
+        lg.circle("fill", hq.x, hq.y, r)
+        lg.setColor(0.55, 0.85, 1, 0.55)
+        lg.setLineWidth(2)
+        lg.circle("line", hq.x, hq.y, r)
+      else
+        lg.setColor(1, 0.35, 0.25, 0.5 + 0.4 * math.sin(world.time * 6))
+        lg.setLineWidth(2)
+        for i = 0, 11 do
+          local a = i * math.pi / 6 + world.time
+          lg.arc("line", "open", hq.x, hq.y, r, a, a + math.pi / 12)
+        end
+      end
+      lg.setLineWidth(1)
+    end
   end
   -- smoke: a drifting grey cloud on every unit inside it
   for _, sq in ipairs(world.squads and world.squads.list or {}) do
