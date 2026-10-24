@@ -9,6 +9,7 @@ local function script(mode, secs)
     -- the title screen on a tab (PA_TAB=craft|arena|rts), optionally with a map picked (PA_MAPI)
     local menu = PA_MENU
     menu.mode = os.getenv("PA_TAB") or "craft"
+    if os.getenv("PA_SETTINGS") then require("src.settings").open = true end
     if os.getenv("PA_GAME") then
       for _, r in ipairs(menu:rects()) do if r.gametype == os.getenv("PA_GAME") then menu:mousepressed(r.x + 2, r.y + 2, 1) end end
     end
@@ -282,6 +283,7 @@ local function script(mode, secs)
       game:centerOn(w.map.w * w.T / 2, w.map.h * w.T / 2)
     end
   end
+  if os.getenv("PA_PAUSE") then game.menuOpen = true end
   for _ = 1, 6 do game:update(1 / 30); frame() end
   if mode == "arena" then
     local sx, sy = game:worldToScreen(c.x, c.y)

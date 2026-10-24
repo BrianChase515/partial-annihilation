@@ -193,7 +193,7 @@ function G.new(opts)
   self.lastClick = { t = 0, e = nil }
   self.notices = {}
   self.stats = { built = 0, lost = 0, killed = 0 }
-  self.edgePan = true
+  self.edgePan = require("src.settings").v.edge
   self.showSidebar = true
   self.mouseLock = true
 
@@ -1277,7 +1277,7 @@ function G:update(dt)
   -- camera panning: arrows / screen edge (wider zone, speeds up near the very edge)
   local w, h = self:viewSize()
   local mx, my = love.mouse.getPosition()
-  local pan = 1000 / self.cam.zoom * dt
+  local pan = 1000 / self.cam.zoom * dt * require("src.settings").v.pan
   local kd = love.keyboard.isDown
   local dx, dy = 0, 0
   if kd("left") then dx = dx - 1 end
@@ -1604,6 +1604,8 @@ function G:mousepressed(x, y, button)
   if self.world.over and self.overShown then
     return UI.overClick(self, x, y, button)
   end
+  local SET = require("src.settings")
+  if SET.open then SET.click(x, y, button); return end
   if self.menuOpen then return UI.menuClick(self, x, y, button) end
   if UI.click(self, x, y, button) then return end
   local wx, wy = self:screenToWorld(x, y)
@@ -1823,12 +1825,14 @@ function G:wheelmoved(dx, dy)
   if love.keyboard.isDown("lalt", "ralt") then
     -- Option + two-finger scroll pans (handy on a trackpad)
     self.follow = nil
-    self.cam.x = self.cam.x - dx * 40 / self.cam.zoom
-    self.cam.y = self.cam.y - dy * 40 / self.cam.zoom
+    local sp = 40 * require("src.settings").v.scroll
+    self.cam.x = self.cam.x - dx * sp / self.cam.zoom
+    self.cam.y = self.cam.y - dy * sp / self.cam.zoom
     self:clampCam()
     return
   end
-  if dy ~= 0 then self:zoomAt(mx, my, dy > 0 and 1.12 or 1 / 1.12) end
+  local zf = 1 + 0.12 * require("src.settings").v.zoom
+  if dy ~= 0 then self:zoomAt(mx, my, dy > 0 and zf or 1 / zf) end
 end
 
 -- Camera that tracks units. Cinematic mode also zooms to frame them.
@@ -1886,6 +1890,8 @@ function G:keypressed(key)
   local shift = love.keyboard.isDown("lshift", "rshift")
   if self.world.over and self.overShown then return end
 
+  if key == "escape" and require("src.settings").open then require("src.settings").open = false; require("src.settings").save(); return end
+  if require("src.settings").open then return end
   if key == "escape" then
     if self.showHelp then self.showHelp = false
     elseif self.mode then self.mode = nil
@@ -2042,6 +2048,7 @@ function G:keypressed(key)
     self:notice(self.mouseLock and "Mouse kept inside window (edge panning on)" or "Mouse free to leave window", 1.6)
   elseif key == "f8" then
     self.edgePan = not self.edgePan
+    local SET = require("src.settings"); SET.v.edge = self.edgePan; SET.save()
     self:notice(self.edgePan and "Edge panning on" or "Edge panning off", 1.2)
   elseif key == "tab" then
     self:selectIdleBuilder()

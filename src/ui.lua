@@ -444,6 +444,16 @@ function UI.drawSquadPanel(game)
     end
     local L = sq.leader
     local up = L and L.alive
+    local chosen = false
+    for _, u in ipairs(sq.members) do if u.alive and game.selected[u] then chosen = true; break end end
+    if chosen then
+      lg.setColor(1, 0.8, 0.25, 0.14)
+      lg.rectangle("fill", x + 3, ry - 2, bw - 6, rh - 2, 5)
+      lg.setColor(1, 0.8, 0.25, 0.95)
+      lg.setLineWidth(2)
+      lg.rectangle("line", x + 3, ry - 2, bw - 6, rh - 2, 5)
+      lg.setLineWidth(1)
+    end
     lg.setFont(font(12))
     lg.setColor(up and 1 or 0.55, up and 0.92 or 0.55, up and 0.6 or 0.55)
     local nm = string.format("%d  %s  (%d)", i, SQ.byType[sq.type].name, alive)
@@ -991,10 +1001,126 @@ end
 ---------------------------------------------------------------------------
 -- Selection info
 
+-- Commander of Heroes: the selected squads - who's in them, the leader, and his two skills
+local function skillState(sq, slot, t)
+  local SQ = require("src.squads")
+  local sk = sq.skills[slot]
+  local def = SQ.SKILLS[sk.key]
+  local up = sq.leader and sq.leader.alive
+  if not up then return def, "leader down", false end
+  if t < sk.untilT then return def, string.format("active %ds", math.ceil(sk.untilT - t)), true end
+  if t < sk.readyAt then return def, string.format("%ds", math.ceil(sk.readyAt - t)), false end
+  return def, "ready", true
+end
+
+function UI.drawSquadInfo(game, L, sqs)
+  local SQ = require("src.squads")
+  local world = game.world
+  local t = world.time
+  local x, y, w = L.infoX, L.panelY + 10, L.infoW
+  game.sqInfoBtns = {}
+  local mx, my = love.mouse.getPosition()
+  local function skillBtn(bx, by, bw, bh, sq, slot, withDesc)
+    local def, st, ok = skillState(sq, slot, t)
+    local hov = mx >= bx and mx <= bx + bw and my >= by and my <= by + bh
+    local active = st:sub(1, 6) == "active"
+    if active then lg.setColor(0.2, 0.48, 0.3)
+    elseif ok then lg.setColor(hov and 0.25 or 0.17, hov and 0.32 or 0.22, hov and 0.44 or 0.3)
+    else lg.setColor(0.1, 0.11, 0.14) end
+    lg.rectangle("fill", bx, by, bw, bh, 5)
+    lg.setColor(0.45, 0.55, 0.68, 0.8)
+    lg.rectangle("line", bx + 0.5, by + 0.5, bw - 1, bh - 1, 5)
+    if not ok and sq.leader and sq.leader.alive then
+      lg.setColor(0.3, 0.36, 0.46, 0.45)
+      lg.rectangle("fill", bx, by, bw * U.clamp(1 - (sq.skills[slot].readyAt - t) / def.cd, 0, 1), bh, 5)
+    end
+    lg.setFont(font(13))
+    lg.setColor(1, 1, 1, ok and 1 or 0.6)
+    lg.print((slot == 1 and "Q  " or "W  ") .. def.name, bx + 8, by + 5)
+    lg.setFont(font(11))
+    lg.setColor(active and 0.6 or 0.85, active and 1 or 0.88, active and 0.6 or 0.95, ok and 1 or 0.6)
+    lg.print(st, bx + bw - 8 - font(11):getWidth(st), by + 7)
+    if withDesc then
+      lg.setColor(0.7, 0.75, 0.82, 0.9)
+      lg.printf(def.desc, bx + 8, by + 24, bw - 16)
+    end
+    game.sqInfoBtns[#game.sqInfoBtns + 1] = { x = bx, y = by, w = bw, h = bh, sq = sq, slot = slot }
+  end
+  if #sqs == 1 then
+    local sq = sqs[1]
+    local ty = SQ.byType[sq.type]
+    local Ld = sq.leader
+    lg.setFont(font(15))
+    lg.setColor(1, 0.85, 0.4)
+    local n = 0
+    for _, u in ipairs(sq.members) do if u.alive then n = n + 1 end end
+    lg.print(string.format("Squad %d  -  %s  (%d)", sq.idx, ty.name, n), x, y)
+    lg.setFont(font(12))
+    if Ld and Ld.alive then
+      lg.setColor(0.85, 0.88, 0.92)
+      lg.print(string.format("Leader: veteran %s   %d / %d", D.units[ty.leader].name, math.floor(Ld.hp), Ld.maxhp), x, y + 22)
+    else
+      lg.setColor(1, 0.55, 0.45)
+      lg.print(string.format("Leader down - back at the HQ in %ds (no skills until then)", math.max(0, math.ceil((sq.respawnAt or t) - t))), x, y + 22)
+    end
+    -- members by type (the leader first, with a star)
+    local counts, order = {}, {}
+    for _, u in ipairs(sq.members) do
+      if u.alive and not u.squadLeader then
+        if not counts[u.key] then counts[u.key] = 0; order[#order + 1] = u.key end
+        counts[u.key] = counts[u.key] + 1
+      end
+    end
+    local ix = x
+    if Ld and Ld.alive then
+      lg.setColor(0.2, 0.17, 0.08)
+      lg.rectangle("fill", ix, y + 42, 56, 62, 5)
+      lg.setColor(1, 0.8, 0.25)
+      lg.rectangle("line", ix + 0.5, y + 42.5, 55, 61, 5)
+      UI.drawIcon(Ld.key, ix + 28, y + 68, 40, 1)
+      lg.setFont(font(11)); lg.setColor(1, 0.85, 0.35); lg.print("leader", ix + 12, y + 88)
+      ix = ix + 62
+    end
+    for _, k in ipairs(order) do
+      lg.setColor(0.12, 0.15, 0.2)
+      lg.rectangle("fill", ix, y + 42, 56, 62, 5)
+      UI.drawIcon(k, ix + 28, y + 68, 40, 1)
+      lg.setFont(font(12)); lg.setColor(1, 1, 1); lg.print("x" .. counts[k], ix + 30, y + 86)
+      ix = ix + 62
+    end
+    -- the two skills, with what they do
+    local bw = math.min(250, (w - (ix - x) - 30) / 2)
+    if bw >= 150 then
+      for slot = 1, 2 do skillBtn(x + w - (3 - slot) * (bw + 8), y + 6, bw, 98, sq, slot, true) end
+    else
+      for slot = 1, 2 do skillBtn(x + (slot - 1) * 208, y + 108, 200, 24, sq, slot, false) end
+    end
+    return
+  end
+  -- several squads: one line each
+  lg.setFont(font(13))
+  lg.setColor(1, 1, 1)
+  lg.print(#sqs .. " squads selected   (Q / W use each squad's skill)", x, y)
+  for i, sq in ipairs(sqs) do
+    local ry = y + 22 + (i - 1) * 34
+    local n = 0
+    for _, u in ipairs(sq.members) do if u.alive then n = n + 1 end end
+    lg.setFont(font(13))
+    lg.setColor(1, 0.85, 0.4)
+    lg.print(string.format("%d  %s (%d)", sq.idx, SQ.byType[sq.type].name, n), x, ry + 6)
+    for slot = 1, 2 do skillBtn(x + 170 + (slot - 1) * 212, ry, 204, 28, sq, slot, false) end
+  end
+end
+
 function UI.drawInfo(game, L)
   local list = game:selectedList()
   local x, y, w = L.infoX, L.panelY + 12, L.infoW
   local foreign = false
+  game.sqInfoBtns = nil
+  if game.world.squads and #list > 0 then
+    local sqs = game:selectedSquads()
+    if #sqs > 0 then return UI.drawSquadInfo(game, L, sqs) end
+  end
   if #list == 0 and game:inspectValid() then list = { game.inspect }; foreign = true end
   if #list == 0 then
     lg.setFont(font(14))
@@ -1666,14 +1792,20 @@ function UI.menuRects()
   local x = (w - bw) / 2
   local y = h / 2 - 138
   local fs = love.window.getFullscreen()
-  return {
-    { x = x, y = y, w = bw, h = 44, label = "Resume", action = "resume" },
-    { x = x, y = y + 56, w = bw, h = 44, label = "Controls (F1)", action = "help" },
-    { x = x, y = y + 112, w = bw, h = 44, label = fs and "Windowed (Ctrl+Cmd+F)" or "Fullscreen (Ctrl+Cmd+F)", action = "fullscreen" },
-    { x = x, y = y + 168, w = bw, h = 44, label = "Save this map...", action = "savemap" },
-    { x = x, y = y + 224, w = bw, h = 44, label = "Surrender & return to title", action = "quit" },
-    { x = x, y = y + 280, w = bw, h = 44, label = "Exit game", action = "exit" },
+  local items = {
+    { label = "Resume", action = "resume" },
+    { label = "Restart (same map)", action = "restart" },
+    { label = "Controls (F1)", action = "help" },
+    { label = "Settings", action = "settings" },
+    { label = fs and "Windowed (Ctrl+Cmd+F)" or "Fullscreen (Ctrl+Cmd+F)", action = "fullscreen" },
+    { label = "Save this map...", action = "savemap" },
+    { label = "Surrender & return to title", action = "quit" },
+    { label = "Exit game", action = "exit" },
   }
+  local gap = h < 760 and 48 or 54
+  y = h / 2 - (#items * gap) / 2 + 30
+  for i, it in ipairs(items) do it.x, it.y, it.w, it.h = x, y + (i - 1) * gap, bw, gap - 10 end
+  return items
 end
 
 function UI.drawMenu()
@@ -1681,7 +1813,8 @@ function UI.drawMenu()
   lg.setColor(0, 0, 0, 0.55)
   lg.rectangle("fill", 0, 0, w, h)
   local rects = UI.menuRects()
-  panelBox(rects[1].x - 30, rects[1].y - 70, rects[1].w + 60, 422, 0.97)
+  local last = rects[#rects]
+  panelBox(rects[1].x - 30, rects[1].y - 70, rects[1].w + 60, last.y + last.h - rects[1].y + 94, 0.97)
   lg.setFont(font(22))
   lg.setColor(1, 1, 1)
   lg.print("Paused", w / 2 - font(22):getWidth("Paused") / 2, rects[1].y - 52)
@@ -1694,6 +1827,8 @@ function UI.menuClick(game, x, y, button_)
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "resume" then game.menuOpen = false
       elseif r.action == "help" then game.menuOpen = false; game.showHelp = true
+      elseif r.action == "restart" then game.playAgain, game.restartSame = true, true
+      elseif r.action == "settings" then require("src.settings").open = true
       elseif r.action == "fullscreen" then
         love.window.setFullscreen(not love.window.getFullscreen(), "desktop")
         game:clampCam()
@@ -2158,6 +2293,7 @@ function UI.draw(game)
   if not game.showHelp and not game.menuOpen then UI.drawPendingTip(game) else game.pendingTip = nil end
   if game.showHelp then UI.drawHelp(game.craft and "craft" or (game.world.squads and "coh") or game.arena) end
   if game.menuOpen then UI.drawMenu() end
+  if require("src.settings").open then require("src.settings").draw() end
   if game.world.over and game.overShown then UI.drawOver(game) end
   if game.naming then
     lg.setColor(0, 0, 0, 0.5)
@@ -2262,6 +2398,19 @@ function UI.click(game, x, y, b)
     local nextG = ((gb.f.assignGroup or 0) + (b == 2 and 9 or 1)) % 10
     for _, f in ipairs(game:selectedFactories()) do f.assignGroup = nextG > 0 and nextG or nil end
     return true
+  end
+  -- Commander of Heroes: skill buttons in the bottom panel
+  for _, sb in ipairs(game.sqInfoBtns or {}) do
+    if x >= sb.x and x <= sb.x + sb.w and y >= sb.y and y <= sb.y + sb.h then
+      local def = require("src.squads").SKILLS[sb.sq.skills[sb.slot].key]
+      if def.aim == "point" then
+        game.mode, game.sqAim = "sqskill", { sq = sb.sq, slot = sb.slot }
+        game:notice(def.name .. ": click the spot (Esc cancels)", 1.6)
+      else
+        game:squadSkill(sb.slot, sb.sq)
+      end
+      return true
+    end
   end
   -- info type buttons (narrow selection)
   for _, ib in ipairs(game.infoButtons or {}) do

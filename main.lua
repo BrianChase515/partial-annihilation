@@ -71,6 +71,17 @@ end
 
 function love.load(args)
   fitWindow(args)
+  -- the player's settings (window size, camera speeds, volumes); tests run with the defaults
+  local SET = require("src.settings")
+  local testing = false
+  for _, a in ipairs(args or {}) do if a:sub(1, 2) == "--" then testing = true end end
+  if not testing then
+    SET.load()
+    SET.applyWindow()
+  end
+  SET.applySound()
+  SET.onWindow = function() if game then game:clampCam() end end
+  SET.onEdge = function(on) if game then game.edgePan = on end end
   love.graphics.setDefaultFilter("linear", "linear")
   love.keyboard.setKeyRepeat(false)
   require("src.sfx").init()
@@ -344,7 +355,7 @@ function love.update(dt)
     elseif game.playAgain then
       local o = {}
       for k, v in pairs(lastOpts) do o[k] = v end
-      if not o.savedMap then o.seed = nil end
+      if not o.savedMap and not game.restartSame then o.seed = nil end
       startGame(o)
     end
   end

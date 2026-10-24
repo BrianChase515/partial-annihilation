@@ -164,6 +164,7 @@ end
 
 function Menu:tabRects(r)
   local x0, y, w, h = self:layout()
+  r[#r + 1] = { x = w - 132, y = h - 40, w = 118, h = 30, label = "Settings", action = "settings", small = true }
   local ty = math.max(14, y - 240)
   local tabs = { { "ANNIHILATION", "rts" }, { "COMMANDER ARENA", "arena" }, { "COMMANDER CRAFT", "craft" }, { "COMMANDER OF HEROES", "coh" } }
   local tw, gap = 238, 8
@@ -891,6 +892,7 @@ function Menu:draw()
   end
   self:drawDropdown()
   if self.showHelp then UI.drawHelp(self.mode == "craft" and "craft" or (self.mode == "coh" and "coh") or self.mode == "arena") end
+  if require("src.settings").open then require("src.settings").draw() end
 end
 
 function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
@@ -1011,6 +1013,8 @@ function Menu:mousepressed(x, y, b)
     return
   end
   if self.showHelp then self.showHelp = false; return end
+  local SET = require("src.settings")
+  if SET.open then SET.click(x, y, b); return end
   for _, r in ipairs(self:rects()) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       local s = r.slot and self.slots[r.slot]
@@ -1102,6 +1106,7 @@ function Menu:mousepressed(x, y, b)
       elseif r.action == "start" and b == 1 then
         if self:validTeams() then return "start" end
       elseif r.action == "help" then self.showHelp = true
+      elseif r.action == "settings" then SET.open = true
       elseif r.action == "update" then
         local ON = require("src.online")
         if ON.state == "updated" then love.event.quit("restart")
@@ -1113,8 +1118,14 @@ function Menu:mousepressed(x, y, b)
 end
 
 function Menu:keypressed(k)
+  if require("src.settings").open then
+    if k == "escape" then require("src.settings").open = false; require("src.settings").save() end
+    return
+  end
   if (k == "return" or k == "space") and self:validTeams() then return "start" end
   if k == "escape" and self.dropdown then self.dropdown = nil; return end
+  local SET = require("src.settings")
+  if k == "escape" and SET.open then SET.open = false; SET.save(); return end
   if k == "escape" then
     if self.showHelp then self.showHelp = false else love.event.quit() end
   end

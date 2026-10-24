@@ -246,6 +246,7 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Move / attack / assist | Right-click (Shift queues) |
 | Attack-move, Stop, Patrol | `A` then click, `S`, `P` then click |
 | Game speed | `+` / `-` (0.5x up to 15x; the result never depends on speed) |
+| Restart the same map / Settings | Esc menu: Restart (same map), Settings (window size, camera scroll and zoom speed, trackpad pan speed, edge scrolling, volumes; also on the title screen) |
 | Plant retreat flag | `Ctrl+F` at the mouse (or the Flag button, then click) |
 | Guard a unit / factory output follows a unit | Right-click a friendly unit with army / a factory selected |
 | Commander flees home (repairs only there) | `F` with the Commander selected |
