@@ -744,7 +744,8 @@ function AI:thinkEconomy()
       local hasWater = self.waterTX and (self.waterSize or 0) > 120
       -- Turtles fortify continuously: the target grows with the clock, and every other
       -- builder (plus the Commander) works on it before claiming more metal
-      local fortCap = p.fortify and math.min(28, self.diff.turrets + math.floor(math.max(0, t - 240) / 70)) or 0
+      -- (a wall that grows a bit slower than it used to, so the economy behind it keeps up)
+      local fortCap = p.fortify and math.min(24, self.diff.turrets + math.floor(math.max(0, t - 240) / 100)) or 0
       self.fortToggle = not self.fortToggle
       local fortifyNow = p.fortify and t > (p.fortifyFrom or 90) and factories >= 1 and turrets + aas < fortCap
         and (isCmd or self.fortToggle) and (tm.metal > 40 or mInc > 7) and not needEnergy
