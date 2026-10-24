@@ -1000,8 +1000,17 @@ function A.onKill(w, o, attacker)
     require("src.jungle").onKill(w, o, attacker)
     return
   end
+  -- live tally per side (the Lanes panel): experience from creeps, and what denying took away
+  st.creepXP = st.creepXP or {}
+  st.denies = st.denies or {}
   -- denied: finished off by its own side - nobody gets anything
   if attacker and attacker.team and w.ally[attacker.team] == w.ally[o.team] then
+    local ds = st.teamSide[attacker.team]
+    if ds then
+      local d = st.denies[ds] or { n = 0, xp = 0 }
+      d.n, d.xp = d.n + 1, d.xp + value
+      st.denies[ds] = d
+    end
     fx(w, "ring", o.x, o.y, 30, 0.6, { color = { 1, 1, 1 } })
     if w.onDeny then w.onDeny(o, attacker) end
     if os.getenv("PA_DEBUG_AI") then print(string.format("DENY t=%d by team%d %s (vet %d)", w.time, attacker.team, attacker.key, o.vet or 0)) end
@@ -1012,10 +1021,13 @@ function A.onKill(w, o, attacker)
   for t = 1, w.np do
     local c = w.teams[t].commander
     if c and c.alive and st.teamSide[t] ~= victimSide then
-      if c == killerC then
-        A.commanderXP(w, c, value)
-      elseif U.dist(c.x, c.y, o.x, o.y) < 700 then
-        A.commanderXP(w, c, value * (killerC and 0.3 or 0.45))
+      local got = 0
+      if c == killerC then got = value
+      elseif U.dist(c.x, c.y, o.x, o.y) < 700 then got = value * (killerC and 0.3 or 0.45) end
+      if got > 0 then
+        A.commanderXP(w, c, got)
+        local cs = st.teamSide[t]
+        st.creepXP[cs] = (st.creepXP[cs] or 0) + got
       end
     end
   end
