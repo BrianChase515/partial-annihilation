@@ -6,15 +6,16 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.15.6"
+D.VERSION = "0.16.0"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
   rts = { "0.8", "Mostly feature complete; still being balanced and polished." },
   arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
   craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
+  coh = { "0.1", "Brand new: squads, leader skills, capture points and tickets. Expect big changes." },
 }
-D.MODE_NAMES = { rts = "Annihilation", arena = "Commander Arena", craft = "Commander Craft" }
+D.MODE_NAMES = { rts = "Annihilation", arena = "Commander Arena", craft = "Commander Craft", coh = "Commander of Heroes" }
 
 D.units = {
   commander = {
@@ -242,20 +243,21 @@ D.units = {
     cost = { metal = 170, energy = 1100, work = 120 },
     desc = "A floating gun platform. Tougher than a Gun Tower and hits land, sea AND air. Built on water by Sea Constructors.",
   },
-  -- Squad Tactics only: the squad leader and the field HQ
+  -- Commander of Heroes only: the field HQ (squads are led by veteran units of their type;
+  -- this old generic leader is kept for saved games and tools)
   leader = {
     name = "Squad Leader", short = "SL", domain = "land", shape = "commander", squadOnly = true,
     radius = 13, hp = 1600, speed = 72, sight = 360, regen = 2,
     weapon = { damage = 26, range = 230, reload = 0.8, speed = 600, targets = { land = true, sea = true } },
     cost = { metal = 0, energy = 0, work = 1 },
-    desc = "Leads a squad and carries its special ability (V toggles it). Returns at the HQ 45 seconds after falling.",
+    desc = "Leads a squad. Returns at the HQ 45 seconds after falling.",
   },
   hq = {
     name = "Field HQ", short = "HQ", domain = "building", building = true, squadOnly = true,
     w = 3, h = 3, place = "land", hp = 9000, sight = 400,
     weapon = { damage = 45, range = 340, reload = 0.6, speed = 700, targets = { land = true, sea = true, air = true } },
     cost = { metal = 0, energy = 0, work = 1 },
-    desc = "Your base. Units near it heal fast, fallen squad members are replaced here (30s) and leaders return (45s). If it falls, you lose.",
+    desc = "Your base. Units near it heal fast, fallen squad members are replaced here (faster the more points you hold) and leaders return (45s). If it falls, you lose.",
   },
   -- Metal Alert modifier only: the ore truck and the refinery it delivers to
   oretruck = {

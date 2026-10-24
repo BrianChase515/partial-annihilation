@@ -53,15 +53,13 @@ local ASLOT_NAMES = { "You", "Ally", "Enemy", "Enemy 2", "Ally 2", "Enemy 3", "A
 
 local SIZES = { { "Small", 96 }, { "Medium", 128 }, { "Large", 160 } }
 -- Annihilation game types, and the Sandbox armies (kept for the whole session)
-local GAMETYPES = { { "standard", "Standard" }, { "sandbox", "Sandbox" }, { "squads", "Squad Tactics" } }
+local GAMETYPES = { { "standard", "Standard" }, { "sandbox", "Sandbox" } }
 local SANDBOX_UNITS = { "scout", "tank", "artillery", "flak", "fighter", "bomber", "gunship", "boat", "destroyer", "sub", "battleship", "walker" }
-local RTS_SETUP = { game = "standard", squadTab = 1,
-  squads = {
-    { on = true, leader = "entrench", units = { tank = 3, artillery = 1, flak = 1, scout = 1 } },
-    { on = true, leader = "spotter", units = { scout = 2, artillery = 2, tank = 2 } },
-    { on = false, leader = "overdrive", units = { tank = 2, gunship = 2, scout = 2 } },
-  },
+local RTS_SETUP = { game = "standard",
   sandbox = { you = { tank = 20, artillery = 6, flak = 4 }, enemy = { tank = 20, artillery = 6, gunship = 4 } } }
+-- Commander of Heroes: map, format, difficulty and the squads you field
+local COH_FORMATS = { { "1v1", 1, 1 }, { "2v2", 2, 2 } }
+local COH_SETUP = { size = 1, format = 1, level = 5, squadTab = 1, squads = require("src.squads").defaults() }
 local WATER = { { "Dry", 0.15 }, { "Some", 0.30 }, { "Lots", 0.45 } }
 local RANDOM_PROF = #D.profiles   -- "Random" is the last personality
 local LEVEL_NAMES = { "very easy", "easy", "easy+", "relaxed", "normal", "tough", "hard", "very hard", "brutal", "insane" }
@@ -94,7 +92,7 @@ local function loadMemory()
 end
 function Menu:remember()
   local mem = { mode = self.mode, sizeI = self.size, waterI = self.water, slots = self.slots, mods = self.mods,
-    arenaSetup = self.arena, craftSetup = self.craft, rts = RTS_SETUP }
+    arenaSetup = self.arena, craftSetup = self.craft, rts = RTS_SETUP, coh = COH_SETUP }
   pcall(love.filesystem.write, MEMFILE, "return " .. ser(mem))
 end
 
@@ -111,7 +109,16 @@ function Menu.new(prev)
       for _, g in ipairs(GAMETYPES) do if g[1] == RTS_SETUP.game then known = true end end
       if not known then RTS_SETUP.game = "standard" end
       if mem.rts.sandbox then RTS_SETUP.sandbox = mem.rts.sandbox end
-      if mem.rts.squads and #mem.rts.squads == 3 then RTS_SETUP.squads = mem.rts.squads end
+    end
+    if mem.coh then
+      local SQ = require("src.squads")
+      COH_SETUP.size = mem.coh.size or COH_SETUP.size
+      COH_SETUP.format = COH_FORMATS[mem.coh.format or 0] and mem.coh.format or 1
+      COH_SETUP.level = mem.coh.level or COH_SETUP.level
+      if mem.coh.squads and #mem.coh.squads == 3 then
+        COH_SETUP.squads = mem.coh.squads
+        for _, ds in ipairs(COH_SETUP.squads) do SQ.fixDesign(ds) end
+      end
     end
   end
   self.size = prev and prev.sizeI or 2
@@ -158,9 +165,12 @@ end
 function Menu:tabRects(r)
   local x0, y, w, h = self:layout()
   local ty = math.max(14, y - 240)
-  r[#r + 1] = { x = w / 2 - 466, y = ty, w = 300, h = 50, label = "ANNIHILATION", tab = "rts", big = true, active = self.mode == "rts" }
-  r[#r + 1] = { x = w / 2 - 150, y = ty, w = 300, h = 50, label = "COMMANDER ARENA", tab = "arena", big = true, active = self.mode == "arena" }
-  r[#r + 1] = { x = w / 2 + 166, y = ty, w = 300, h = 50, label = "COMMANDER CRAFT", tab = "craft", big = true, active = self.mode == "craft" }
+  local tabs = { { "ANNIHILATION", "rts" }, { "COMMANDER ARENA", "arena" }, { "COMMANDER CRAFT", "craft" }, { "COMMANDER OF HEROES", "coh" } }
+  local tw, gap = 238, 8
+  local tx = w / 2 - (#tabs * tw + (#tabs - 1) * gap) / 2
+  for i, tb in ipairs(tabs) do
+    r[#r + 1] = { x = tx + (i - 1) * (tw + gap), y = ty, w = tw, h = 50, label = tb[1], tab = tb[2], big = true, active = self.mode == tb[2] }
+  end
 end
 
 -- which arena slots are in play for the chosen format: you, ally, enemy 1, enemy 2
@@ -421,6 +431,7 @@ end
 function Menu:rects()
   if self.mode == "arena" then return self:arenaRects() end
   if self.mode == "craft" then return self:craftRects() end
+  if self.mode == "coh" then return self:cohRects() end
   local x0, y, w, h = self:layout()
   local r = {}
   self:tabRects(r)
@@ -472,28 +483,6 @@ function Menu:rects()
   r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
   r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
   local px = x0 + 580
-  if RTS_SETUP.game == "squads" then
-    local SQ = require("src.squads")
-    local cur = RTS_SETUP.squads[RTS_SETUP.squadTab] or RTS_SETUP.squads[1]
-    for i = 1, 3 do
-      local sq = RTS_SETUP.squads[i]
-      r[#r + 1] = { x = px + (i - 1) * 104, y = y, w = 100, h = 30, label = "Squad " .. i .. (sq.on and "" or " (off)"), kind = "sqtab", sqi = i,
-        active = RTS_SETUP.squadTab == i, small = true }
-    end
-    if RTS_SETUP.squadTab > 1 then
-      r[#r + 1] = { x = px, y = y + 38, w = 100, h = 28, label = cur.on and "In the game" or "Not used", kind = "sqon", active = cur.on, small = true }
-    end
-    local ab = SQ.byAbility[cur.leader] or SQ.ABILITIES[1]
-    r[#r + 1] = { x = px + 108, y = y + 38, w = 204, h = 28, label = "Leader: " .. ab.name .. "  v", kind = "sqleader", small = true }
-    for i, k in ipairs(SQ.UNITS) do
-      local yy = y + 76 + (i - 1) * 30
-      r[#r + 1] = { x = px + 150, y = yy, w = 26, h = 26, label = "-", kind = "squ", sqkey = k, sqd = -1, small = true }
-      r[#r + 1] = { x = px + 178, y = yy, w = 40, h = 26, label = tostring(cur.units[k] or 0), kind = "squ", sqkey = k, sqd = 0, small = true }
-      r[#r + 1] = { x = px + 220, y = yy, w = 26, h = 26, label = "+", kind = "squ", sqkey = k, sqd = 1, small = true }
-    end
-    self:updateRect(r, w)
-    return r
-  end
   if RTS_SETUP.game == "sandbox" then
     -- the two armies: a count per unit type (click +/-, Shift for 10, right-click lowers)
     for i, k in ipairs(SANDBOX_UNITS) do
@@ -521,6 +510,89 @@ function Menu:rects()
   return r
 end
 
+-- Commander of Heroes setup: map, format, difficulty on the left; your three squads on the right
+function Menu:cohRects()
+  local x0, y, w, h = self:layout()
+  local r = {}
+  self:tabRects(r)
+  local C = COH_SETUP
+  for i, o in ipairs({ { "Small", 1 }, { "Medium", 2 } }) do
+    r[#r + 1] = { x = x0 + (i - 1) * 104, y = y, w = 100, h = 34, label = o[1], kind = "cohsize", value = o[2],
+      active = C.size == o[2], rowLabel = i == 1 and "Map" or nil }
+  end
+  for i, o in ipairs(COH_FORMATS) do
+    r[#r + 1] = { x = x0 + (i - 1) * 104, y = y + 44, w = 100, h = 34, label = o[1], kind = "cohfmt", value = i,
+      active = C.format == i, rowLabel = i == 1 and "Format" or nil }
+  end
+  r[#r + 1] = { x = x0, y = y + 88, w = 32, h = 34, label = "-", kind = "cohlv", d = -1, rowLabel = "Difficulty" }
+  r[#r + 1] = { x = x0 + 36, y = y + 88, w = 132, h = 34, label = C.level .. "  " .. LEVEL_NAMES[C.level], kind = "cohlv", d = 0 }
+  r[#r + 1] = { x = x0 + 172, y = y + 88, w = 32, h = 34, label = "+", kind = "cohlv", d = 1 }
+  local by = y + 4 * 46 + 54 + 160
+  r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
+  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
+  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  -- the squads
+  local SQ = require("src.squads")
+  local px = x0 + 580
+  local cur = C.squads[C.squadTab] or C.squads[1]
+  for i = 1, 3 do
+    local sq = C.squads[i]
+    r[#r + 1] = { x = px + (i - 1) * 104, y = y, w = 100, h = 30, label = "Squad " .. i .. (sq.on and "" or " (off)"), kind = "sqtab", sqi = i,
+      active = C.squadTab == i, small = true }
+  end
+  if C.squadTab > 1 then
+    r[#r + 1] = { x = px, y = y + 38, w = 100, h = 28, label = cur.on and "In the game" or "Not used", kind = "sqon", active = cur.on, small = true }
+  end
+  local ty = SQ.byType[cur.type] or SQ.TYPES[1]
+  r[#r + 1] = { x = px + 108, y = y + 38, w = 204, h = 28, label = "Type: " .. ty.name .. "  v", kind = "sqtype", small = true }
+  for i, k in ipairs(SQ.UNITS) do
+    local yy = y + 76 + (i - 1) * 30
+    r[#r + 1] = { x = px + 150, y = yy, w = 26, h = 26, label = "-", kind = "squ", sqkey = k, sqd = -1, small = true }
+    r[#r + 1] = { x = px + 178, y = yy, w = 40, h = 26, label = tostring(cur.units[k] or 0), kind = "squ", sqkey = k, sqd = 0, small = true }
+    r[#r + 1] = { x = px + 220, y = yy, w = 26, h = 26, label = "+", kind = "squ", sqkey = k, sqd = 1, small = true }
+  end
+  self:updateRect(r, w)
+  return r
+end
+
+function Menu:drawCohInfo(x0, y)
+  local lg = love.graphics
+  local SQ = require("src.squads")
+  local C = COH_SETUP
+  local cur = C.squads[C.squadTab]
+  local px = x0 + 580
+  lg.setFont(R.font(13))
+  lg.setColor(0.55, 0.62, 0.7)
+  lg.print("YOUR SQUADS  (each one is led by a veteran of its type)", px, y - 22)
+  for i, k in ipairs(SQ.UNITS) do
+    lg.setColor(0.8, 0.85, 0.92)
+    lg.print(D.units[k].name .. "  (" .. SQ.COST[k] .. ")", px, y + 76 + (i - 1) * 30 + 5)
+  end
+  local used = SQ.cost(cur.units)
+  lg.setColor(used <= SQ.BUDGET and 0.6 or 1, 0.85, 0.6)
+  lg.print(string.format("Points: %d / %d", used, SQ.BUDGET), px + 260, y + 76 + 5)
+  local ty = SQ.byType[cur.type] or SQ.TYPES[1]
+  local yy = y + 76 + #SQ.UNITS * 30 + 6
+  lg.setColor(0.95, 0.85, 0.5)
+  lg.printf(ty.name .. ": " .. ty.desc, px, yy, 400)
+  yy = yy + 38
+  for slot, key in ipairs(ty.skills) do
+    local sk = SQ.SKILLS[key]
+    lg.setColor(0.75, 0.85, 1)
+    lg.printf((slot == 1 and "Q  " or "W  ") .. sk.name .. ": " .. sk.desc, px, yy, 400)
+    local _, lines = R.font(13):getWrap((slot == 1 and "Q  " or "W  ") .. sk.name .. ": " .. sk.desc, 400)
+    yy = yy + #lines * 16 + 4
+  end
+  -- how it plays, under the setup on the left
+  lg.setColor(0.6, 0.66, 0.74)
+  lg.printf("Five capture points. Ground units standing on a point take it (aircraft can't). "
+    .. "Hold more points than the enemy and their tickets drain; every unit you lose costs tickets too. "
+    .. "Run them out of tickets, or destroy their HQ, to win.\n\n"
+    .. "Click any unit to command its whole squad (Alt for one unit). Fallen members are replaced at your HQ - "
+    .. "faster the more points you hold - and units heal fast there. A fallen leader returns after 45 s. Never scored (yet).",
+    x0, y + 140, 520)
+end
+
 function Menu:activeCount()
   local n = 0
   for _, s in ipairs(self.slots) do if s.on then n = n + 1 end end
@@ -528,7 +600,7 @@ function Menu:activeCount()
 end
 
 function Menu:validTeams()
-  if self.mode == "arena" or self.mode == "craft" then return true end
+  if self.mode == "arena" or self.mode == "craft" or self.mode == "coh" then return true end
   if self.savedMap and self.savedMap.np <= 2 and self:activeCount() > 2 then return false end
   local teams, n = {}, 0
   for _, s in ipairs(self.slots) do
@@ -578,7 +650,8 @@ function Menu:draw()
   lg.setFont(R.font(18))
   lg.setColor(th.sub[1], th.sub[2], th.sub[3])
   local sub = self.mode == "arena" and "Commander Arena: no base, no army. Your Commander, three lanes and endless creeps."
-    or (self.mode == "craft" and "Commander Craft: gold, lumber, heroes and three tiers. Warcraft rules, our heroes."
+    or (self.mode == "craft" and "Commander Craft: gold, lumber, heroes and three tiers. Warcraft rules, our heroes.")
+    or (self.mode == "coh" and "Commander of Heroes: lead squads, not armies. Take the map, bleed their tickets."
     or "A small real-time strategy game of land, sea and air. Shapes included.")
   lg.print(sub, w / 2 - R.font(18):getWidth(sub) / 2, y - 78)
   do
@@ -595,6 +668,8 @@ function Menu:draw()
   local ty = y + 160
   if self.mode == "craft" then
     -- (rows carry their own labels)
+  elseif self.mode == "coh" then
+    self:drawCohInfo(x0, y)
   elseif self.mode == "arena" then
     local fm = AFORMATS[self.arena.format]
     if not fm.ffa and fm[2] + fm[3] > 6 then
@@ -611,27 +686,7 @@ function Menu:draw()
     lg.print("Team", x0 + 78, ty - 22)
     lg.print("Difficulty (1-10)", x0 + 176, ty - 22)
     lg.print("Personality (click to choose)", x0 + 388, ty - 22)
-    if RTS_SETUP.game == "squads" then
-      local SQ = require("src.squads")
-      local cur = RTS_SETUP.squads[RTS_SETUP.squadTab]
-      lg.print("YOUR SQUADS", x0 + 580, y - 22)
-      lg.setFont(R.font(13))
-      for i, k in ipairs(SQ.UNITS) do
-        lg.setColor(0.8, 0.85, 0.92)
-        lg.print(D.units[k].name .. "  (" .. SQ.COST[k] .. ")", x0 + 580, y + 76 + (i - 1) * 30 + 5)
-      end
-      local used = SQ.cost(cur.units)
-      lg.setColor(used <= SQ.BUDGET and 0.6 or 1, 0.85, 0.6)
-      lg.print(string.format("Points: %d / %d", used, SQ.BUDGET), x0 + 580 + 260, y + 76 + 5)
-      local ab = SQ.byAbility[cur.leader] or SQ.ABILITIES[1]
-      lg.setColor(0.95, 0.85, 0.5)
-      lg.printf(ab.name .. ": " .. ab.desc, x0 + 580, y + 76 + #SQ.UNITS * 30 + 6, 380)
-      lg.setColor(0.5, 0.56, 0.64)
-      lg.printf("Small map, no economy. Units heal slowly anywhere and fast at your HQ - flee (F) and come back. "
-        .. "Each squad follows its leader: V toggles the ability of the selected squad. A fallen leader returns at the HQ after 45s. Destroy the enemy HQ to win. Never scored.",
-        x0 + 580, y + 76 + #SQ.UNITS * 30 + 52, 380)
-      lg.setFont(R.font(13))
-      lg.setColor(0.55, 0.62, 0.7)
+    if false then
     elseif RTS_SETUP.game == "sandbox" then
       lg.print("SANDBOX ARMIES", x0 + 580, y - 22)
       lg.setColor(0.6, 0.85, 1); lg.print("Your side", x0 + 580 + 150 + 22, y - 22)
@@ -714,6 +769,7 @@ function Menu:draw()
       lg.setColor(th.line[1], th.line[2], th.line[3], 0.8)
       lg.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 6)
       local fs = r.action == "start" and 24 or (r.big and 20 or (r.small and 13 or 15))
+      while fs > 11 and R.font(fs):getWidth(r.label or "") > r.w - 14 do fs = fs - 1 end -- long labels shrink to fit
       if r.big and r.active then
         lg.setColor(0.95, 0.75, 0.3)
         lg.rectangle("line", r.x - 2.5, r.y - 2.5, r.w + 5, r.h + 5, 8)
@@ -745,6 +801,8 @@ function Menu:draw()
     lg.setLineWidth(1)
     lg.line(x0 + 4 * 92 + 7, y - 14, x0 + 4 * 92 + 7, y + 34)
     self:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
+  elseif self.mode == "coh" then
+    -- (drawn with the column headers)
   else
   -- personality description
   lg.setFont(R.font(14))
@@ -823,6 +881,7 @@ function Menu:draw()
   local tip = self.mode == "arena"
     and "Tip: stay behind your creeps, let them soak tower fire, and go home to heal. Q W E R use skills at the mouse."
     or self.mode == "craft" and "Tip: keep five workers on gold and a few on wood, build Farms before you need them, and creep with your hero early."
+    or self.mode == "coh" and "Tip: click any unit to command its whole squad. Q / W fire the leader's skills at the mouse. C cycles your leaders."
     or (require("src.ghost").unlocked() and "Tip: Mirror (plays like you) and Nemesis (plays against your habits) are in the personality list."
       or string.format("Finish %d more Annihilation games (win or lose, no gameplay modifiers) to unlock two opponents that learn from you.",
         math.max(0, require("src.ghost").NEEDED - require("src.ghost").completed())))
@@ -831,7 +890,7 @@ function Menu:draw()
     lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 40)
   end
   self:drawDropdown()
-  if self.showHelp then UI.drawHelp(self.mode == "craft" and "craft" or self.mode == "arena") end
+  if self.showHelp then UI.drawHelp(self.mode == "craft" and "craft" or (self.mode == "coh" and "coh") or self.mode == "arena") end
 end
 
 function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
@@ -992,25 +1051,28 @@ function Menu:mousepressed(x, y, b)
         you.class = (you.class == r.roster) and 0 or r.roster
       elseif r.modkey then self.mods[r.modkey] = not self.mods[r.modkey]
       elseif r.gametype then RTS_SETUP.game = r.gametype
-      elseif r.kind == "sqtab" then RTS_SETUP.squadTab = r.sqi
+      elseif r.kind == "sqtab" then COH_SETUP.squadTab = r.sqi
       elseif r.kind == "sqon" then
-        local sq = RTS_SETUP.squads[RTS_SETUP.squadTab]
+        local sq = COH_SETUP.squads[COH_SETUP.squadTab]
         sq.on = not sq.on
-      elseif r.kind == "sqleader" then
+      elseif r.kind == "sqtype" then
         local SQ = require("src.squads")
-        local sq = RTS_SETUP.squads[RTS_SETUP.squadTab]
+        local sq = COH_SETUP.squads[COH_SETUP.squadTab]
         local idx = 1
-        for i, a in ipairs(SQ.ABILITIES) do if a.key == sq.leader then idx = i end end
-        sq.leader = SQ.ABILITIES[(idx - 1 + dir) % #SQ.ABILITIES + 1].key
+        for i, ty in ipairs(SQ.TYPES) do if ty.key == sq.type then idx = i end end
+        sq.type = SQ.TYPES[(idx - 1 + dir) % #SQ.TYPES + 1].key
       elseif r.kind == "squ" then
         local SQ = require("src.squads")
-        local sq = RTS_SETUP.squads[RTS_SETUP.squadTab]
+        local sq = COH_SETUP.squads[COH_SETUP.squadTab]
         local d = r.sqd ~= 0 and r.sqd or dir
         local n = math.max(0, (sq.units[r.sqkey] or 0) + d)
         local test = {}
         for k, v in pairs(sq.units) do test[k] = v end
         test[r.sqkey] = n
         if SQ.cost(test) <= SQ.BUDGET then sq.units[r.sqkey] = n end
+      elseif r.kind == "cohsize" then COH_SETUP.size = r.value
+      elseif r.kind == "cohfmt" then COH_SETUP.format = r.value
+      elseif r.kind == "cohlv" then COH_SETUP.level = math.max(1, math.min(10, COH_SETUP.level + (r.d ~= 0 and r.d or dir)))
       elseif r.kind == "sbdown" or r.kind == "sbup" or r.kind == "sbcount" then
         local step = love.keyboard.isDown("lshift", "rshift") and 10 or 1
         local d = (r.kind == "sbdown" or (r.kind == "sbcount" and b == 2)) and -step or step
@@ -1081,6 +1143,18 @@ function Menu:options()
       players = players,
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end
+  if self.mode == "coh" then
+    local C = COH_SETUP
+    local f = COH_FORMATS[C.format]
+    local players = { { human = true, ally = 1 } }
+    for _ = 1, f[3] do players[#players + 1] = { ally = 2, level = C.level } end
+    for _ = 2, f[2] do players[#players + 1] = { ally = 1, level = C.level } end
+    -- creation order decides colors and starts: you, enemy, (ally, enemy 2)
+    if #players == 4 then players = { players[1], players[2], players[4], players[3] } end
+    return { mode = "rts", coh = true, size = C.size == 1 and 96 or 128, water = WATER[1][2], players = players,
+      mods = { squads = true }, squadSetup = C.squads, menuMode = "coh",
+      arenaSetup = self.arena, craftSetup = self.craft, sizeI = self.size, waterI = self.water, slots = self.slots }
+  end
   if self.mode == "arena" then
     local A = self.arena
     local act = self:arenaActive()
@@ -1112,15 +1186,11 @@ function Menu:options()
     size = SIZES[self.size][2], water = WATER[self.water][2], players = players,
     sizeI = self.size, waterI = self.water, slots = self.slots, savedMap = self.savedMap,
     mods = { alien = self.mods.alien, drops = self.mods.drops, groovy = self.mods.groovy, convoy = self.mods.convoy, apoc = self.mods.apoc,
-      sandbox = RTS_SETUP.game == "sandbox" or nil, squads = RTS_SETUP.game == "squads" or nil },
+      sandbox = RTS_SETUP.game == "sandbox" or nil },
     sandbox = RTS_SETUP.game == "sandbox" and RTS_SETUP.sandbox or nil,
-    squadSetup = RTS_SETUP.game == "squads" and RTS_SETUP.squads or nil,
     menuMode = "rts", arenaSetup = self.arena, craftSetup = self.craft,
   }
-  if RTS_SETUP.game == "squads" then
-    -- squad fights want a small, mostly dry map
-    o.size, o.water, o.savedMap = SIZES[1][2], WATER[1][2], nil
-  elseif self.savedMap then
+  if self.savedMap then
     o.seed = self.savedMap.seed
     o.size = self.savedMap.size
     o.water = self.savedMap.water

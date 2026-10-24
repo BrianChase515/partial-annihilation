@@ -466,7 +466,7 @@ function R.drawGeneralTag(e, zoom)
   if zoom > 0.7 then
     lg.setColor(1, 0.82, 0.25, 0.12)
     lg.setLineWidth(1)
-    lg.circle("line", e.x, e.y, 320)
+    lg.circle("line", e.x, e.y, e.squadLeader and require("src.squads").RADIUS or 320)
   end
 end
 
@@ -611,12 +611,12 @@ function R.drawWorld(cam, game)
   end
 
   for _, e in ipairs(list) do
-    R.drawHealth(e, sel[e] or e.built < 1 or (e.key == "commander") or e.general)
+    R.drawHealth(e, sel[e] or e.built < 1 or (e.key == "commander") or e.general or e.squadLeader)
   end
   if world.craft then require("src.craft_ui").drawOver(world, cam, list) end
   for _, e in ipairs(list) do
     if e.key == "commander" then R.drawNameplate(e, cam.zoom)
-    elseif e.general then R.drawGeneralTag(e, cam.zoom) end
+    elseif e.general or e.squadLeader then R.drawGeneralTag(e, cam.zoom) end
   end
 
   -- repair zones: the one being dragged, and those of selected constructors
@@ -837,6 +837,9 @@ function R.drawWorld(cam, game)
       end
     end
   end
+
+  -- Commander of Heroes: capture points and flares
+  if world.capPoints then require("src.squads").draw(world, cam) end
 
   -- Alien Tech landing zone (everyone sees it)
   local a = world.alien

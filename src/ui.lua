@@ -187,11 +187,24 @@ function UI.drawTop(game)
     craftUI().drawTop(game)
   elseif game.arena then
     UI.drawArenaTop(game)
+  elseif game.world.squads then
+    -- Commander of Heroes: no economy - the mode's name and the ticket race instead
+    local st = game.world.squads
+    local me = game.world.ally[1]
+    local foe
+    for a in pairs(st.tickets) do if a ~= me then foe = a end end
+    lg.setFont(font(14))
+    lg.setColor(0.95, 0.85, 0.5)
+    lg.print("COMMANDER OF HEROES", 14, 10)
+    lg.setColor(0.85, 0.9, 0.96)
+    local SQ = require("src.squads")
+    lg.print(string.format("Tickets  %d  vs  %d      Points  %d - %d", math.max(0, math.floor(st.tickets[me] or 0)),
+      math.max(0, math.floor(foe and st.tickets[foe] or 0)), SQ.held(game.world, me), foe and SQ.held(game.world, foe) or 0), 230, 10)
   else
   resourceBar(14, 7, "METAL", tm.metal, tm.mStore, tm.mIncome, tm.mSpend, { 0.82, 0.86, 0.95 })
   resourceBar(370, 7, "ENERGY", tm.energy, tm.eStore, tm.eIncome, tm.eSpend, { 1, 0.85, 0.3 })
   end
-  if tm.stalled and not game.arena and not game.craft then
+  if tm.stalled and not game.arena and not game.craft and not game.world.squads then
     -- under the bar, centered, so it never collides with the bar's contents
     lg.setFont(font(13))
     local msg = "LOW RESOURCES - building slowed"
@@ -378,61 +391,135 @@ end
 -- Commander card (top right, under the scoreboard): health, level, XP, status.
 -- Click it to jump to him.
 
--- Squad Tactics: one row per squad - its ability (click to toggle), health and who's left;
--- click the name to select the squad
+-- Commander of Heroes: tickets and points on top, then one row per squad - its type, health,
+-- who's left and its two skills (click a skill = cast; aimed ones then want a click on the map)
 function UI.drawSquadPanel(game)
   local world = game.world
   local SQ = require("src.squads")
   local list = SQ.squadsOf(world, 1)
   local w = lg.getWidth()
   local bw = UI.SCORE_W
-  local rh = 46
+  local rh = 58
   local x, y = w - bw - 10, (world.score and game.scoreBottom or UI.TOP_H) + 6
-  local bh = #list * rh + 8
-  panelBox(x, y, bw, bh, 0.88)
-  game.squadRows = {}
+  local st = world.squads
+  -- tickets
+  local me = world.ally[1]
+  local foe
+  for a in pairs(st.tickets) do if a ~= me then foe = a end end
+  local th = 44
+  local bh = th + #list * rh + 8
+  panelBox(x, y, bw, bh, 0.9)
+  local cols = (world.mods and world.mods.groovy) and D.groovyColor or D.teamColor
+  local function allyCol(a) for t = 1, world.np do if world.ally[t] == a then return cols[t] end end return { 1, 1, 1 } end
+  local function bar(bx, by, frac, c, right)
+    lg.setColor(0.12, 0.14, 0.18)
+    lg.rectangle("fill", bx, by, (bw - 30) / 2, 9, 2)
+    lg.setColor(c[1], c[2], c[3])
+    local ww = (bw - 30) / 2 * math.max(0, frac)
+    lg.rectangle("fill", right and (bx + (bw - 30) / 2 - ww) or bx, by, ww, 9, 2)
+  end
+  lg.setFont(font(12))
+  local mt, ft = math.max(0, math.floor(st.tickets[me] or 0)), math.max(0, math.floor(foe and st.tickets[foe] or 0))
+  local mc, fc = allyCol(me), allyCol(foe)
+  lg.setColor(mc[1], mc[2], mc[3]); lg.print(tostring(mt), x + 10, y + 5)
+  local ft_s = tostring(ft)
+  lg.setColor(fc[1], fc[2], fc[3]); lg.print(ft_s, x + bw - 10 - font(12):getWidth(ft_s), y + 5)
+  local pm, pf = SQ.held(world, me), foe and SQ.held(world, foe) or 0
+  local mid = string.format("Points %d - %d", pm, pf)
+  lg.setColor(0.85, 0.88, 0.92); lg.print(mid, x + bw / 2 - font(12):getWidth(mid) / 2, y + 5)
+  local full = st.full or {}
+  st.full = full
+  full[me] = math.max(full[me] or 0, mt); if foe then full[foe] = math.max(full[foe] or 0, ft) end
+  bar(x + 10, y + 24, mt / math.max(1, full[me]), mc, true)
+  bar(x + 20 + (bw - 30) / 2, y + 24, ft / math.max(1, foe and full[foe] or 1), fc, false)
+  game.squadRows = { { x = x, y = y, w = bw, h = th, header = true } }
   local mx, my = love.mouse.getPosition()
+  local t = world.time
   for i, sq in ipairs(list) do
-    local ry = y + 4 + (i - 1) * rh
+    local ry = y + th + (i - 1) * rh
     local alive, hp, max = 0, 0, 0
     for _, u in ipairs(sq.members) do
       max = max + u.maxhp
       if u.alive then alive = alive + 1; hp = hp + u.hp end
     end
     local L = sq.leader
+    local up = L and L.alive
     lg.setFont(font(12))
-    lg.setColor(L and L.alive and 1 or 0.5, L and L.alive and 1 or 0.5, L and L.alive and 1 or 0.5)
-    lg.print(string.format("%d  Squad %d  (%d)", i, sq.idx, alive), x + 10, ry + 3)
-    local ab = SQ.byAbility[sq.ability]
-    local bx, bwid = x + bw - 122, 112
-    local hov = mx >= bx and mx <= bx + bwid and my >= ry + 2 and my <= ry + 24
-    if sq.on then lg.setColor(0.2, 0.55, 0.3) else lg.setColor(hov and 0.2 or 0.13, hov and 0.24 or 0.16, hov and 0.3 or 0.2) end
-    lg.rectangle("fill", bx, ry + 2, bwid, 22, 4)
-    lg.setColor(1, 1, 1, L and L.alive and 1 or 0.4)
-    local t = (ab and ab.name or "?") .. (sq.on and "  ON" or "")
-    lg.setFont(font(11))
-    lg.print(t, bx + bwid / 2 - font(11):getWidth(t) / 2, ry + 6)
+    lg.setColor(up and 1 or 0.55, up and 0.92 or 0.55, up and 0.6 or 0.55)
+    local nm = string.format("%d  %s  (%d)", i, SQ.byType[sq.type].name, alive)
+    if not up and sq.respawnAt then nm = nm .. string.format("  - leader back in %ds", math.max(0, math.ceil(sq.respawnAt - t))) end
+    lg.print(nm, x + 10, ry + 2)
     local frac = max > 0 and hp / max or 0
     lg.setColor(0.12, 0.14, 0.18)
-    lg.rectangle("fill", x + 10, ry + 30, bw - 20, 8, 2)
+    lg.rectangle("fill", x + 10, ry + 19, bw - 20, 6, 2)
     lg.setColor(0.2 + (1 - frac) * 0.8, 0.3 + frac * 0.6, 0.15)
-    lg.rectangle("fill", x + 10, ry + 30, (bw - 20) * frac, 8, 2)
-    game.squadRows[#game.squadRows + 1] = { sq = sq, x = x, y = ry, w = bw, h = rh, ab = { x = bx, y = ry + 2, w = bwid, h = 22 } }
+    lg.rectangle("fill", x + 10, ry + 19, (bw - 20) * frac, 6, 2)
+    local abs = {}
+    local bwid = (bw - 26) / 2
+    for slot, sk in ipairs(sq.skills) do
+      local def = SQ.SKILLS[sk.key]
+      local bx, by = x + 10 + (slot - 1) * (bwid + 6), ry + 30
+      local hov = mx >= bx and mx <= bx + bwid and my >= by and my <= by + 22
+      local ready = up and t >= sk.readyAt
+      local active = up and t < sk.untilT
+      if active then lg.setColor(0.2, 0.5, 0.3)
+      elseif ready then lg.setColor(hov and 0.24 or 0.17, hov and 0.3 or 0.22, hov and 0.4 or 0.3)
+      else lg.setColor(0.1, 0.11, 0.14) end
+      lg.rectangle("fill", bx, by, bwid, 22, 4)
+      if up and not ready then
+        -- cooldown fill
+        local f = 1 - (sk.readyAt - t) / def.cd
+        lg.setColor(0.3, 0.36, 0.46, 0.5)
+        lg.rectangle("fill", bx, by, bwid * U.clamp(f, 0, 1), 22, 4)
+      end
+      local label = (slot == 1 and "Q " or "W ") .. def.name
+      if up and not ready and not active then label = label .. string.format(" %d", math.ceil(sk.readyAt - t)) end
+      lg.setFont(font(11))
+      lg.setColor(1, 1, 1, up and (ready or active) and 1 or 0.55)
+      lg.print(label, bx + bwid / 2 - font(11):getWidth(label) / 2, by + 5)
+      abs[slot] = { x = bx, y = by, w = bwid, h = 22 }
+      if hov then game.sqHoverSkill = def end
+    end
+    game.squadRows[#game.squadRows + 1] = { sq = sq, x = x, y = ry, w = bw, h = rh, abs = abs }
   end
+  -- a skill's description when hovering its button
+  local hs = game.sqHoverSkill
+  if hs then
+    lg.setFont(font(12))
+    local tw = 260
+    local _, lines = font(12):getWrap(hs.name .. ": " .. hs.desc, tw - 16)
+    local hh = #lines * 15 + 12
+    local hx, hy = x - tw - 8, math.min(my, lg.getHeight() - hh - 10)
+    lg.setColor(0.04, 0.05, 0.08, 0.95)
+    lg.rectangle("fill", hx, hy, tw, hh, 6)
+    lg.setColor(0.9, 0.92, 0.96)
+    lg.printf(hs.name .. ": " .. hs.desc, hx + 8, hy + 6, tw - 16)
+  end
+  game.sqHoverSkill = nil
   game.cardBottom = y + bh
 end
 
 function UI.squadPanelClick(game, x, y)
+  local SQ = require("src.squads")
   for _, r in ipairs(game.squadRows or {}) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
-      if x >= r.ab.x and x <= r.ab.x + r.ab.w and y >= r.ab.y and y <= r.ab.y + r.ab.h then
-        require("src.squads").toggle(game.world, r.sq)
-      else
-        local g = {}
-        for _, u in ipairs(r.sq.members) do if u.alive then g[#g + 1] = u end end
-        game:select(g)
-        if r.sq.leader and r.sq.leader.alive then game:centerOn(r.sq.leader.x, r.sq.leader.y) end
+      if r.header then return true end
+      for slot, b in ipairs(r.abs or {}) do
+        if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
+          local def = SQ.SKILLS[r.sq.skills[slot].key]
+          if def.aim == "point" then
+            game.mode, game.sqAim = "sqskill", { sq = r.sq, slot = slot }
+            game:notice(def.name .. ": click the spot (Esc cancels)", 1.6)
+          else
+            game:squadSkill(slot, r.sq)
+          end
+          return true
+        end
       end
+      local g = {}
+      for _, u in ipairs(r.sq.members) do if u.alive then g[#g + 1] = u end end
+      game:select(g)
+      if r.sq.leader and r.sq.leader.alive then game:centerOn(r.sq.leader.x, r.sq.leader.y) end
       return true
     end
   end
@@ -823,6 +910,17 @@ function UI.drawMinimap(game, L)
     end
   end
   if world.arena and world.arena.jungle then require("src.jungle").drawMinimap(world, mm, s) end
+  -- Commander of Heroes: capture points as flags in their owner's color
+  for _, p in ipairs(world.capPoints or {}) do
+    local c = { 0.85, 0.85, 0.85 }
+    if p.owner then for t = 1, world.np do if world.ally[t] == p.owner then c = { R.teamColor(t) }; break end end end
+    local px, py = mm.x + p.x / T * s, mm.y + p.y / T * s
+    lg.setColor(0, 0, 0, 0.8)
+    lg.circle("fill", px, py, 5)
+    lg.setColor(c[1], c[2], c[3])
+    lg.circle("fill", px, py, 3.6)
+    if p.contested then lg.setColor(1, 1, 1, 0.5 + 0.5 * math.sin(love.timer.getTime() * 8)); lg.circle("line", px, py, 6.5) end
+  end
   local a = world.alien
   if a and (a.state == "announced" or a.state == "dormant") then
     local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
@@ -1484,9 +1582,39 @@ Classes
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
 ]]
 
+local COH_HELP = [[
+COMMANDER OF HEROES - CONTROLS
+
+  Left-click a unit ......... selects its whole squad (Alt-click: just that unit)
+  1 / 2 / 3 ................. select squad 1, 2, 3 (tap twice to jump there)
+  C ......................... cycle through your squad leaders
+  Right-click ............... move (each squad keeps its own pace) / attack a target
+  A then click .............. attack-move: the squad forms ranks, marches, then fights and kites
+  Q / W ..................... the leader's two skills, aimed at the mouse
+                              (or click a skill in the squad panel, then click the spot)
+  F ......................... flee: back to your HQ, weapons off until repaired
+  S / D ..................... stop / hold fire       + / - ... game speed
+
+HOW TO WIN
+  Five capture points. Ground units standing on a point take it - aircraft can't.
+  Hold more points than the enemy and their tickets drain; every unit lost costs tickets.
+  Run them out of tickets, or destroy their HQ.
+  Units heal fast at your HQ. Fallen members are replaced there - faster the more points
+  you hold. A fallen leader returns after 45 seconds (his squad has no skills meanwhile).
+
+SQUAD TYPES
+  Armor (Tank leader) ........ Hull Down, Smoke Screen
+  Battery (Artillery leader) . Barrage, Spotter Drone
+  Recon (Scout leader) ....... Flare, Sprint
+  Air Defense (Flak leader) .. Flak Barrage, Field Repair
+  Air Wing (Gunship leader) .. Strafing Run, Afterburner
+
+  Esc = menu,  F3 = pause,  M = sound,  Shift+M = music,  F1 = close this]]
+UI.COH_HELP = COH_HELP
+
 function UI.drawHelp(arena)
   local w, h = lg.getDimensions()
-  local text = arena == "craft" and craftUI().HELP or (arena and ARENA_HELP or HELP)
+  local text = arena == "craft" and craftUI().HELP or (arena == "coh" and COH_HELP) or (arena and ARENA_HELP or HELP)
   local f = font(12)
   local lines = {}
   for l in (text .. "\n"):gmatch("(.-)\n") do lines[#lines + 1] = l end
@@ -2028,7 +2156,7 @@ function UI.draw(game)
   end
 
   if not game.showHelp and not game.menuOpen then UI.drawPendingTip(game) else game.pendingTip = nil end
-  if game.showHelp then UI.drawHelp(game.craft and "craft" or game.arena) end
+  if game.showHelp then UI.drawHelp(game.craft and "craft" or (game.world.squads and "coh") or game.arena) end
   if game.menuOpen then UI.drawMenu() end
   if game.world.over and game.overShown then UI.drawOver(game) end
   if game.naming then

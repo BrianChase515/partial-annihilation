@@ -154,6 +154,59 @@ local function script(mode, secs)
       opts.players[4] = { ally = 2, level = 5, race = "warband" }
     end
   end
+  if mode == "coh" then
+    -- Commander of Heroes: our squads played through the game's own commands (select, attack-move,
+    -- Q / W) against the computer; prints tickets as it goes, then a screenshot
+    local SQ = require("src.squads")
+    local secs2 = tonumber(os.getenv("PA_SECS") or "180")
+    opts = { mode = "rts", coh = true, size = 96, water = 0.15, seed = tonumber(os.getenv("PA_SEED") or "31"), mods = { squads = true },
+      squadSetup = SQ.defaults(), players = { { human = true, ally = 1 }, { ally = 2, level = tonumber(os.getenv("PA_LEVEL") or "5") } } }
+    game = startFn(opts)
+    local w = game.world
+    local nextOrder, nextLog = 0, 0
+    while w.time < secs2 and not w.over do
+      for _ = 1, 15 do game:update(1 / 30) end
+      if w.time >= nextOrder then
+        nextOrder = w.time + 8
+        for i, sq in ipairs(SQ.squadsOf(w, 1)) do
+          local L = sq.leader
+          if L and L.alive then
+            game:select({ L })
+            local best, bd
+            for _, p in ipairs(w.capPoints) do
+              if p.owner ~= w.ally[1] then
+                local d = (p.x - L.x) ^ 2 + (p.y - L.y) ^ 2 + i * 1e5 * ((_ + i) % 3)
+                if not bd or d < bd then best, bd = p, d end
+              end
+            end
+            if best then game:commandMove(best.x, best.y, "amove", false) end
+            local sx, sy = game:worldToScreen(best and best.x or L.x, best and best.y or L.y)
+            love.mouse.setPosition(sx, sy)
+            game:keypressed("q"); game:keypressed("w")
+          end
+        end
+      end
+      if w.time >= nextLog then
+        nextLog = w.time + 30
+        local parts = {}
+        for a, tk in pairs(w.squads.tickets) do parts[#parts + 1] = string.format("ally%d %d tickets %d pts", a, tk, SQ.held(w, a)) end
+        table.sort(parts)
+        print(string.format("COH %3ds  %s", math.floor(w.time), table.concat(parts, " | ")))
+      end
+      frame()
+    end
+    print("COH over", w.over and w.over.winnerAlly, math.floor(w.time))
+    local L = SQ.squadsOf(w, 1)[1].leader
+    local fx, fy = (L and L.alive) and L.x or w.capPoints[3].x, (L and L.alive) and L.y or w.capPoints[3].y
+    game:select(L and L.alive and { L } or {})
+    game.cam.zoom = 0.9
+    game:centerOn(fx, fy)
+    for _ = 1, 6 do game:update(1 / 30); frame() end
+    pending = "uishot_coh.png"
+    frame(); frame()
+    print("UISHOT", love.filesystem.getSaveDirectory() .. "/uishot_coh.png")
+    return
+  end
   local tmpl = mode:match("^arena%-(%a+)")
   if tmpl then
     opts.mode, opts.template, opts.size = "arena", tmpl, 96

@@ -706,7 +706,7 @@ A.PASSIVES = {
   loader   = { name = "Rapid Loader", desc = "Fire 20% faster.", apply = function(w, e) mulMod(e, "rof", 1.2) end },
   treads   = { name = "Overdrive Treads", desc = "+15% movement speed.", apply = function(w, e) mulMod(e, "speed", 1.15) end },
   bounty   = { name = "Bounty Hunter", desc = "+30% experience.", apply = function(w, e) mulMod(e, "xpMul", 1.3) end },
-  breaker  = { name = "Siege Breaker", desc = "+60% damage to towers and the Core.", apply = function(w, e) mulMod(e, "breaker", 1.6) end },
+  breaker  = { name = "Siege Breaker", desc = "+35% damage to towers and the Core.", apply = function(w, e) mulMod(e, "breaker", 1.35) end },
   lifesteal = { name = "Siphon Rounds", desc = "Heal for 12% of the damage you deal.", apply = function(w, e) e.mods.lifesteal = (e.mods.lifesteal or 0) + 0.12 end },
   secondwind = { name = "Second Wind", desc = "Once per life: survive a killing blow and become invulnerable for 4 seconds.", apply = function(w, e) e.mods.secondWind = true end },
   focus    = { name = "Focus Core", desc = "Skills recharge 20% faster.", apply = function(w, e) mulMod(e, "cdr", 0.8) end },

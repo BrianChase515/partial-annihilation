@@ -33,7 +33,7 @@ function L.start(game)
   table.sort(mods)
   local water, total = 0, w.map.w * w.map.h
   for i = 0, total - 1 do if w.map.terrain[i] == 0 then water = water + 1 end end
-  local mk = w.craft and "craft" or (w.arena and "arena" or "rts")
+  local mk = w.craft and "craft" or (w.arena and "arena" or (w.coh and "coh" or "rts"))
   self:raw("PARTIAL ANNIHILATION MATCH LOG  v" .. D.VERSION .. "  (" .. D.MODE_NAMES[mk] .. " " .. D.MODE_VERSIONS[mk][1] .. ")   " .. os.date("%Y-%m-%d %H:%M"))
   if w.craft then
     self:raw(string.format("Mode: COMMANDER CRAFT   map %s %dx%d seed %d, official score: %s", w.map.template or "horseshoe",
@@ -42,7 +42,7 @@ function L.start(game)
     self:raw(string.format("Mode: COMMANDER ARENA   map %s %dx%d seed %d, %d sides%s, official score: %s", w.map.template or "classic",
       w.map.w, w.map.h, w.map.seed, w.arena.nSides, w.arena.ffa and " (free-for-all)" or "", w.official and "yes" or "no"))
   else
-  self:raw("Mode: ANNIHILATION")
+  self:raw(w.coh and "Mode: COMMANDER OF HEROES" or "Mode: ANNIHILATION")
   self:raw(string.format("Map: %dx%d seed %d, water %.0f%% (%s), modifiers: %s, official score: %s",
     w.map.w, w.map.h, w.map.seed, 100 * water / total, w.map.ring and "ocean ring" or "no ring",
     #mods > 0 and table.concat(mods, ",") or "none", w.official and "yes" or "no"))
@@ -109,6 +109,13 @@ function L:snapshot()
   local w = self.game.world
   local g = self.game
   self:raw(string.format("--- %s ---", mmss(w.time)))
+  if w.squads and w.capPoints then
+    local SQ = require("src.squads")
+    local parts = {}
+    for a, tk in pairs(w.squads.tickets) do parts[#parts + 1] = string.format("side %d: %d tickets, %d points", a, math.floor(tk), SQ.held(w, a)) end
+    table.sort(parts)
+    self:raw("  " .. table.concat(parts, " | "))
+  end
   if w.craft then
     local C = require("src.craft")
     if g.stats then self:raw(string.format("  actions/min %d", g.stats.actions or 0)); g.stats.actions = 0 end

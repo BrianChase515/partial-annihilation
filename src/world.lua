@@ -64,6 +64,7 @@ function W.new(opts)
   for i = 0, n - 1 do self.visible[i] = 0; self.explored[i] = false end
   self.fogTimer = 0
   self.noFog = opts.noFog
+  self.coh = opts.coh -- Commander of Heroes (squads, points, tickets)
   self.noKite = (os.getenv("PA_NOKITE") or "") ~= "" -- test harness: switch kiting off to compare
 
   self.nukes = {}
@@ -767,7 +768,7 @@ end
 
 function W:speedOf(e)
   local flee = e.retreating and (e.key == "commander" and 1.5 or 1.25) or 1
-  local sp = e.def.speed * (1 + 0.04 * (e.level or 0)) * flee * (self:modsOf(e).speed or 1) * (e.sqSpeed or 1)
+  local sp = e.def.speed * (1 + 0.04 * (e.level or 0)) * flee * (self:modsOf(e).speed or 1)
   if self.heroes then
     sp = sp * (self:bv(e, "speed") or 1)
     if e.slowUntil and self.time < e.slowUntil then sp = sp * 0.6 end
@@ -775,7 +776,8 @@ function W:speedOf(e)
   local o = e.orders[1]
   if o and o.groupSpeed and not e.retreating then sp = math.min(sp, o.groupSpeed) end
   if o and o.march and not o.march.contact and not e.retreating and (o.formed or not o.formX) then sp = math.min(sp, o.march.speed) end
-  return sp
+  -- squad skills (Sprint, Hull Down...) scale the whole squad, after it has matched pace
+  return sp * (e.sqSpeed or 1)
 end
 
 -- Units out of combat near their Commander or a factory slowly repair
@@ -920,6 +922,9 @@ end
 -- can e's side see o? (its own eyes, or any friendly unit or building close enough to o)
 function W:spotted(e, o)
   if U.dist2(e.x, e.y, o.x, o.y) <= self:sightOf(e) ^ 2 then return true end
+  for _, v in ipairs(self.visionSources or {}) do
+    if v.ally == self.ally[e.team] and U.dist2(v.x, v.y, o.x, o.y) <= v.r * v.r then return true end
+  end
   local seen = false
   self:query(o.x, o.y, 480, function(f)
     if not seen and f.alive and f ~= e and f.team and self.ally[f.team] == self.ally[e.team] and f.def.sight
@@ -1844,6 +1849,19 @@ function W:updateFog(force)
             vis[row + tx] = 1
             exp[row + tx] = true
           end
+        end
+      end
+    end
+  end
+  -- flares and other lights (Commander of Heroes)
+  for _, v in ipairs(self.visionSources or {}) do
+    if v.ally == self.ally[self.playerTeam] then
+      local r = v.r / T
+      local cx, cy = v.x / T, v.y / T
+      for ty = math.max(0, math.floor(cy - r)), math.min(h - 1, math.floor(cy + r)) do
+        for tx = math.max(0, math.floor(cx - r)), math.min(w - 1, math.floor(cx + r)) do
+          local dx, dy = tx + 0.5 - cx, ty + 0.5 - cy
+          if dx * dx + dy * dy <= r * r then vis[ty * w + tx] = 1; exp[ty * w + tx] = true end
         end
       end
     end

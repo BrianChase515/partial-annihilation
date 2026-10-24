@@ -80,6 +80,16 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
 ![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)
 
 
+### Commander of Heroes: squads, skills and capture points
+
+A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units. There's no economy and no base building: each side has a Field HQ and two or three squads you design before the match (12 points each: Scouts 1, Tanks/Flak/Fighters 2, Artillery/Gunships 3, Bombers 4).
+
+- **Squads, not armies.** Click any unit and its whole squad answers (Alt-click for one unit). Squads move at their own pace, march in ranks on attack-move, and start on control groups 1-3.
+- **Leaders by type, two skills each (Q / W, at the mouse):** Armor (led by a veteran Tank): Hull Down and Smoke Screen. Battery (Artillery): Barrage and Spotter Drone. Recon (Scout): Flare and Sprint. Air Defense (Flak): Flak Barrage and Field Repair. Air Wing (Gunship): Strafing Run and Afterburner. Skills run on cooldowns, and the squad panel shows them (click one to cast).
+- **Capture points and tickets.** Five points: one near each base, three across the middle. Ground units standing on a point take it (aircraft can't). Hold more than the enemy and their tickets drain; every unit lost costs tickets too. Win when they run out, or when their HQ falls.
+- **Fall back, come again.** Units heal fast at the HQ; fallen members are replaced there (faster the more points you hold) and a fallen leader returns after 45 seconds.
+- 1v1 or 2v2 on a small or medium map, difficulty 1-10. Not scored yet (mode version 0.1).
+
 ### Your Commander is a roguelike hero with a nuke
 Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:
 - Second Wind and Emergency Recall
@@ -109,7 +119,6 @@ Victory and defeat get their own fanfares. A robotic voice calls out "Warning. N
 - **Groovy:** explosions become flowers, the palette goes 1970, and the landscape slowly trips out.
 - **Metal Alert:** only a quarter of the metal deposits, but each is worth three times as much, and the metal has to travel. Every extractor comes with its own **ore truck** that hauls loads to your **Refinery** (you start with one; build more). Kill a truck and that extractor needs a minute to roll out a new one, and rebuilding the extractor doesn't skip the wait.
 - **Sandbox** (a game type, next to Standard): pick any army for each side, up to 300 of every unit type, and they start beside the Commanders. One Commander each; losing yours still ends it. Never scored, never teaches Mirror or Nemesis.
-- **Squad Tactics** (a game type): a small, dry map, no economy and no Commander. Each side has a Field HQ and two or three squads you design before the match (12 points each: Scouts 1, Tanks/Flak/Fighters 2, Artillery/Gunships 3, Bombers 4). Every squad follows a Squad Leader with a toggle ability (V): Entrench, Spotter Drone, Smoke, Overdrive or Field Repair. Units heal slowly anywhere and fast at the HQ, fallen members are replaced there after 30 seconds and leaders return after 45, so falling back and coming again is the rhythm. Destroy the enemy HQ to win. Squads start on control groups 1-3, and the squad panel (top right) toggles abilities with a click.
 - **Post-Apocalypse:** no Commanders. Everyone starts with a single Constructor and wins by wiping out every enemy unit and building. At 10:00 the fog of war lifts for good.
 
 Combine them however you like. Score keeps running, but only games without gameplay modifiers (Groovy is cosmetic) count as official, or teach Mirror and Nemesis.

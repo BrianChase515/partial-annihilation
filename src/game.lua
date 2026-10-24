@@ -46,7 +46,7 @@ function G.new(opts)
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
     playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, craft = self.craft, template = opts.template,
-    experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup,
+    experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup, coh = opts.coh,
   })
   local world = self.world
   world.humanTeams = {}
@@ -58,7 +58,7 @@ function G.new(opts)
       if not p.human then
         local ai = require("src.squads").newAI(world, i, p.level)
         self.ais[#self.ais + 1] = ai
-        p.profileName = "Squads"
+        p.profileName = ai.profileName
       end
     elseif self.craft then
       if not p.human then
@@ -287,11 +287,18 @@ function G.new(opts)
       for _, u in ipairs(sq.members) do g[#g + 1] = u end
       self.groups[i] = g
     end
-    world.onSquadAbility = function(sq)
+    world.onSquadSkill = function(sq, slot)
       if sq.team == 1 then
-        local ab = SQ.byAbility[sq.ability]
-        self:notice(string.format("Squad %d: %s %s", sq.idx, ab and ab.name or sq.ability, sq.on and "ON" or "off"), 1.5)
+        local sk = SQ.SKILLS[sq.skills[slot].key]
+        self:notice(string.format("%s: %s", SQ.byType[sq.type].name, sk.name), 1.4)
       end
+    end
+    world.onSquadLeaderDown = function(sq)
+      if sq.team == 1 then self:notice(string.format("%s Leader down - back at the HQ in 45s", SQ.byType[sq.type].name), 2.5) end
+    end
+    world.onPointTaken = function(p, ally)
+      if ally == world.ally[1] then self:notice("Point " .. p.name .. " taken", 1.8)
+      else self:notice("Point " .. p.name .. " lost to the enemy", 2.2) end
     end
   end
   world.onApocFog = function()
@@ -473,6 +480,12 @@ function G:select(list, add)
   for _, e in ipairs(list) do
     if e.alive and e.team == 1 and not e.def.truck then self.selected[e] = true end -- ore trucks drive themselves
   end
+  -- Commander of Heroes: clicking any member selects the whole squad (hold Alt for one unit)
+  if self.world.squads and not love.keyboard.isDown("lalt", "ralt") then
+    for e in pairs(self.selected) do
+      if e.squad then for _, u in ipairs(e.squad.members) do if u.alive then self.selected[u] = true end end end
+    end
+  end
   self.mode = nil
 end
 
@@ -633,8 +646,19 @@ function G:commandMove(x, y, kind, queue)
   local groupSpeed, march
   if kind == "gmove" or (kind == "amove" and #units > 1) then
     for _, u in ipairs(units) do
-      local sp = self.world:speedOf(u)
+      local sp = self.world:speedOf(u) / (u.sqSpeed or 1)
       if not groupSpeed or sp < groupSpeed then groupSpeed = sp end
+    end
+  end
+  -- Commander of Heroes: each squad keeps its own pace (and marches as its own group)
+  local perSquad = self.world.squads and (kind == "move" or kind == "gmove" or kind == "amove")
+  local sqPace, sqCount, sqMarch = {}, {}, {}
+  if perSquad then
+    for _, u in ipairs(units) do
+      local k = u.squad or u
+      local sp = self.world:speedOf(u) / (u.sqSpeed or 1)
+      if not sqPace[k] or sp < sqPace[k] then sqPace[k] = sp end
+      sqCount[k] = (sqCount[k] or 0) + 1
     end
   end
   local fdx, fdy = 0, 0
@@ -654,8 +678,18 @@ function G:commandMove(x, y, kind, queue)
   end
   for _, u in ipairs(units) do
     local s = slots[u]
-    local o = { type = kind == "gmove" and "move" or kind, x = s[1], y = s[2], groupSpeed = groupSpeed, march = march }
-    if march and march.formUp then o.formX, o.formY = s[1] + fdx, s[2] + fdy end
+    local gs, mr = groupSpeed, march
+    if perSquad then
+      local k = u.squad or u
+      if kind == "amove" then
+        sqMarch[k] = sqMarch[k] or { speed = sqPace[k], n = sqCount[k], formUp = march and march.formUp }
+        gs, mr = nil, sqMarch[k]
+      else
+        gs = sqPace[k]
+      end
+    end
+    local o = { type = kind == "gmove" and "move" or kind, x = s[1], y = s[2], groupSpeed = gs, march = mr }
+    if mr and mr.formUp then o.formX, o.formY = s[1] + fdx, s[2] + fdy end
     if kind == "patrol" then
       local last = queue and u.orders[#u.orders]
       o.fromX, o.fromY = last and last.x or u.x, last and last.y or u.y
@@ -1590,6 +1624,10 @@ function G:mousepressed(x, y, button)
       self:commandMove(wx, wy, self.mode, shift)
       if not shift then self.mode = nil end
       return
+    elseif self.mode == "sqskill" and self.sqAim then
+      self:squadSkill(self.sqAim.slot, self.sqAim.sq, wx, wy)
+      self.mode, self.sqAim = nil, nil
+      return
     elseif self.mode == "nuke" then
       self.world:launchNuke(self:myCommander(), wx, wy)
       self.mode = nil
@@ -1911,7 +1949,7 @@ function G:keypressed(key)
     return
   end
   if key == "d" and self.holdToggle then self.holdToggle = false end
-  if self.world.squads and key == "v" then self:toggleSquads(); return end
+  if self.world.squads and (key == "q" or key == "w") then self:squadSkill(key == "q" and 1 or 2); return end
   if self.craft then
     if key == "q" and shift and CG.trainWorker(self) then return end
     if CG.heroKey(self, key) then return end
@@ -2065,7 +2103,7 @@ function G:namingKey(key)
   if not self.naming then love.keyboard.setTextInput(false) end
 end
 
--- Squad Tactics: V toggles the ability of every squad that has a unit selected
+-- Commander of Heroes: the squads with a unit selected
 function G:selectedSquads()
   local seen, out = {}, {}
   for _, e in ipairs(self:selectedList()) do
@@ -2075,16 +2113,26 @@ function G:selectedSquads()
   return out
 end
 
-function G:toggleSquads()
+-- Q / W: skill 1 or 2 of the selected squads. Self skills fire for every selected squad that has
+-- it ready; aimed skills go to the mouse, from the first squad that can
+function G:squadSkill(slot, sqOnly, wx, wy)
   local SQ = require("src.squads")
-  local list = self:selectedSquads()
-  if #list == 0 then self:notice("Select a squad first (1, 2, 3)", 1.2); return end
-  -- all on if any is off, else all off
-  local anyOff = false
-  for _, sq in ipairs(list) do if not sq.on then anyOff = true end end
-  for _, sq in ipairs(list) do SQ.toggle(self.world, sq, anyOff) end
+  local list = sqOnly and { sqOnly } or self:selectedSquads()
+  if #list == 0 then self:notice("Select a squad first (1, 2, 3 or click one)", 1.2); return end
+  if not wx then wx, wy = self:screenToWorld(love.mouse.getPosition()) end
+  local done, why = false, nil
+  for _, sq in ipairs(list) do
+    local s = sq.skills[slot]
+    if s then
+      local ok, r = SQ.cast(self.world, sq, slot, wx, wy)
+      if ok then
+        done = true
+        if SQ.SKILLS[s.key].aim == "point" then break end
+      else why = why or r end
+    end
+  end
+  if not done and why then self:notice(why, 1.4) end
 end
-
 -- a flashing marker on the minimap for a few seconds (e.g. where an ally's Commander fell)
 function G:minimapPing(x, y, col)
   self.mmPings = self.mmPings or {}
