@@ -223,6 +223,12 @@ The same `.love` file runs on Windows and Linux with LÖVE 11.5.
 
 If you keep the game in Documents, Desktop or Downloads, macOS asks once whether LÖVE may use that folder (the game reads itself from there and writes its match logs beside it). Allow it once and you won't be asked again. A folder like `~/Games` doesn't ask at all.
 
+## Kiting, attack-move and sight
+
+- **Kiting:** a ranged unit that is fighting (attack, attack-move, patrol, guard or idle) steps back from a shorter-ranged enemy closing in and keeps shooting. It won't run from something it can't shoot or from something much faster than itself (a Scout swarm on artillery). Plain moves and group moves never kite. In Commander Arena, Commanders kite enemy Commanders only, never the creep wave. Computer players kite from level 4 up; level 8+ do it every time.
+- **Attack-move marches:** a group attack-move forms ranks (short reach in front, long guns behind) and walks at the slowest unit's pace until anyone makes contact; then everyone fights freely. Level 5+ computer armies march too.
+- **No shooting into the fog:** a target beyond a unit's own sight must be seen by a friendly unit or building. Artillery and battleships rely on spotters.
+
 ## Controls
 
 | Action | Keys |
@@ -230,6 +236,7 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Select / add | Left-click or drag; Shift adds; double-click selects all of a type on screen |
 | Move / attack / assist | Right-click (Shift queues) |
 | Attack-move, Stop, Patrol | `A` then click, `S`, `P` then click |
+| Game speed | `+` / `-` (0.5x up to 15x; the result never depends on speed) |
 | Plant retreat flag | `Ctrl+F` at the mouse (or the Flag button, then click) |
 | Guard a unit / factory output follows a unit | Right-click a friendly unit with army / a factory selected |
 | Commander flees home (repairs only there) | `F` with the Commander selected |
