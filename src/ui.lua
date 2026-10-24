@@ -755,6 +755,8 @@ end
 function UI.drawInfo(game, L)
   local list = game:selectedList()
   local x, y, w = L.infoX, L.panelY + 12, L.infoW
+  local foreign = false
+  if #list == 0 and game:inspectValid() then list = { game.inspect }; foreign = true end
   if #list == 0 then
     lg.setFont(font(14))
     lg.setColor(0.6, 0.66, 0.74)
@@ -778,6 +780,16 @@ function UI.drawInfo(game, L)
       title = "Hero: " .. (require("src.arena").byClass[e.class] or { name = e.class }).name
     end
     lg.print(title, x + 72, y + 2)
+    if foreign then
+      local wld = game.world
+      local who = e.key == "goldmine" and "Neutral" or (e.team == 0 and "Neutral creep" or
+        ((wld:hostile(e.team, 1) and "Enemy" or "Ally") .. " - " .. (D.teamName[e.team] or ("team " .. e.team))))
+      local tw = font(17):getWidth(title)
+      lg.setFont(font(13))
+      local hc = e.team == 0 and { 0.95, 0.8, 0.4 } or (wld:hostile(e.team, 1) and { 1, 0.45, 0.4 } or { 0.5, 1, 0.6 })
+      lg.setColor(hc)
+      lg.print("(" .. who .. ")", x + 82 + tw, y + 5)
+    end
     lg.setFont(font(12))
     lg.setColor(0.75, 0.8, 0.86)
     local hpTxt = string.format("HP %d / %d", math.max(0, e.hp), e.maxhp)
@@ -862,7 +874,7 @@ function UI.drawInfo(game, L)
       lg.print("Upgrades: " .. (#names > 0 and table.concat(names, ", ") or "none yet") .. nuke, x + 72, y + 126)
     end
     -- factory queue
-    if d.factory and e.built >= 1 then
+    if d.factory and e.built >= 1 and not foreign then
       local qx, qy = x, y + 112
       -- "new units join group" control
       local gx, gy, gw = x + w - 190, y + 2, 190
@@ -902,7 +914,7 @@ function UI.drawInfo(game, L)
         lg.setColor(0.5, 0.55, 0.6)
         lg.print("Empty. Click a unit on the right or press its key (Shift = 5, right-click removes).", qx, qy + 20)
       end
-    elseif e.orders and #e.orders > 0 then
+    elseif e.orders and #e.orders > 0 and not foreign then
       local o = e.orders[1]
       local names = { move = "Moving", amove = "Attack-moving", attack = "Attacking", patrol = "Patrolling", build = "Building", assist = "Assisting", retreat = "Retreating (weapons off)", repairzone = "On repair-zone duty" }
       lg.setColor(0.6, 0.85, 0.6)

@@ -99,6 +99,24 @@ local function script(mode, secs)
         or (pick == "barracks" and e.key:match("barracks"))) then sel[#sel + 1] = e end
     end
     if #sel > 0 then game:select(sel) end
+    if os.getenv("PA_INSPECT") then
+      w.noFog = true
+      local best, bd
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.team == 0 and e.def.weapon then
+          local d = (e.x - c.x) ^ 2 + (e.y - c.y) ^ 2
+          if not bd or d < bd then best, bd = e, d end
+        end
+      end
+      game.selected = {}
+      game.inspect = best
+      game:centerOn(best.x, best.y)
+      for _ = 1, 2 do game:update(1 / 30); frame() end
+      local hx, hy = best.x + 160, best.y
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 2 and not e.def.building then hx, hy = e.x, e.y; game:centerOn(e.x, e.y); break end end
+      local sx, sy = game:worldToScreen(hx, hy)
+      love.mouse.setPosition(sx, sy)
+    end
     if os.getenv("PA_WIDE") then game.cam.zoom = 0.6; game:centerOn(c.x, c.y + 200) end
     if os.getenv("PA_OVERVIEW") then
       w.noFog = true

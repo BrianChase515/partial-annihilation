@@ -403,8 +403,25 @@ end
 ---------------------------------------------------------------------------
 -- Selection helpers
 
+-- a visible non-player entity under the point (enemy, ally, creep or gold mine), for the read-only info panel
+function G:inspectable(wx, wy)
+  local world = self.world
+  return world:entityAt(wx, wy, function(o)
+    if o.team == 1 or o.inMine then return false end
+    return o.dormant or o.key == "goldmine" or world:isVisible(o)
+  end)
+end
+
+function G:inspectValid()
+  local e = self.inspect
+  if not e then return nil end
+  if not e.alive or e.inMine or not (e.dormant or e.key == "goldmine" or self.world:isVisible(e)) then self.inspect = nil; return nil end
+  return e
+end
+
 function G:select(list, add)
   if not add then self.selected = {} end
+  if #list > 0 then self.inspect = nil end
   for _, e in ipairs(list) do
     if e.alive and e.team == 1 then self.selected[e] = true end
   end
@@ -1180,6 +1197,55 @@ function G:draw()
   end
 
   UI.draw(self)
+  self:drawHoverInfo()
+end
+
+-- hovering a visible enemy, creep or mine: a small card with its name, health and weapon
+function G:drawHoverInfo()
+  if self.boxStart or self.mode or self.menuOpen or self.showHelp then return end
+  local mx, my = love.mouse.getPosition()
+  if UI.overPanel(self, mx, my) then return end
+  local wx, wy = self:screenToWorld(mx, my)
+  local e = self:inspectable(wx, wy)
+  if not e then return end
+  local world, d = self.world, e.def
+  local lg = love.graphics
+  local title = d.name
+  if e.key == "commander" and e.class and world.heroes then
+    local cls = require("src.arena").byClass[e.class]
+    title = (cls and cls.name or e.class) .. "  L" .. (e.clevel or 0)
+  end
+  local lines = {}
+  if e.key == "goldmine" then lines[#lines + 1] = string.format("%d gold left", e.gold or 0)
+  else lines[#lines + 1] = string.format("HP %d / %d", math.max(0, e.hp), e.maxhp) end
+  if d.weapon then
+    local m = e.mods or {}
+    local dmg = d.weapon.damage * (m.craftDmg or 1) * (e.key == "commander" and (m.dmg or 1) or 1)
+    local kind = (d.melee or m.melee) and "Melee" or (d.weapon.ballistic and "Siege" or "Ranged")
+    lines[#lines + 1] = string.format("%s %d dmg, range %d", kind, dmg, world:rangeOf(e))
+  end
+  local who = e.key == "goldmine" and "Neutral" or (e.team == 0 and "Neutral creep" or (world:hostile(e.team, 1) and "Enemy" or "Ally"))
+  local f1, f2 = R.font(14), R.font(12)
+  local tw = f1:getWidth(title)
+  for _, l in ipairs(lines) do tw = math.max(tw, f2:getWidth(l)) end
+  tw = math.max(tw, f2:getWidth(who))
+  local bw, bh = tw + 20, 26 + #lines * 16 + 16
+  local bx, by = mx + 18, my + 14
+  local sw, sh = self:viewSize()
+  if bx + bw > sw then bx = mx - bw - 10 end
+  if by + bh > sh then by = my - bh - 10 end
+  lg.setColor(0.05, 0.07, 0.1, 0.92)
+  lg.rectangle("fill", bx, by, bw, bh, 5)
+  local hc = e.team == 0 and { 0.95, 0.8, 0.4 } or (world:hostile(e.team, 1) and { 1, 0.45, 0.4 } or { 0.5, 1, 0.6 })
+  lg.setColor(hc[1], hc[2], hc[3], 0.8)
+  lg.setLineWidth(1)
+  lg.rectangle("line", bx, by, bw, bh, 5)
+  lg.setFont(f1); lg.setColor(1, 1, 1)
+  lg.print(title, bx + 10, by + 5)
+  lg.setFont(f2); lg.setColor(hc)
+  lg.print(who, bx + 10, by + 24)
+  lg.setColor(0.8, 0.85, 0.9)
+  for i, l in ipairs(lines) do lg.print(l, bx + 10, by + 24 + i * 16) end
 end
 
 -- Orders, build ghosts, rally points, range rings for the selection
@@ -1199,6 +1265,14 @@ function G:drawOverlays()
     lg.polygon("fill", fx, fy - 34, fx + 20, fy - 29 + wave, fx, fy - 23)
   end
   local shift = love.keyboard.isDown("lshift", "rshift")
+  local ins = self:inspectValid()
+  if ins then
+    local hc = ins.team == 0 and { 0.95, 0.8, 0.4 } or (world:hostile(ins.team, 1) and { 1, 0.35, 0.3 } or { 0.5, 1, 0.6 })
+    lg.setColor(hc[1], hc[2], hc[3], 0.9)
+    lg.setLineWidth(2)
+    if ins.def.building then lg.rectangle("line", ins.x - ins.def.w * T / 2 - 1, ins.y - ins.def.h * T / 2 - 1, ins.def.w * T + 2, ins.def.h * T + 2, 6)
+    else lg.circle("line", ins.x, ins.y, ins.def.radius + 5) end
+  end
   for _, e in ipairs(self:selectedList()) do
     -- order waypoints
     if not e.def.building and (#e.orders > 0) then
@@ -1463,7 +1537,10 @@ function G:mousereleased(x, y, button)
     local wx, wy = self:screenToWorld(x, y)
     local e = world:entityAt(wx, wy, function(o) return o.team == 1 end)
     if not e then
+      -- nothing of ours there: inspect whatever visible enemy / neutral / mine is under the cursor
+      local other = self:inspectable(wx, wy)
       if not shift then self.selected = {} end
+      self.inspect = other
       return
     end
     local now = love.timer.getTime()
