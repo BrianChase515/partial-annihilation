@@ -14,6 +14,70 @@ local function script(mode, secs)
     for i = 1, 10 do opts.players[i] = { ally = i % 2 == 1 and 1 or 2, level = 5 } end
     opts.players[1].class = os.getenv("PA_CLASS") or "ranger"
   end
+  if mode == "craft" and os.getenv("PA_DECOY") then
+    opts = { mode = "craft", size = 88, seed = 31,
+      players = { { human = true, ally = 1, race = "vanguard", class = "ranger" }, { ally = 2, level = 1, race = "warband" } } }
+    game = startFn(opts)
+    local w = game.world
+    local A = require("src.arena")
+    local h = w.teams[1].commander
+    h.skills = { { key = "decoy", readyAt = 0 } }
+    local foes = {}
+    for i = 1, 4 do foes[i] = w:spawn(i <= 2 and "grunt" or "headhunter", 2, h.x + 200 + i * 20, h.y + 60) end
+    for _, f in ipairs(foes) do w:issue(f, { type = "attack", target = h }) end
+    for _ = 1, 30 do game:update(1 / 30) end
+    print("before", h.hp)
+    print("cast", A.useSkill(w, h, 1, h.x - 150, h.y))
+    local hp0 = h.hp
+    for _ = 1, 90 do game:update(1 / 30) end
+    local dec
+    for _, e in ipairs(w.entities) do if e.key == "decoy" then dec = e end end
+    print("hero lost", hp0 - h.hp, "decoy hp", dec and dec.hp, dec and dec.maxhp)
+    for _, f in ipairs(foes) do local o = f.orders[1]; print("foe", f.key, o and o.type, o and o.target and o.target.key, f.chase and f.chase.key) end
+    return
+  end
+  if mode == "craft" and os.getenv("PA_BUILDQ") then
+    -- shift-queued builds and group builds, played through the game's own commands
+    opts = { mode = "craft", size = 88, seed = 31,
+      players = { { human = true, ally = 1, race = "warband" }, { ally = 2, level = 1, race = "vanguard" } } }
+    game = startFn(opts)
+    local w = game.world
+    w.teams[1].gold, w.teams[1].wood = 3000, 1000
+    local function step(sec) local tt = w.time + sec; while w.time < tt and not w.over do for _ = 1, 15 do game:update(1 / 30) end; frame() end end
+    local function sel(pred) local l = {}; for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and pred(e) then l[#l + 1] = e end end; game:select(l); return l end
+    local hall = sel(function(e) return e.def.hall end)[1]
+    step(4)
+    local ws = sel(function(e) return e.def.worker end)
+    local function dump(tag)
+      for _, e in ipairs(ws) do
+        local t = {}
+        for _, o in ipairs(e.orders) do t[#t + 1] = o.type .. (o.key and (":" .. o.key) or "") .. (o.kind and (":" .. o.kind) or "") end
+        print(tag, e.id, table.concat(t, ","))
+      end
+    end
+    -- one worker, three shift-queued burrows
+    game:select({ ws[1] })
+    game.buildKey = "w_burrow"
+    print("q1", game:placeBuilding(hall.x + 200, hall.y + 180, true))
+    print("q2", game:placeBuilding(hall.x + 280, hall.y + 180, true))
+    print("q3", game:placeBuilding(hall.x + 360, hall.y + 180, true))
+    dump("AFTERQ")
+    -- three workers, one barracks
+    game:select({ ws[2], ws[3], ws[4] })
+    game.buildKey = "w_barracks"
+    local placed
+    for _, off in ipairs({ { -250, 250 }, { 0, 300 }, { 250, 320 }, { -300, 0 }, { 300, -60 }, { 0, -300 }, { 200, 450 } }) do
+      if not placed and game:placeBuilding(hall.x + off[1], hall.y + off[2], false) then placed = off end
+    end
+    print("grp", placed and placed[1], placed and placed[2])
+    dump("AFTERG")
+    step(90)
+    dump("LATER")
+    local n = {}
+    for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.building then n[e.key] = (n[e.key] or 0) + (e.built >= 1 and 1 or 0) end end
+    for k, v in pairs(n) do print("BUILT", k, v) end
+    return
+  end
   if mode == "craft" and os.getenv("PA_HUMAN") then
     -- play team 1 by hand through the game's own commands
     opts = { mode = "craft", size = 88, seed = 31,
@@ -96,9 +160,19 @@ local function script(mode, secs)
     local sel = {}
     for _, e in ipairs(w.entities) do
       if e.alive and e.team == 1 and ((pick == "worker" and e.def.worker) or (pick == "hall" and e.def.hall)
-        or (pick == "barracks" and e.key:match("barracks"))) then sel[#sel + 1] = e end
+        or (pick == "barracks" and e.key:match("barracks")) or (pick == "army" and not e.def.worker and not e.def.building)) then sel[#sel + 1] = e end
     end
     if #sel > 0 then game:select(sel) end
+    if pick == "army" then
+      local cg = require("src.craft_game")
+      local hs = cg.selectedHeroes(game)
+      if hs[1] then game:centerOn(hs[1].x, hs[1].y) end
+      cg.cycleHero(game)
+    end
+    if os.getenv("PA_MOUSE") then
+      local mx, my = os.getenv("PA_MOUSE"):match("(%d+),(%d+)")
+      love.mouse.setPosition(tonumber(mx), tonumber(my))
+    end
     if os.getenv("PA_GMOVE") then
       local units = {}
       for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and not e.def.building and not e.def.worker then units[#units + 1] = e end end

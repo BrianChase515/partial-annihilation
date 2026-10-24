@@ -78,7 +78,7 @@ end
 function Menu:tabRects(r)
   local x0, y, w, h = self:layout()
   local ty = math.max(14, y - 240)
-  r[#r + 1] = { x = w / 2 - 466, y = ty, w = 300, h = 50, label = "RTS", tab = "rts", big = true, active = self.mode == "rts" }
+  r[#r + 1] = { x = w / 2 - 466, y = ty, w = 300, h = 50, label = "ANNIHILATION", tab = "rts", big = true, active = self.mode == "rts" }
   r[#r + 1] = { x = w / 2 - 150, y = ty, w = 300, h = 50, label = "COMMANDER ARENA", tab = "arena", big = true, active = self.mode == "arena" }
   r[#r + 1] = { x = w / 2 + 166, y = ty, w = 300, h = 50, label = "COMMANDER CRAFT", tab = "craft", big = true, active = self.mode == "craft" }
 end
@@ -576,7 +576,7 @@ function Menu:draw()
   local hy = y + 44 + 5 * 40 + 34
   lg.setFont(R.font(13))
   lg.setColor(0.55, 0.62, 0.7)
-  lg.print("HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
+  lg.print("ANNIHILATION HIGH SCORES  season " .. D.SEASON, x0 + 580, hy)
   local official = not (self.mods.alien or self.mods.drops)
   if official then lg.setColor(0.5, 0.9, 0.55) else lg.setColor(1, 0.6, 0.35) end
   local ot = official and "this game counts" or "modifiers on: unofficial"

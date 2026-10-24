@@ -41,6 +41,7 @@ function L.start(game)
     self:raw(string.format("Mode: COMMANDER ARENA   map %s %dx%d seed %d, %d sides%s, official score: %s", w.map.template or "classic",
       w.map.w, w.map.h, w.map.seed, w.arena.nSides, w.arena.ffa and " (free-for-all)" or "", w.official and "yes" or "no"))
   else
+  self:raw("Mode: ANNIHILATION")
   self:raw(string.format("Map: %dx%d seed %d, water %.0f%% (%s), modifiers: %s, official score: %s",
     w.map.w, w.map.h, w.map.seed, 100 * water / total, w.map.ring and "ocean ring" or "no ring",
     #mods > 0 and table.concat(mods, ",") or "none", w.official and "yes" or "no"))

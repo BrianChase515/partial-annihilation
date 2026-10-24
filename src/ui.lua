@@ -29,6 +29,8 @@ end
 function UI.overPanel(game, x, y)
   local w, h = love.graphics.getDimensions()
   if y >= h - UI.PANEL_H or y <= UI.TOP_H then return true end
+  local hb = game.craft and game.heroBar
+  if hb and x >= hb.x and x <= hb.x + hb.w and y >= hb.y and y <= hb.y + hb.h then return true end
   if game.orderBtns and y >= h - UI.PANEL_H - UI.ORDERS_H then
     local b1, bn = game.orderBtns[1], game.orderBtns[#game.orderBtns]
     if b1 and x >= b1.x - 6 and x <= bn.x + bn.w + 6 then return true end
@@ -374,6 +376,7 @@ end
 -- Click it to jump to him.
 
 function UI.drawCommanderCard(game)
+  if game.craft then return craftUI().drawHeroBar(game) end
   local world = game.world
   local c = world.teams[1].commander
   if not c then return end
@@ -506,6 +509,7 @@ function UI.drawJunglePanel(game)
 end
 
 function UI.cmdCardClick(game, x, y)
+  if game.craft then return craftUI().heroBarClick(game, x, y) end
   local r = game.cmdCard
   if r and x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
     local c = game.world.teams[1].commander
@@ -1204,11 +1208,20 @@ function UI.drawCard(game, L)
     local tw = 290
     local _, lines = font(13):getWrap(text, tw)
     local th = #lines * font(13):getHeight() + 16
-    local tx, ty = math.min(mx + 14, lg.getWidth() - tw - 24), my - th - 10
-    panelBox(tx, ty, tw + 16, th, 0.97)
-    lg.setColor(0.9, 0.93, 0.97)
-    lg.printf(text, tx + 8, ty + 8, tw)
+    local tx, ty = math.min(mx + 14, lg.getWidth() - tw - 24), math.max(UI.TOP_H + 4, math.min(my, b.y or my) - th - 6)
+    -- drawn last (see UI.draw) so the order bar and other panels can't cover it
+    game.pendingTip = { text = text, x = tx, y = ty, w = tw, h = th }
   end
+end
+
+function UI.drawPendingTip(game)
+  local t = game.pendingTip
+  if not t then return end
+  game.pendingTip = nil
+  lg.setFont(font(13))
+  panelBox(t.x, t.y, t.w + 16, t.h, 0.97)
+  lg.setColor(0.9, 0.93, 0.97)
+  lg.printf(t.text, t.x + 8, t.y + 8, t.w)
 end
 
 ---------------------------------------------------------------------------
@@ -1839,6 +1852,7 @@ function UI.draw(game)
     end
   end
 
+  if not game.showHelp and not game.menuOpen then UI.drawPendingTip(game) else game.pendingTip = nil end
   if game.showHelp then UI.drawHelp(game.craft and "craft" or game.arena) end
   if game.menuOpen then UI.drawMenu() end
   if game.world.over and game.overShown then UI.drawOver(game) end

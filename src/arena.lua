@@ -283,7 +283,21 @@ A.SKILLS = {
     use = function(w, c, tx, ty) dash(w, c, tx, ty, 260); c.fadeUntil = w.time + 1.5 end },
   decoy = { name = "Decoy", aim = "point", range = 400, cd = 20, tags = { "summon", "defend" },
     desc = "A decoy that enemies prefer to shoot, for 8 seconds.",
-    use = function(w, c, tx, ty) summon(w, c, "decoy", 1, 8, 0, { x = tx, y = ty, stay = true }) end },
+    use = function(w, c, tx, ty)
+      local d = summon(w, c, "decoy", 1, 8, 0, { x = tx, y = ty, stay = true })[1]
+      if not d then return end
+      d.decoy = true
+      -- enemies nearby drop what they were chasing (the Ranger, mostly) and go for the decoy;
+      -- a human's own explicit attack orders are left alone
+      w:query(d.x, d.y, 650, function(o)
+        if o.alive and o.def.weapon and not o.def.building and o.team ~= c.team and w:hostile(o.team, c.team) and w:canTarget(o, d) then
+          if o.chase and o.chase.alive and o.chase.team == c.team then o.chase = d end
+          if o.retaliate then o.retaliate = d end
+          local od = o.orders[1]
+          if od and od.type == "attack" and od.target and od.target.team == c.team and not (w.humanTeams and w.humanTeams[o.team]) then od.target = d end
+        end
+      end)
+    end },
   frostarrow = { name = "Frost Arrow", aim = "point", range = 560, cd = 8, tags = { "dmg", "aoe", "cc" },
     desc = "An arrow that bursts into frost, slowing everything nearby.",
     use = function(w, c, tx, ty)
@@ -886,6 +900,7 @@ end
 
 function A.learn(w, c, key)
   local s = A.SKILLS[key]
+  for i = 1, 4 do if c.skills[i] and c.skills[i].key == key then return end end -- never the same skill twice
   local slot = s.ult and 4 or nil
   if not slot then
     for i = 1, 3 do if not c.skills[i] then slot = i; break end end

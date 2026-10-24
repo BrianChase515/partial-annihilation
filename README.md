@@ -8,7 +8,7 @@ Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of 
 
 **[Play it in your browser](https://brianchase515.github.io/partial-annihilation/)**, or [download](#download) it for Windows, Mac, Linux and the Steam Deck.
 
-**Two games in one:** a full RTS, and **Commander Arena**, a single-player lane-battle mode where you control only your Commander.
+**Three games in one:** **Annihilation**, the full Total Annihilation-style RTS; **Commander Arena**, a lane-battle mode where you control only your Commander; and **Commander Craft**, a Warcraft-style mode with workers, races and heroes.
 
 ## What makes it different
 
@@ -22,7 +22,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
 - **Food and upkeep.** Every unit costs food (farms and halls provide it, up to 80). Above 40 food your gold income drops 30%, above 60 it drops 60%.
 - **Three tiers.** Town Hall → Keep → Castle (Great Hall → Stronghold → Fortress) unlock units, buildings, research and your 2nd and 3rd hero.
 - **No free upgrades.** Units never level up. Every improvement is bought: weapons and armor (three levels) at the Blacksmith / War Mill, and each production building researches upgrades for its own units (Defend, Long Rifles, Berserker Strength, Ensnare, Pulverize and more).
-- **Heroes.** You start with your class's hero and one skill. Levels come from enemies and creeps dying nearby, each with a card (skills at 2 and 4, the ultimate at 6). Heroes heal fast by your halls and rise again at your altar. Flee (F) works for them too.
+- **Heroes.** You start with your class's hero and one skill. Levels come from enemies and creeps dying nearby, each with a card (skills at 2 and 4, the ultimate at 6). Heroes heal fast by your halls and rise again at your altar. Flee (F) works for them too. The **hero bar** (top right) shows every hero's health and each skill's cooldown as a clock sweep; click a skill to cast it. With several heroes selected, **C** switches which one Q W E R control without losing the selection.
 - **Four 1v1 maps** (or Random), all original layouts inspired by classic fantasy-RTS maps:
   - **Horseshoe:** a U of land around a lake, corner expansions, a rich mine on the middle peninsula guarded by gnolls and an Ogre Warlord.
   - **Old Temple:** open ground, bases in opposite corners, two expansions each, and a walled plaza in the middle.
@@ -30,7 +30,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Serpent Glade:** one long road winding through deep forest past pocket expansions, plus a narrow hunters' trail.
 - **Melee matters.** Swords, axes and cavalry have to reach their target; ranged units and towers can hit flyers; siege wrecks buildings; casters heal, slow and bloodlust on their own.
 - **A computer opponent (difficulty 1-10)** that works its economy, creeps with its heroes, expands, techs up and attacks. Levels 8-10 also mine 10-30% faster.
-- **Its own soundtrack**: three fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove). The RTS keeps its five; the Arena mixes all eight.
+- **Its own soundtrack**: three fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove). Annihilation keeps its five; the Arena mixes all eight.
 
 ### Commander Arena: a single-player lane battler
 Switch the title screen to **COMMANDER ARENA** for a different game. There's no base and no army: just your Commander, three lanes, towers, a Core to protect, and endless waves of creeps marching at the enemy.
@@ -115,7 +115,7 @@ The **Battleship** brings the sea to the land. It shells anything within 40 tile
 Your Commander can flee too, at +50% speed, but he only repairs at his starting spot. There he powers down until he's whole again, which turns your start into a real base: hit-and-run with him is fine, and the way to kill an enemy Commander is to catch him off guard or assault his home.
 
 ### Where's the enemy?
-Every RTS map has four corner bases. You and each opponent get a random corner, so in a 1v1 the enemy might be right next door or across the map: scout before you commit. Teammates always start side by side, and empty corners are free real estate.
+Every Annihilation map has four corner bases. You and each opponent get a random corner, so in a 1v1 the enemy might be right next door or across the map: scout before you commit. Teammates always start side by side, and empty corners are free real estate.
 
 ### Opponents with personalities, and Commanders they actually use
 Difficulty (1–10) and personality are set separately for each computer player. The personalities are *Balanced, Aggressive, Turtle, Boomer, Air, Naval, Raider* and *Warlord*, a Commander who leads every assault from the front. Computer players pick upgrades that fit their style. They send their Commander out to hunt for experience when the odds are good and pull him back to their strongest position when hurt. Raiders, Aggressive and Warlord players (and sometimes Balanced ones) run packs of fast scouts that hunt down exposed constructors and extractors and scatter when anything bigger shows up, so guard your expansions. They also aim nukes at your most valuable targets while keeping clear of their own buildings.

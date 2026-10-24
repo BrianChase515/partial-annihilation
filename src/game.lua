@@ -94,7 +94,7 @@ function G.new(opts)
       VOICE.say(offer and "commander_level" or "nuke_ready")
       end
       SFX.play("ready", 0.7, 0)
-    elseif e.clevel >= 5 and world:hostile(e.team, 1) and not self.arena then
+    elseif e.clevel >= 5 and world:hostile(e.team, 1) and not world.heroes then
       self:notice(D.teamName[e.team] .. "'s Commander now has a NUKE.", 4)
     end
   end
@@ -806,21 +806,27 @@ function G:placeBuilding(wx, wy, queue)
   end
   local builders = self:selectedBuilders()
   if self.craft then
-    -- Warcraft style: the nearest selected worker goes; afterwards he returns to what he was gathering
+    -- every selected worker takes the order (a group builds faster). Shift adds it after their
+    -- other queued builds; gathering always resumes once the last one is done
     local ok, why = require("src.craft").canOrder(self.world, 1, key)
     if not ok then self:notice(why, 1.6); return false end
-    local cx, cy = (tx + D.units[key].w / 2) * self.world.T, (ty + D.units[key].h / 2) * self.world.T
-    local best, bd
+    if #builders == 0 then return false end
     for _, b in ipairs(builders) do
-      local o = b.orders[1]
-      local d = U.dist(b.x, b.y, cx, cy) + (b.carry and 200 or 0) + ((o and (o.type == "build" or o.type == "assist")) and 5000 or 0)
-      if not bd or d < bd then best, bd = b, d end
-    end
-    if not best then return false end
-    local prev = best.orders[1]
-    self.world:issue(best, { type = "build", key = key, tx = tx, ty = ty }, queue)
-    if not queue and prev and prev.type == "harvest" then
-      self.world:issue(best, { type = "harvest", kind = prev.kind, target = prev.target, tree = prev.tree }, true)
+      local resume
+      for _, o in ipairs(b.orders) do
+        if o.type == "harvest" then resume = { type = "harvest", kind = o.kind, target = o.target, tree = o.tree } end
+      end
+      local other = false
+      for _, o in ipairs(b.orders) do if o.type ~= "harvest" then other = true end end
+      if queue and other then
+        -- drop the trailing "back to work" so the new build queues behind the other builds
+        for i = #b.orders, 2, -1 do if b.orders[i].type == "harvest" then table.remove(b.orders, i) end end
+        if b.orders[1].type == "harvest" then table.remove(b.orders, 1); b.path = nil end
+        self.world:issue(b, { type = "build", key = key, tx = tx, ty = ty }, #b.orders > 0)
+      else
+        self.world:issue(b, { type = "build", key = key, tx = tx, ty = ty }, false)
+      end
+      if resume then self.world:issue(b, resume, true) end
     end
     return true
   end
@@ -1279,6 +1285,18 @@ function G:drawOverlays()
     lg.polygon("fill", fx, fy - 34, fx + 20, fy - 29 + wave, fx, fy - 23)
   end
   local shift = love.keyboard.isDown("lshift", "rshift")
+  if self.craft then
+    -- with several heroes selected, mark the one Q W E R drive
+    local sel = CG.selectedHeroes(self)
+    local a = #sel >= 2 and CG.activeHero(self)
+    if a then
+      local t = love.timer.getTime()
+      lg.setColor(1, 0.82, 0.3, 0.9)
+      lg.setLineWidth(2.5)
+      lg.circle("line", a.x, a.y, a.def.radius + 9 + math.sin(t * 5) * 1.5)
+      lg.polygon("fill", a.x, a.y - a.def.radius - 14, a.x - 6, a.y - a.def.radius - 24, a.x + 6, a.y - a.def.radius - 24)
+    end
+  end
   local ins = self:inspectValid()
   if ins then
     local hc = ins.team == 0 and { 0.95, 0.8, 0.4 } or (world:hostile(ins.team, 1) and { 1, 0.35, 0.3 } or { 0.5, 1, 0.6 })
@@ -1442,12 +1460,12 @@ function G:mousepressed(x, y, button)
       self.mode = nil
       return
     elseif self.mode == "skill" then
-      local c = self.craft and CG.activeHero(self) or self:myCommander()
-      if c then
+      local c = self.skillHero or (self.craft and CG.activeHero(self)) or self:myCommander()
+      if c and c.alive then
         local ok, why = ARENA.useSkill(self.world, c, self.skillSlot, wx, wy)
         if not ok and why then self:notice(why, 1.2) end
       end
-      self.mode = nil
+      self.mode, self.skillHero = nil, nil
       return
     elseif self.mode == "flag" then
       self.flag = { x = wx, y = wy }
@@ -1759,7 +1777,7 @@ function G:keypressed(key)
     if key == "q" and shift and CG.trainWorker(self) then return end
     if CG.heroKey(self, key) then return end
     if key == "n" then return end
-    if key == "c" and not shift then CG.cycleHero(self); return end
+    if key == "c" then CG.cycleHero(self, shift); return end
     if key == "tab" then CG.idleWorker(self); return end
   end
   if self.arena then

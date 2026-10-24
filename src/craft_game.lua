@@ -75,14 +75,28 @@ function CG.init(game)
   end
 end
 
--- the hero your skill keys and level-up cards talk to: the selected one, else your first
+-- the heroes in the current selection, in a stable order
+local function selectedHeroes(game)
+  local out = {}
+  for _, h in ipairs(C.heroesOf(game.world, 1, false)) do
+    if game.selected[h] then out[#out + 1] = h end
+  end
+  return out
+end
+CG.selectedHeroes = selectedHeroes
+
+-- the hero your skill keys and level-up cards talk to: the active one (C cycles it, the hero bar
+-- sets it) if it's in the selection, else the first selected hero, else the active / first hero
 function CG.activeHero(game)
   local w = game.world
-  local sel
-  for _, e in ipairs(game:selectedList()) do
-    if e.key == "commander" and e.team == 1 and e.alive then sel = e; break end
+  local a = game.activeHero
+  if a and (not a.alive or a.team ~= 1) then a = nil end
+  local sel = selectedHeroes(game)
+  if #sel > 0 then
+    for _, h in ipairs(sel) do if h == a then return a end end
+    return sel[1]
   end
-  if sel then return sel end
+  if a then return a end
   for _, h in ipairs(C.heroesOf(w, 1, false)) do return h end
 end
 
@@ -231,12 +245,24 @@ function CG.useSkill(game, slot)
   if not ok and why then game:notice(why, 1.2) end
 end
 
--- C: jump between your heroes
-function CG.cycleHero(game)
+-- C: with several heroes selected, switch which one Q W E R drive (the selection stays);
+-- otherwise (or Shift+C) jump to your next hero and select him
+function CG.cycleHero(game, jump)
+  local sel = selectedHeroes(game)
+  if not jump and #sel >= 2 then
+    local cur = CG.activeHero(game)
+    local idx = 1
+    for i, h in ipairs(sel) do if h == cur then idx = i end end
+    local h = sel[idx % #sel + 1]
+    game.activeHero = h
+    game:notice("Q W E R: " .. ARENA.byClass[h.class].name, 1)
+    return
+  end
   local list = C.heroesOf(game.world, 1, false)
   if #list == 0 then game:notice("No hero alive", 1.2); return end
   game.heroIdx = (game.heroIdx or 0) % #list + 1
   local h = list[game.heroIdx]
+  game.activeHero = h
   game:centerOn(h.x, h.y)
   game:select({ h })
 end

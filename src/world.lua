@@ -120,6 +120,11 @@ function W.new(opts)
       end
     end
   end
+  -- Commander Craft 1v1: the two (mirror-image) bases swap sides at random
+  if opts.craft and not opts.fixedStarts and not opts.autotest and self.np == 2 and love.math.random() < 0.5 then
+    local st = self.map.starts
+    st[1], st[2] = st[2], st[1]
+  end
   -- commanders
   for t = 1, self.np do
     local s = self.map.starts[t]
@@ -558,6 +563,21 @@ function W:chooseUpgrade(e, i)
   e.taken[u.key] = true
   e.upgrades[#e.upgrades + 1] = u
   u.apply(self, e)
+  -- heroes: cards still waiting were dealt before this pick; redeal any that offer something now taken
+  if self.heroes then
+    local keep = {}
+    for _, off in ipairs(e.offers) do
+      local stale = false
+      for _, card in ipairs(off) do if e.taken[card.key] then stale = true end end
+      if stale then
+        local fresh = ARENA.offer(self, e, off[1] and off[1].skill and "skill" or "passive")
+        if #fresh > 0 then keep[#keep + 1] = fresh end
+      else
+        keep[#keep + 1] = off
+      end
+    end
+    e.offers = keep
+  end
   return u
 end
 
@@ -1176,6 +1196,7 @@ function W:findChaseTarget(e)
       local d = U.dist(e.x, e.y, o.x, o.y)
       if d <= self:sightOf(e) and (not layer or d <= self:rangeOf(e) or self.map:canReach(layer, e.x, e.y, o.x, o.y, w.range * 0.9)) then
         local score = d - (o.def.weapon and 120 or 0) - (o.def.building and 0 or 60)
+        if o.decoy or o.key == "decoy" then score = score - 600 end
         if not bd or score < bd then best, bd = o, score end
       end
     end

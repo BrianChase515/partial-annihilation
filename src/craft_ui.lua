@@ -206,7 +206,7 @@ CU.ORDERS = {
   { "skill1", nil, "Q" }, { "skill2", nil, "W" }, { "skill3", nil, "E" }, { "skill4", nil, "R" },
   { "army", "Army", "Ctrl+A", "Select every fighting unit (not workers)." },
   { "builder", "Worker", "Tab", "Jump to the next idle worker. Shift+Q trains one at your hall from anywhere." },
-  { "cmd", "Hero", "C", "Jump between your heroes." },
+  { "cmd", "Hero", "C", "Several heroes selected: switch which one Q W E R control (the selection stays). Otherwise: jump to your next hero. Shift+C always jumps." },
   { "follow", "Follow", "L", "Camera follows the selection." },
   { "help", "Help", "F1", "All controls and tips." },
 }
@@ -295,7 +295,10 @@ Heroes
   You start with one hero (your class), with one skill. Every level: +6% health, +5% damage and a card
   (Z / X): skills at 2 and 4, the ultimate at 6, upgrades otherwise. Experience comes from enemy units
   and creeps dying near your heroes (shared between them).
-  Select a hero: Q W E R cast his skills at the mouse.  C = next hero.  F = flee to your hall (+50% speed).
+  Select a hero: Q W E R cast his skills at the mouse.  F = flee to your hall (+50% speed).
+  Several heroes selected: C switches which one Q W E R control, without changing the selection (Shift+C jumps).
+  The hero bar (top right) shows every hero's health and cooldowns: click a skill to cast it, a portrait to make
+  that hero active (double-click to jump there).
   Heroes heal fast next to your halls. Fallen heroes rise at your altar (or hall) after a short wait, for 80 + 30 x level gold.
 
 Melee units (swords, axes, cavalry) must reach their target; ranged units and towers hit from afar and can
@@ -304,5 +307,201 @@ shoot flyers. Siege (Mortars, Demolishers) wrecks buildings. Casters heal, slow 
   Right-click = move / attack / gather.  A = attack-move,  hold G + click = group move,  S = stop,  hold D = hold fire,  Ctrl+A = army
   Ctrl+1..9 groups, 1..9 recall.  Space = last attack.  Esc = menu,  F3 = pause,  + / - = game speed
 ]]
+
+---------------------------------------------------------------------------
+-- Hero bar (top right): every hero at a glance - health, level, unspent cards and each skill's
+-- cooldown as a clock sweep. Click a portrait to make that hero the one Q W E R drive (double-click
+-- jumps there); click a skill to cast it (aimed skills then take a click on the map).
+
+local function box(x, y, w, h, a)
+  lg.setColor(0.07, 0.09, 0.12, a or 0.9)
+  lg.rectangle("fill", x, y, w, h, 6)
+  lg.setColor(0.25, 0.32, 0.4, 0.8)
+  lg.setLineWidth(1)
+  lg.rectangle("line", x + 0.5, y + 0.5, w - 1, h - 1, 6)
+end
+
+-- a skill name squeezed into a small tile: the word that says most ("Lightning Sentry" -> "Sentry")
+local function shortName(name)
+  local words = {}
+  for wd in name:gmatch("%S+") do words[#words + 1] = wd end
+  local pick = words[#words] or name
+  if #words >= 2 and #words[#words] <= 3 then pick = words[1] end
+  if #pick > 7 then pick = pick:sub(1, 6) .. "." end
+  return pick
+end
+
+CU.HERO_ROW = 64
+
+function CU.drawHeroBar(game)
+  local w = game.world
+  local UI = require("src.ui")
+  local heroes = C.heroesOf(w, 1, true)
+  game.heroBar = nil
+  if #heroes == 0 then return end
+  local active = require("src.craft_game").activeHero(game)
+  local sw = lg.getWidth()
+  local bw, rh = UI.SCORE_W, CU.HERO_ROW
+  local x, y = sw - bw - 10, (w.score and game.scoreBottom or UI.TOP_H) + 6
+  local bh = #heroes * rh + 4
+  box(x, y, bw, bh, 0.88)
+  local bar = { x = x, y = y, w = bw, h = bh, rows = {} }
+  local mx, my = love.mouse.getPosition()
+  local now = w.time
+  for i, h in ipairs(heroes) do
+    local ry = y + 2 + (i - 1) * rh
+    local row = { hero = h, x = x, y = ry, w = bw, h = rh, skills = {} }
+    local isActive = h == active and #heroes > 1
+    if isActive then
+      lg.setColor(1, 0.82, 0.3, 0.13)
+      lg.rectangle("fill", x + 3, ry + 1, bw - 6, rh - 2, 5)
+      lg.setColor(1, 0.82, 0.3, 0.9)
+      lg.setLineWidth(2)
+      lg.rectangle("line", x + 3, ry + 1, bw - 6, rh - 2, 5)
+    end
+    local hit = h.alive and now - (h.lastHit or -99) < 1.2
+    if hit then
+      lg.setColor(1, 0.2, 0.15, 0.18 + 0.18 * math.sin(love.timer.getTime() * 14))
+      lg.rectangle("fill", x + 3, ry + 1, bw - 6, rh - 2, 5)
+    end
+    -- portrait
+    local cls = ARENA.byClass[h.class]
+    require("src.ui").drawIcon("cls_" .. h.class, x + 26, ry + 24, 34, h.alive and 1 or 0)
+    row.portrait = { x = x + 6, y = ry + 4, w = 40, h = 40 }
+    lg.setFont(font(10))
+    lg.setColor(1, 0.9, 0.55)
+    local lv = "L" .. (h.clevel or 0)
+    lg.print(lv, x + 26 - font(10):getWidth(lv) / 2, ry + 44)
+    -- name, status, health, experience
+    local tx = x + 52
+    lg.setFont(font(12))
+    lg.setColor(h.alive and 1 or 0.6, h.alive and 1 or 0.6, h.alive and 1 or 0.6)
+    lg.print(cls and cls.name or h.class, tx, ry + 3)
+    local status, sc
+    if not h.alive then status, sc = h.respawnAt and string.format("rises in %ds", math.max(0, math.ceil(h.respawnAt - now))) or "fallen", { 1, 0.45, 0.4 }
+    elseif h.offers and #h.offers > 0 then status, sc = "CARD! Z / X", { 1, 0.85, 0.35 }
+    elseif w:isFleeing(h) then status, sc = "fleeing", { 1, 0.75, 0.3 }
+    elseif hit then status, sc = "under attack", { 1, 0.45, 0.4 }
+    elseif h.stance then status, sc = h.stance:upper(), { 0.95, 0.8, 0.45 } end
+    if status then
+      lg.setFont(font(10))
+      lg.setColor(sc)
+      lg.print(status, x + bw - 10 - font(10):getWidth(status), ry + 5)
+    end
+    local hbw = bw - 62
+    local frac = h.alive and h.hp / h.maxhp or 0
+    lg.setColor(0.12, 0.14, 0.18)
+    lg.rectangle("fill", tx, ry + 20, hbw, 7, 2)
+    lg.setColor(0.2 + (1 - frac) * 0.8, 0.3 + frac * 0.6, 0.15)
+    lg.rectangle("fill", tx, ry + 20, hbw * frac, 7, 2)
+    local xf = R.cmdXP(h)
+    lg.setColor(0.65, 0.55, 1, 0.9)
+    lg.rectangle("fill", tx, ry + 28, hbw * (xf or 0), 2)
+    -- skills
+    local gap = 4
+    local tw = math.floor((hbw - gap * 3) / 4)
+    for slot = 1, 4 do
+      local sx, sy, th = tx + (slot - 1) * (tw + gap), ry + 33, 26
+      local sk = h.skills and h.skills[slot]
+      local def = sk and ARENA.SKILLS[sk.key]
+      local hov = mx >= sx and mx <= sx + tw and my >= sy and my <= sy + th
+      local ready = def and h.alive and now >= sk.readyAt
+      if def then
+        if slot == 4 then lg.setColor(ready and 0.42 or 0.22, ready and 0.3 or 0.17, ready and 0.08 or 0.06)
+        else lg.setColor(ready and 0.13 or 0.1, ready and 0.3 or 0.15, ready and 0.42 or 0.2) end
+      else
+        lg.setColor(0.1, 0.11, 0.13)
+      end
+      lg.rectangle("fill", sx, sy, tw, th, 4)
+      if def and not ready and h.alive then
+        -- clock sweep: the dark part shrinks as the skill comes back
+        local cdMax = def.cd * ((h.mods and h.mods.cdr) or 1)
+        local left = math.max(0, sk.readyAt - now)
+        local f = math.min(1, left / math.max(0.1, cdMax))
+        lg.setScissor(sx, sy, tw, th)
+        lg.setColor(0, 0, 0, 0.55)
+        lg.arc("fill", sx + tw / 2, sy + th / 2, tw, -math.pi / 2, -math.pi / 2 + f * math.pi * 2)
+        lg.setScissor()
+      elseif ready then
+        -- just came back: a short glow
+        local since = now - sk.readyAt
+        if since < 0.6 then
+          lg.setColor(1, 1, 1, 0.5 * (1 - since / 0.6))
+          lg.rectangle("fill", sx, sy, tw, th, 4)
+        end
+      end
+      lg.setColor(hov and 1 or 0.4, hov and 1 or 0.48, hov and 1 or 0.58, def and 0.9 or 0.4)
+      lg.setLineWidth(1)
+      lg.rectangle("line", sx + 0.5, sy + 0.5, tw - 1, th - 1, 4)
+      lg.setFont(font(10))
+      if def then
+        local name = shortName(def.name)
+        lg.setColor(1, 1, 1, ready and 1 or 0.65)
+        lg.print(name, sx + tw / 2 - font(10):getWidth(name) / 2, sy + 2)
+        local sub = ready and ARENA.KEYS[slot]:upper() or string.format("%d", math.ceil(sk.readyAt - now))
+        if not h.alive then sub = "-" end
+        lg.setColor(ready and 0.75 or 1, ready and 0.85 or 0.8, ready and 1 or 0.45)
+        lg.print(sub, sx + tw / 2 - font(10):getWidth(sub) / 2, sy + 13)
+      else
+        lg.setColor(0.4, 0.42, 0.46)
+        local t = slot == 4 and "L6" or "-"
+        lg.print(t, sx + tw / 2 - font(10):getWidth(t) / 2, sy + 7)
+      end
+      row.skills[slot] = { x = sx, y = sy, w = tw, h = th, def = def }
+      if hov and def then game.heroBarTip = { def = def, slot = slot, x = sx, y = sy + th + 4 } end
+    end
+    bar.rows[#bar.rows + 1] = row
+  end
+  game.heroBar = bar
+  game.cardBottom = y + bh
+  -- the hovered skill's description, under the bar
+  local tip = game.heroBarTip
+  game.heroBarTip = nil
+  if tip and mx >= x and mx <= x + bw and my >= y and my <= y + bh then
+    local text = tip.def.name .. (tip.def.ult and "  (ultimate)" or "") .. "\n" .. tip.def.desc ..
+      string.format("\nCooldown %ds.  Click to cast%s.", tip.def.cd, tip.def.aim == "point" and ", then click the map" or "")
+    local ww = 260
+    local _, lines = font(12):getWrap(text, ww)
+    local th = #lines * font(12):getHeight() + 12
+    local bx = math.min(x, sw - ww - 22)
+    local by = y + bh + 4
+    box(bx, by, ww + 12, th, 0.97)
+    lg.setFont(font(12))
+    lg.setColor(0.9, 0.93, 0.97)
+    lg.printf(text, bx + 6, by + 6, ww)
+  end
+end
+
+function CU.heroBarClick(game, x, y)
+  local bar = game.heroBar
+  if not bar or x < bar.x or x > bar.x + bar.w or y < bar.y or y > bar.y + bar.h then return false end
+  local w = game.world
+  for _, row in ipairs(bar.rows) do
+    local h = row.hero
+    for slot, r in pairs(row.skills) do
+      if r.def and x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
+        if not h.alive then return true end
+        game.activeHero = h
+        if r.def.aim == "point" then
+          game.mode, game.skillSlot, game.skillHero = "skill", slot, h
+        else
+          local ok, why = ARENA.useSkill(w, h, slot, h.x, h.y)
+          if not ok and why then game:notice(why, 1.2) end
+        end
+        return true
+      end
+    end
+    if y >= row.y and y <= row.y + row.h then
+      game.activeHero = h
+      local now = love.timer.getTime()
+      if game.heroBarLast and game.heroBarLast.h == h and now - game.heroBarLast.t < 0.35 and h.alive then
+        game:centerOn(h.x, h.y)
+      end
+      game.heroBarLast = { h = h, t = now }
+      return true
+    end
+  end
+  return true
+end
 
 return CU
