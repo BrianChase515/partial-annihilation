@@ -1981,6 +1981,19 @@ function G:keypressed(key)
       local g = list[self.genIdx]
       self:centerOn(g.x, g.y); self:select({ g })
     end
+  elseif key == "c" and self.world.mods and self.world.mods.squads then
+    -- Squad Tactics: cycle through your squad leaders
+    local SQ = require("src.squads")
+    local list = {}
+    for _, sq in ipairs(SQ.squadsOf(self.world, 1)) do
+      if sq.leader and sq.leader.alive then list[#list + 1] = sq.leader end
+    end
+    if #list == 0 then self:notice("No leaders on the field - a fallen leader returns at the HQ after 45 s", 2)
+    else
+      self.leaderIdx = (self.leaderIdx or 0) % #list + 1
+      local L = list[self.leaderIdx]
+      self:centerOn(L.x, L.y); self:select({ L })
+    end
   elseif key == "home" or key == "c" then
     local c = self.world.teams[1].commander
     if c and c.alive then self:centerOn(c.x, c.y); self:select({ c }) end
