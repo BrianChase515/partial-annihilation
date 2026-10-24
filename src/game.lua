@@ -1040,6 +1040,20 @@ function G:updateVoice(dt)
       if e.alive and not e.def.building and e.team ~= 0 and w:hostile(e.team, 1) and w:isVisible(e) then seen = seen + 1 end
     end
     MUSIC.floor = math.min(0.32, seen * 0.025)
+    -- winning or losing: your alliance's live score against the best enemy alliance
+    if w.score then
+      local mine, best = 0, 0
+      local byAlly = {}
+      for t = 1, w.np do
+        local sc = w.score[t]
+        if sc then byAlly[w.ally[t]] = (byAlly[w.ally[t]] or 0) + sc.pts end
+      end
+      for a, p in pairs(byAlly) do
+        if a == w.ally[1] then mine = p elseif p > best then best = p end
+      end
+      local total = math.max(1500, mine + best)
+      MUSIC.setMood((mine - best) / total * 2.5)
+    end
   end
   local c = w.teams[1].commander
   if c and c.alive and c.key == "commander" then

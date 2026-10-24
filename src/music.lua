@@ -4,7 +4,12 @@
 --   skirmish  -> + cellos/basses ostinato, tremolo, timpani (tension)
 --   battle    -> + full brass, percussion, driving strings (combat)
 -- Streamed from disk, so memory use stays tiny.
-local M = { muted = false, volume = 0.55, intensity = 0, heat = 0 }
+local M = { muted = false, volume = 0.55, intensity = 0, heat = 0, mood = 0 }
+-- mood (-1 losing .. +1 winning) colours the mix: behind, an uneasy tension layer never quite
+-- leaves even in quiet moments; ahead, the calm is fuller and the fights swell harder. The next
+-- suite in a rotation is picked to match (bright suites when winning, dark ones when losing).
+M.BRIGHT = { _f = true, _k = true, _d = true }
+M.DARK = { _c = true, _h = true, _l = true, _i = true }
 local stems, gains = {}, { ambient = 0, tension = 0, combat = 0 }
 local stinger
 local playing = false
@@ -111,10 +116,13 @@ function M.update(dt, level)
   local rate = target > M.intensity and 0.45 or 0.12
   M.intensity = M.intensity + (target - M.intensity) * math.min(1, dt * rate * 3)
   local i = M.intensity
+  local mood = level == "menu" and 0 or (M.mood or 0)
+  local behind = math.max(0, -mood)
+  local ahead = math.max(0, mood)
   local want = {
-    ambient = 1 - 0.65 * smooth(0.2, 0.8, i),
-    tension = smooth(0.12, 0.45, i),
-    combat = smooth(0.45, 0.8, i),
+    ambient = (1 - 0.65 * smooth(0.2, 0.8, i)) * (1 - 0.25 * behind),
+    tension = math.max(smooth(0.12, 0.45, i), 0.45 * behind),
+    combat = math.min(1, smooth(0.45, 0.8, i) * (1 + 0.25 * ahead)),
   }
   local master = M.muted and 0 or M.volume * (level == "menu" and 0.7 or 1)
   if M.fadeOut then
@@ -134,7 +142,16 @@ function M.update(dt, level)
     if swap <= 0 then
       swapping = false
       M.qi = (M.qi or 1) % #(M.queue or M.SUITES) + 1
-      M.start((M.queue or M.SUITES)[M.qi])
+      -- a clear lead or deficit picks the next suite to suit it, if the pool has one
+      local q = M.queue or M.SUITES
+      local want = (M.mood or 0) > 0.35 and M.BRIGHT or ((M.mood or 0) < -0.35 and M.DARK or nil)
+      if want and not want[q[M.qi]] then
+        for k = 1, #q do
+          local j = (M.qi + k - 2) % #q + 1
+          if want[q[j]] and q[j] ~= M.suite then q[M.qi], q[j] = q[j], q[M.qi]; break end
+        end
+      end
+      M.start(q[M.qi])
       swap = 0
     end
   elseif swap < 1 then
@@ -168,8 +185,17 @@ function M.finale(won)
   if stinger and not M.muted then stinger:setVolume(M.volume * 1.1); stinger:play() end
 end
 
+-- how the match is going for the player, from the live score: -1 (losing badly) .. +1 (winning big).
+-- A big swing either way gives the music a swell.
+function M.setMood(m)
+  m = math.max(-1, math.min(1, m))
+  local old = M.mood or 0
+  M.mood = old + (m - old) * 0.35
+  if (old < -0.3 and M.mood > 0.3) or (old > 0.3 and M.mood < -0.3) then M.bump(0.6) end
+end
+
 function M.reset()
-  M.heat, M.intensity, M.fadeOut, M.floor = 0, 0, nil, 0
+  M.heat, M.intensity, M.fadeOut, M.floor, M.mood = 0, 0, nil, 0, 0
   loops, swap, swapping = 0, 1, false
   lastTell = stems.ambient and stems.ambient:tell() or 0
 end
