@@ -779,16 +779,16 @@ function AI:thinkEconomy()
       if not task then
         local wantAA = math.min(6, (enemyAir > 2 and 1 + math.floor(enemyAir / 4) or 0) + (t > 300 and self.diff.aaBonus or 0))
         -- (from level 5 the specialists grab land first: their plant comes once the economy runs)
-        local lateSpec = (self.diff.level or 5) >= 5 and (t < 200 or mFuture < 14)
+        local lateSpec = (self.diff.level or 5) >= 5 and (t < (self.specFrom or 200) or mFuture < 14)
         if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "shipyard"
         elseif p.airFirst and airfacs == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "airfac"
         elseif landfacs == 0 and factories >= 1 and mFuture > 6 then task = "landfac"
-        elseif airfacs == 0 and mFuture > 6.5 and t > 150 then task = "airfac"
-        elseif yards == 0 and hasWater and mFuture > 7.5 and t > 200 then task = "shipyard"
+        elseif airfacs == 0 and mFuture > 6.5 and t > (self.specFrom and self.specFrom - 50 or 150) then task = "airfac"
+        elseif yards == 0 and hasWater and mFuture > 7.5 and t > (self.specFrom or 200) then task = "shipyard"
         elseif p.harbor and yards == 0 and hasWater and mFuture > 6 and t > 180 then task = "shipyard"
-        elseif turrets < self.diff.turrets and t > 160 then task = "turret"
+        elseif turrets < self.diff.turrets and t > (self.turretFrom or 160) then task = "turret"
         elseif aas < wantAA then task = "aaturret"
-        elseif storages == 0 and t > 300 then task = "storage"
+        elseif storages == 0 and t > (self.storageFrom or 300) then task = "storage"
         elseif (factories < self.diff.maxFactories and mFuture > (10 + factories * 4) * (p.factoryEcoMul or 1))
           or (factories < self.diff.maxFactories + 2 and tm.metal > tm.mStore * 0.55 and t > 180) then
           local airShare = p.factoryAirShare or 0.4
@@ -1260,7 +1260,6 @@ function AI:launchRaid(army, inWave)
     end
   end
   if not best then return end
-  Tel.note(world, "raid", self.team, "raid on a " .. best.key)
   local fast = { scout = true, gunship = true, bomber = true, boat = true, tank = true }
   local squad = {}
   for _, u in ipairs(army) do
@@ -1272,6 +1271,7 @@ function AI:launchRaid(army, inWave)
     end
   end
   if #squad < 3 then return end
+  Tel.note(world, "raid", self.team, string.format("raid on a %s with %d units", best.key, #squad))
   self.lastRaid = world.time
   self.raidSquad = squad
   for _, u in ipairs(squad) do

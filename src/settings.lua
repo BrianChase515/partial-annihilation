@@ -73,8 +73,8 @@ local ROWS = {
   { key = "sfx", label = "Effects volume", min = 0, max = 1, step = 0.1, show = pct },
   { key = "padCursor", label = "Controller cursor speed (left stick)", min = 0.5, max = 2.5, step = 0.25, show = pct },
   { key = "padHints", label = "Controller button hints", show = function(v) return v and "On" or "Off" end },
-  { key = "annAI", label = "Annihilation AI", show = function(v) return v == "v2" and "v2 (beta)" or "Classic" end },
-  { key = "cohAI", label = "Commander of Heroes AI", show = function(v) return v == "v2" and "v2 (testing)" or "Classic" end },
+  { key = "annAI", label = "Annihilation AI (from the next match)", show = function(v) return v == "v2" and "v2 (beta)" or "Classic" end },
+  { key = "cohAI", label = "Commander of Heroes AI (from the next match)", show = function(v) return v == "v2" and "v2 (testing)" or "Classic" end },
 }
 
 function Set.rects()

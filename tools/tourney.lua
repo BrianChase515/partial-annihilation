@@ -191,6 +191,19 @@ local function run()
   end
   table_by("level")
   if mode == "rts" or S.v2 then table_by("profile") end
+  -- how fast each kind of AI gets an army out
+  do
+    local agg = {}
+    for _, r in ipairs(rows) do
+      local k = (r.profile or "?"):find("v2") and "v2" or "classic"
+      agg[k] = agg[k] or { a3 = 0, a6 = 0, n = 0, w = 0, d = 0 }
+      local a = agg[k]
+      a.a3, a.a6, a.n = a.a3 + (r.f.army3 or 0), a.a6 + (r.f.army6 or 0), a.n + 1
+      if r.over == 1 then a.d, a.w = a.d + 1, a.w + r.won end
+    end
+    print("  army value at 3:00 / 6:00, and wins:")
+    for k, a in pairs(agg) do print(string.format("    %-8s %5d / %5d   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n), a.w, a.d)) end
+  end
   if mode ~= "rts" then table_by("comp") end
   print("CSV", love.filesystem.getSaveDirectory() .. "/tourney_" .. mode .. ".csv")
 end

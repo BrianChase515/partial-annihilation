@@ -78,6 +78,19 @@ function Tel:update()
       l[#l + 1] = e
     end
   end
+  -- army size (metal value of fighting units) at 3 and 6 minutes: how fast a side gets going
+  for _, mark in ipairs({ 180, 360 }) do
+    if w.time >= mark and not self["army" .. mark] then
+      local v = {}
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.team and e.team >= 1 and not e.def.building and e.def.weapon and e.key ~= "commander" and e.key ~= "builder" then
+          local c = e.def.cost
+          v[e.team] = (v[e.team] or 0) + (c and (c.metal + c.energy / 10) or 50)
+        end
+      end
+      self["army" .. mark] = v
+    end
+  end
   -- groups: single-linkage clusters (units within 350 of each other are one group)
   for t, l in pairs(byTeam) do
     local seen, n = {}, 0
@@ -150,6 +163,8 @@ function Tel.fingerprint(world, team)
   table.sort(ds)
   f.killRange = #ds > 0 and ds[math.ceil(#ds / 2)] or 0
   f.kills, f.losses = k, l
+  f.army3 = self.army180 and self.army180[team] or 0
+  f.army6 = self.army360 and self.army360[team] or 0
   -- decisions it logged, by kind
   f.decisions = self.decisions[team] or {}
   local nd = 0

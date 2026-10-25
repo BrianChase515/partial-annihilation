@@ -35,10 +35,29 @@ function AI2.new(world, team, level, profileKey)
   self.level = self.diff.level or level or 5
   self.omniscient = self.level >= 8
   self.baseWave, self.baseGrow, self.baseRaid = self.diff.waveBase, self.diff.waveGrow, self.diff.raidEvery
+  -- tempo: v2 plays faster than the classic AI at the same level - it thinks more often, builds
+  -- its second and third plants much sooner, stops making constructors earlier, and gets its
+  -- first army out the door (its own copy of the profile, so classic games aren't touched)
+  local prof = {}
+  for k, v in pairs(self.profile) do prof[k] = v end
+  self.profile = prof
+  local lv = self.level
+  self.diff.think = math.max(0.35, self.diff.think * 0.6)
+  self.diff.maxFactories = self.diff.maxFactories + 1 + math.floor(lv / 4)
+  prof.factoryEcoMul = (prof.factoryEcoMul or 1) * (0.75 - 0.03 * lv)
+  self.diff.builderBonus = self.diff.builderBonus - (lv >= 4 and 1 or 0)
+  self.diff.firstWave = math.floor(self.diff.firstWave * 0.75)
+  self.diff.waveBase = math.max(4, self.diff.waveBase - 1)
+  -- and it puts its early metal into land, plants and army, not into specialist plants, towers
+  -- and storage it doesn't need yet (Fortress / naval / air personalities aside)
+  self.specFrom = (prof.navalFirst or prof.airFirst) and 200 or 300
+  self.turretFrom = 300
+  self.storageFrom = 480
   -- personality shapes the opening
   local P = self.p.w
   self.diff.firstWave = math.floor(self.diff.firstWave * (1.25 - 0.3 * P.aggression + 0.15 * P.patience))
   self.diff.turrets = math.max(1, math.floor(self.diff.turrets * (0.6 + 0.45 * P.hold) + 0.5))
+  if P.hold >= 1.4 then self.turretFrom = 170 end
   if P.raid >= 1.3 and not self.diff.raidEvery and self.level >= 4 then self.diff.raidEvery = 170 end
   if P.raid >= 1.3 and not self.huntersWanted and self.level >= 3 then self.huntersWanted, self.huntersFrom = 2, 200 end
   self.posture = { }
