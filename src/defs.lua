@@ -107,12 +107,12 @@ D.units = {
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
     radius = 22, hp = 6500, speed = 36, sight = 300, needsSpotter = true,
-    -- (nearly the whole map: parked off your coast it shells anything your units or buildings
+    -- (the whole of a medium map, most of a large one: parked off your coast it shells anything your units or buildings
     -- can see. Up close it's helpless, and it can't shoot at aircraft)
-    weapon = { damage = 115, range = 4000, minRange = 200, reload = 4.2, speed = 650, splash = 60, ballistic = true,
+    weapon = { damage = 115, range = 6000, minRange = 200, reload = 4.2, speed = 650, splash = 60, ballistic = true,
       targets = { land = true, sea = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
-    desc = "Siege ship. Shells almost anywhere on the map that you can see - but it only sees 300 itself, fires slowly, can't hit anything within 200 and can't shoot aircraft or subs. Very tough, very slow: a big army or an air raid will overwhelm it unless patrol boats screen it. Everyone will hunt it.",
+    desc = "Siege ship. Shells anything you can see anywhere on a medium map (6000 range) - but it only sees 300 itself, fires slowly, can't hit anything within 200 and can't shoot aircraft or subs. Very tough, very slow: a big army or an air raid will overwhelm it unless patrol boats screen it. Everyone will hunt it.",
   },
   seabuilder = {
     name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",

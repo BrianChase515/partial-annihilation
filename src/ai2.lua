@@ -7,6 +7,7 @@
 --   * what it builds: the classic mix, tilted to answer what you've got (no AA? more air)
 -- Like AI War, it takes the best option more often the higher its level (63% at 5, 95% at 10);
 -- level 8+ knows everything you have. Every choice goes in the match log.
+local D = require("src.defs")
 local U = require("src.util")
 local B = require("src.brain")
 local Tel = require("src.telemetry")
@@ -396,7 +397,7 @@ function AI2:bbParkSpot(b)
         local dc, de = U.dist(x, y, cx, cy), U.dist(x, y, self.enemyX or cx, self.enemyY or cy)
         local db = U.dist(x, y, self.baseX, self.baseY)
         -- in range of the centre, nearer us than them
-        if dc < 3400 and db < de then
+        if dc < D.units.battleship.weapon.range * 0.85 and db < de then
           local sc = dc + 0.5 * db
           if not bs or sc < bs then best, bs = { x = x, y = y }, sc end
         end
