@@ -143,7 +143,7 @@ function R.drawEntity(e, cam, selected)
         end
       end
       -- the picture first, so a turret's barrel draws on top of it
-      local drewIcon = zoom >= 0.3 and ICONS.has(e.key)
+      local drewIcon = zoom >= 0.3 and ICONS.has(e.key) and e.key ~= "powercore"
       if drewIcon then
         lg.setColor(1, 1, 1, 0.9)
         ICONS.draw(e.key, x, y, math.min(d.w, d.h) * D.TILE * (d.weapon and 0.6 or 0.7))
@@ -155,6 +155,41 @@ function R.drawEntity(e, cam, selected)
         lg.line(x, y, x + math.cos(a) * 16, y + math.sin(a) * 16)
         lg.setColor(cr, cg, cb)
         lg.circle("fill", x, y, 7)
+      end
+      if e.key == "powercore" and (e.built or 1) >= 1 then
+        -- a tall sensor tower: it casts a long shadow, a mast rises from the pad, and the beacon
+        -- on top sweeps the middle of the map
+        local tt = love.timer.getTime()
+        local pulse = 0.5 + 0.5 * math.sin(tt * 3)
+        local topX, topY = x - 10, y - 40
+        lg.setColor(0, 0, 0, 0.3)
+        lg.polygon("fill", x - 7, y + 4, x + 7, y - 4, x + 40, y + 42, x + 30, y + 50)
+        -- pad rings
+        lg.setColor(0.4, 0.85, 1, 0.9)
+        lg.setLineWidth(2)
+        lg.circle("line", x, y, 22)
+        -- the mast: a tapered column from the pad up to the beacon
+        lg.setColor(cr * 0.45, cg * 0.45, cb * 0.45)
+        lg.polygon("fill", x - 9, y + 2, x + 9, y + 2, topX + 5, topY, topX - 5, topY)
+        lg.setColor(cr, cg, cb)
+        lg.polygon("fill", x - 4, y + 2, x + 4, y + 2, topX + 2, topY, topX - 2, topY)
+        lg.setColor(0.05, 0.05, 0.08)
+        lg.setLineWidth(1.5)
+        lg.polygon("line", x - 9, y + 2, x + 9, y + 2, topX + 5, topY, topX - 5, topY)
+        -- beacon
+        lg.setColor(0.4, 0.85, 1, 0.25 + 0.2 * pulse)
+        lg.circle("fill", topX, topY, 12 + 4 * pulse)
+        lg.setColor(0.7, 0.97, 1)
+        lg.circle("fill", topX, topY, 5 + pulse)
+        local a = tt * 1.4
+        lg.setColor(0.5, 0.9, 1, 0.4)
+        lg.setLineWidth(3)
+        lg.line(topX, topY, topX + math.cos(a) * 60, topY + math.sin(a) * 60)
+        -- how far it sees (faint, so the middle reads as watched)
+        lg.setColor(0.4, 0.85, 1, 0.1 + 0.05 * pulse)
+        lg.setLineWidth(2)
+        lg.circle("line", x, y, d.sight)
+        drewIcon = true
       end
       if drewIcon then
         -- (the picture says what it is)

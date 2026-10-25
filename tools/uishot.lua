@@ -134,8 +134,8 @@ local function script(mode, secs)
     local w = game.world
     w.noFog = true
     local map = w.map
-    for _, ship in ipairs({ "destroyer", "battleship", "tank" }) do
-      local layer = ship == "tank" and "land" or "sea"
+    for _, ship in ipairs({ "destroyer", "battleship", "tank", "turret" }) do
+      local layer = (ship == "tank" or ship == "turret") and "land" or "sea"
       local tx, ty = map:nearestTile(math.floor(map.w / 2), math.floor(map.h / 2), function(x, y) return map:passable(layer, x, y) end, 40)
       local x, y = map:center(tx, ty)
       local target = w:spawn(ship, 1, x, y); target.built = 1
@@ -189,6 +189,24 @@ local function script(mode, secs)
     for _, r in ipairs(raiders) do if r.alive then left = left + 1 end end
     print(string.format("BBSPOT battleship %d away; shots fired %d; extractor %s after %.0fs; raiders left %d", math.floor(U.dist(bx, by, mx, my)), shots,
       mex.alive and "standing" or "lost", t, left))
+    return
+  end
+  if os.getenv("PA_CORESHOT") then
+    -- the Power Core tower built on its node, a Defense Tower beside it, zoomed in
+    game = startFn({ size = 112, water = 0.3, seed = 31, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local cn = w.map.coreNode
+    local x, y = (cn.x + 1) * w.T, (cn.y + 1) * w.T
+    local pc = w:spawn("powercore", 1, x, y); pc.built = 1
+    local tw = w:spawn("turret", 1, x + 3 * w.T + w.T / 2, y + w.T / 2); tw.built = 1
+    game.cam.zoom = tonumber(os.getenv("PA_ZOOM") or "0.55")
+    game:centerOn(x, y)
+    for _ = 1, 6 do frame() end
+    pending = "uishot_core.png"
+    frame(); frame()
+    print("UISHOT core")
     return
   end
   if os.getenv("PA_MAPVIEW") then

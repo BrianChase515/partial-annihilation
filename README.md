@@ -113,7 +113,7 @@ The result screen names the personality you faced; the match log has its map rea
 
 ### Towers stop Commanders
 
-Fights start early and in the open, but walking your Commander into a defended base isn't free: gun towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (70 metal) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
+Fights start early and in the open, but walking your Commander into a defended base isn't free: Defense Towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (95 metal), carry a flak mount as well (one tower covers a base from tanks and aircraft alike) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 
 ### The Power Core, and metal that belongs to the navy
 
@@ -228,8 +228,7 @@ Shapes tell you the domain, and the number tells you the type:
 - Vehicle Plant
 - Aircraft Plant
 - Shipyard
-- Gun Tower
-- AA Tower
+- Defense Tower (gun and flak in one)
 
 ## Play in your browser
 

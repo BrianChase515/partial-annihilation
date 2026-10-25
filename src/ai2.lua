@@ -64,9 +64,8 @@ function AI2.new(world, team, level, profileKey)
   self.diff.turrets = math.max(2, self.diff.turrets)
   self.storageFrom = 480
   -- air defence it keeps whether or not it has seen aircraft: about one flak per eight land
-  -- fighters, an AA Tower beside every two gun towers, and flak riding with the Commander
+  -- fighters, and flak riding with the Commander (its Defense Towers cover the base)
   self.flakShare = 0.12
-  self.aaPerTowers = 2
   self.reserved = {}
   -- personality shapes the opening
   local P = self.p.w

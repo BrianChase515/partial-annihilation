@@ -773,7 +773,7 @@ function AI:thinkEconomy()
         task = { key = "powercore", tx = cn.x, ty = cn.y }
       elseif fortifyNow then
         self.fortN = (self.fortN or 0) + 1
-        task = (self.fortN % 4 == 0) and "aaturret" or "turret"
+        task = "turret" -- (Defense Towers hit air too)
         self.fortWhere = (self.fortN % 3 == 0) and "outpost" or "ring"
       elseif needEnergy and solars < 60 then
         task = "solar"
@@ -795,8 +795,6 @@ function AI:thinkEconomy()
       end
       if not task then
         local wantAA = math.min(6, (enemyAir > 2 and 1 + math.floor(enemyAir / 4) or 0) + (t > 300 and self.diff.aaBonus or 0))
-        -- (v2) an AA Tower for every couple of gun towers, so a Commander that runs home is covered from the air too
-        if self.aaPerTowers and turrets >= 1 then wantAA = math.max(wantAA, math.min(4, math.ceil(turrets / self.aaPerTowers))) end
         -- (from level 5 the specialists grab land first: their plant comes once the economy runs)
         local lateSpec = (self.diff.level or 5) >= 5 and (t < (self.specFrom or 200) or mFuture < 14)
         if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "shipyard"
@@ -806,7 +804,7 @@ function AI:thinkEconomy()
         elseif yards == 0 and hasWater and mFuture > 7.5 and t > (self.specFrom or 200) then task = "shipyard"
         elseif p.harbor and yards == 0 and hasWater and mFuture > 6 and t > 180 then task = "shipyard"
         elseif turrets < self.diff.turrets and t > (self.turretFrom or 160) then task = "turret"
-        elseif aas < wantAA then task = "aaturret"
+        elseif turrets < self.diff.turrets + wantAA and t > 90 then task = "turret" -- (they shoot aircraft too)
         elseif storages == 0 and t > (self.storageFrom or 300) then task = "storage"
         elseif (factories < self.diff.maxFactories and mFuture > (10 + factories * 4) * (p.factoryEcoMul or 1))
           or (factories < self.diff.maxFactories + 2 and tm.metal > tm.mStore * 0.55 and t > 180) then

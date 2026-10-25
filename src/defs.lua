@@ -22,7 +22,7 @@ D.units = {
     name = "Commander", short = "CMD", domain = "land", shape = "commander",
     radius = 15, hp = 3000, speed = 58, sight = 340, turn = 6,
     buildPower = 12, buildRange = 130, regen = 4,
-    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "powercore", "refinery" },
+    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "storage", "powercore", "refinery" },
     weapon = { damage = 45, range = 210, reload = 0.6, speed = 560, targets = { land = true, sea = true } },
     income = { metal = 1.5, energy = 22 },
     storage = { metal = 900, energy = 3750 },
@@ -32,7 +32,7 @@ D.units = {
     name = "Constructor", short = "B", domain = "land", shape = "square",
     radius = 10, hp = 260, speed = 74, sight = 260,
     buildPower = 7, buildRange = 105,
-    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "powercore", "refinery" },
+    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "storage", "powercore", "refinery" },
     cost = { metal = 60, energy = 500, work = 60 },
     desc = "Builds structures. Right-click your own unfinished or damaged things to help or repair.",
   },
@@ -243,7 +243,7 @@ D.units = {
     w = 2, h = 2, place = "water", hp = 1900,
     weapon = { damage = 34, range = 330, reload = 0.45, speed = 820, splash = 30, targets = { land = true, sea = true, air = true } },
     cost = { metal = 170, energy = 1100, work = 120 },
-    desc = "A floating gun platform. Tougher than a Gun Tower and hits land, sea AND air. Built on water by Sea Constructors.",
+    desc = "A floating gun platform. Tougher than a Defense Tower and hits land, sea AND air. Built on water by Sea Constructors.",
   },
   -- Commander of Heroes only: the field HQ (squads are led by veteran units of their type;
   -- this old generic leader is kept for saved games and tools)
@@ -270,10 +270,10 @@ D.units = {
   },
   powercore = {
     name = "Power Core", short = "PC", domain = "building", building = true, coreOnly = true,
-    w = 2, h = 2, place = "core", hp = 3200,
+    w = 2, h = 2, place = "core", hp = 3200, sight = 1100, -- (a tall tower: whoever holds it sees the whole middle)
     income = { metal = 10, energy = 150 },
     cost = { metal = 200, energy = 900, work = 160 },
-    desc = "Only on the Power Core node in the middle of the map: +10 metal and +150 energy a second - about four extractors' worth. Whoever holds the centre runs two fronts.",
+    desc = "Only on the Power Core node in the middle of the map: +10 metal and +150 energy a second - about four extractors' worth. It's a tall tower that sees 1100 around it, so your artillery and battleships can hit anything in the middle. Whoever holds the centre runs two fronts.",
   },
   refinery = {
     name = "Refinery", short = "RF", domain = "building", building = true, convoyOnly = true,
@@ -318,14 +318,17 @@ D.units = {
     desc = "Builds ships. Must be placed on water.",
   },
   turret = {
-    name = "Gun Tower", short = "T", domain = "building", building = true,
+    name = "Defense Tower", short = "T", domain = "building", building = true,
     w = 1, h = 1, place = "land", hp = 1600,
     weapon = { damage = 30, range = 300, reload = 0.5, speed = 650, targets = { land = true, sea = true } },
+    -- and a flak mount on top: its own gun, so it never stops shooting tanks to shoot planes
+    aaWeapon = { damage = 26, range = 320, reload = 0.6, speed = 900, splash = 34, targets = { air = true } },
     antiCommander = true, -- (x2.5 against Commanders, see D.TOWER_VS_COMMANDER)
-    cost = { metal = 70, energy = 550, work = 62 },
-    desc = "Defensive tower against land units and ships. Hits Commanders 2.5x as hard: a Commander needs support to take a base with towers.",
+    cost = { metal = 95, energy = 750, work = 78 },
+    desc = "Defensive tower: a gun for land units and ships, and a flak mount for aircraft. Hits Commanders 2.5x as hard: a Commander needs support to take a base with towers, and a hurt one is safe under its own.",
   },
   aaturret = {
+    -- (retired: the Defense Tower does both now. Kept so older saves and tools still load)
     name = "AA Tower", short = "A", domain = "building", building = true,
     w = 1, h = 1, place = "land", hp = 900,
     weapon = { damage = 34, range = 340, reload = 0.5, speed = 900, splash = 38, targets = { air = true } },
@@ -337,7 +340,7 @@ D.units = {
 -- Commander Craft (Warcraft-style mode): its own units, buildings, research and races
 require("src.craft_defs")(D)
 
--- Towers stop Commanders (Annihilation 0.9): gun towers hit a Commander 2.5x as hard, so a
+-- Towers stop Commanders (Annihilation 0.9): Defense Towers hit a Commander 2.5x as hard, so a
 -- Commander has to come with support to crack a defended base - and a hurt Commander, or units
 -- that fled home, are safe under their towers. Other buildings don't shoot; towers are cheap.
 D.TOWER_VS_COMMANDER = 2.5

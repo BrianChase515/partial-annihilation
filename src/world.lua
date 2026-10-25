@@ -2042,6 +2042,7 @@ function W:update(dt)
         if e.built >= 1 then
           if e.def.factory then self:updateFactory(e, dt) end
           if e.def.weapon then self:updateWeapon(e, dt) end
+          if e.def.aaWeapon then self:updateAA(e, dt) end
         end
       else
         self:updateUnit(e, dt)
