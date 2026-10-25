@@ -127,6 +127,35 @@ local function script(mode, secs)
     print("UISHOT over")
     return
   end
+  if os.getenv("PA_AATEST") then
+    -- ships vs aircraft: 3 gunships attack a destroyer, then a battleship (and a tank, for scale)
+    game = startFn({ size = 96, water = 0.6, seed = 11, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local map = w.map
+    for _, ship in ipairs({ "destroyer", "battleship", "tank" }) do
+      local layer = ship == "tank" and "land" or "sea"
+      local tx, ty = map:nearestTile(math.floor(map.w / 2), math.floor(map.h / 2), function(x, y) return map:passable(layer, x, y) end, 40)
+      local x, y = map:center(tx, ty)
+      local target = w:spawn(ship, 1, x, y); target.built = 1
+      local gs = {}
+      for k = 1, 3 do gs[k] = w:spawn("gunship", 2, x + 400 + k * 20, y + k * 15); gs[k].built = 1; w:issue(gs[k], { type = "attack", target = target }) end
+      local t = 0
+      while t < 40 and target.alive do
+        local any = false
+        for _, g in ipairs(gs) do if g.alive then any = true end end
+        if not any then break end
+        w:update(1 / 30); t = t + 1 / 30
+      end
+      local left = 0
+      for _, g in ipairs(gs) do if g.alive then left = left + 1 end end
+      print(string.format("AATEST %-10s %s after %.1fs; gunships left %d", ship, target.alive and string.format("survived (%d%%)", math.floor(target.hp / target.maxhp * 100)) or "sunk", t, left))
+      for _, g in ipairs(gs) do if g.alive then w:remove(g) end end
+      if target.alive then w:remove(target) end
+    end
+    return
+  end
   if os.getenv("PA_MAPVIEW") then
     -- the whole map from above (fog off), with deposits and starts: PA_MAPSEED, PA_SIZE, PA_WATER
     game = startFn({ size = tonumber(os.getenv("PA_SIZE") or "128"), water = tonumber(os.getenv("PA_WATER") or "0.3"),

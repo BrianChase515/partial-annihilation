@@ -1325,6 +1325,7 @@ function UI.drawInfo(game, L)
             d.weapon.damage * (m.craftDmg or 1), game.world:rangeOf(e), d.weapon.targets.air and ", hits air" or "")
         else
         info[#info + 1] = string.format("Weapon: %d dmg, range %d, hits %s", d.weapon.damage, d.weapon.range, table.concat(tg, "/"))
+        if d.aaWeapon then info[#info + 1] = string.format("Anti-air: %d dmg, range %d", d.aaWeapon.damage, d.aaWeapon.range) end
         end
       end
     end

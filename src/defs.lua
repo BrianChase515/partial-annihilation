@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.21.1"
+D.VERSION = "0.22.0"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
@@ -96,16 +96,20 @@ D.units = {
     name = "Destroyer", short = "2", domain = "sea", shape = "circle",
     radius = 16, hp = 1500, speed = 70, sight = 360,
     weapon = { damage = 62, range = 330, reload = 1.5, speed = 560, targets = { land = true, sea = true, sub = true } },
+    -- AA machine guns: a second gun just for aircraft
+    aaWeapon = { damage = 18, range = 300, reload = 0.2, speed = 900, targets = { air = true } },
     cost = { metal = 260, energy = 1700, work = 200 },
-    desc = "Heavy warship. Long guns and depth charges for subs.",
+    desc = "Heavy warship. Long guns and depth charges for subs, and AA machine guns that shred aircraft near the fleet.",
   },
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
     radius = 22, hp = 4200, speed = 40, sight = 460, needsSpotter = true,
     weapon = { damage = 55, range = 1300, minRange = 200, reload = 3.6, speed = 420, splash = 48, ballistic = true,
       targets = { land = true, sea = true } },
+    -- long-range flak: covers the fleet and the coast against air
+    aaWeapon = { damage = 40, range = 480, reload = 0.9, speed = 850, splash = 45, targets = { air = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
-    desc = "Siege ship. Shells anything within 40 tiles that a friend can see (it only sees 460 itself), but slowly. Can't hit aircraft or subs. Everyone will hunt it.",
+    desc = "Siege ship. Shells anything within 40 tiles that a friend can see (it only sees 460 itself), but slowly, and its long-range flak covers the coast against aircraft. Can't hit subs. Everyone will hunt it.",
   },
   seabuilder = {
     name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",
@@ -343,6 +347,10 @@ for key, d in pairs(D.units) do
   if d.weapon then
     d.weapon.minRange = d.weapon.minRange or 0
     d.weapon.splash = d.weapon.splash or 0
+  end
+  if d.aaWeapon then
+    d.aaWeapon.minRange = d.aaWeapon.minRange or 0
+    d.aaWeapon.splash = d.aaWeapon.splash or 0
   end
 end
 

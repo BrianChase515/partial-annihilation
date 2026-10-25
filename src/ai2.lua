@@ -569,9 +569,40 @@ function AI2:thinkArmy()
   self:updateStage()
   self.tgtPick = nil -- a fresh target choice for any wave launched this think
   local r = AI.thinkArmy(self)
+  self:harborGuard()
   self:sendHurtHome()
   self:defendHome()
   return r
+end
+
+-- the navy as base defense: once the enemy shows aircraft (or the base is being hit), a couple of
+-- destroyers hold the water nearest the base - their AA guns cover it like a tower line would,
+-- and they can move to wherever the threat comes from
+function AI2:harborGuard()
+  local w = self.world
+  if not self.waterTX then return end
+  local units = self:enemyUnits()
+  local air = 0
+  for _, e in ipairs(units) do if e.def.domain == "air" then air = air + 1 end end
+  local hot = self:enemyNearBase() ~= nil
+  if air == 0 and not hot then return end
+  -- the open water nearest the base
+  if not self.harborX then self.harborX, self.harborY = w.map:center(self.waterTX, self.waterTY) end
+  local n = 0
+  for _, e in ipairs(w.entities) do
+    if n >= 2 then break end
+    if e.alive and e.team == self.team and e.key == "destroyer" and not e.disarmed then
+      n = n + 1
+      self.wave[e] = nil
+      if #e.orders == 0 or U.dist(e.x, e.y, self.harborX, self.harborY) > 260 then
+        w:issue(e, { type = "amove", x = self.harborX + self.rng:random(-80, 80), y = self.harborY + self.rng:random(-80, 80) })
+      end
+    end
+  end
+  if n > 0 and not self.harborNoted then
+    self.harborNoted = true
+    Tel.note(w, "navy", self.team, string.format("%d destroyers hold the water by the base (air cover)", n))
+  end
 end
 
 -- a unit that ran from a fight is powered down until it's repaired. The classic code can still

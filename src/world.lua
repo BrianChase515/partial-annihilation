@@ -971,6 +971,35 @@ function W:spotted(e, o)
   return seen
 end
 
+-- a second gun just for aircraft (destroyers' machine guns, battleships' long-range flak): its own
+-- reload and its own targets, so it never takes the main guns off what they're shooting
+function W:updateAA(e, dt)
+  local aw = e.def.aaWeapon
+  if e.disarmed or e.holdFire or (e.built or 1) < 1 then return end
+  e.aaReload = math.max(0, (e.aaReload or 0) - dt)
+  e.aaScan = (e.aaScan or 0) - dt
+  local t = e.aaTarget
+  if t and (not t.alive or U.dist2(e.x, e.y, t.x, t.y) > (aw.range + 10) ^ 2) then t = nil end
+  if not t and e.aaScan <= 0 then
+    e.aaScan = 0.25
+    local bd
+    self:query(e.x, e.y, aw.range + 40, function(o)
+      if o.alive and o.def.domain == "air" and o.team and o.team > 0 and self:hostile(o.team, e.team)
+        and not (o.fadeUntil and self.time < o.fadeUntil) and self:spotted(e, o) then
+        local d = U.dist2(e.x, e.y, o.x, o.y)
+        if d <= aw.range * aw.range and (not bd or d < bd) then t, bd = o, d end
+      end
+    end)
+  end
+  e.aaTarget = t
+  if t and e.aaReload <= 0 then
+    local keep = e.reload
+    self:fire(e, t, aw)
+    e.reload = keep
+    e.aaReload = aw.reload / (1 + 0.08 * (e.level or 0))
+  end
+end
+
 function W:findTarget(e, range)
   local best, bd, bestIsUnit
   local w = e.def.weapon
@@ -1000,8 +1029,8 @@ function W:inRange(e, o, extra)
   return d <= self:rangeOf(e) + (extra or 0) and d >= w.minRange
 end
 
-function W:fire(e, o)
-  local w = e.def.weapon
+function W:fire(e, o, wov)
+  local w = wov or e.def.weapon
   local tx, ty = o.x, o.y
   if w.ballistic and not o.def.building then
     -- slight inaccuracy for artillery and bombs
@@ -1690,6 +1719,7 @@ function W:updateUnit(e, dt)
   end
 
   self:updateWeapon(e, dt, focus)
+  if e.def.aaWeapon then self:updateAA(e, dt) end
 end
 
 ---------------------------------------------------------------------------
