@@ -208,10 +208,21 @@ local function script(mode, secs)
         f.x, f.y = L.x + 260, L.y + (k - 1.5) * 60
         w:issue(f, { type = "move", x = f.x + 500, y = f.y + 300 })
       end
-      local surr
-      for i = 1, 300 do
+      local surr, broke
+      for i = 1, 2400 do
         game:update(1 / 30)
-        if game.mercy and not surr then surr = i; print("MERCY at frame", i, "fallen", #game.mercy.fallen, "units", #game.mercy.units) end
+        if not broke and w.squads.broken and next(w.squads.broken) then
+          broke = i
+          print("BROKEN at frame", i, "hide at", math.floor(foes[1].hideX or -1), math.floor(foes[1].hideY or -1))
+        end
+        if broke and i == broke + 240 then
+          -- go after them
+          local l = {}
+          for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and not e.def.building then l[#l + 1] = e end end
+          game:select(l)
+          game:commandMove(foes[1].hideX, foes[1].hideY, "amove", false)
+        end
+        if game.mercy and not surr then surr = i; print("MERCY at frame", i, "fallen", #game.mercy.fallen, "units", #game.mercy.units); break end
       end
       local found, total = 0, 0
       for _, d in ipairs(w.squads.trail or {}) do total = total + 1; if d.found then found = found + 1 end end

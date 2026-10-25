@@ -650,6 +650,7 @@ local function wihScript()
     squadSetup = SQ.defaults(), cohMode = "wih", hillFrac = 0.22, rockFrac = 0.06,
     players = { { human = true, ally = 1 }, { ally = 2, level = 8 } } })
   local w = game.world
+  SQ.MERCY_AT = 0 -- (the endgame is staged below)
   game.ais[#game.ais + 1] = SQ.newAI(w, 1, 8)
   local mine = SQ.squadsOf(w, 1)
   local function mid(list)
@@ -699,11 +700,93 @@ local function wihScript()
     game.cam.zoom = 0.9
     scene("Every squad has a veteran leader and two skills: Barrage!", 5, function() center(fx2, fy2) end)
   end
-  -- 3. the aftermath
-  simFast(25)
+  -- 3. the hunt: the enemy is bled down to a few men; a wounded one runs, and leaves a trail
+  local function theirs()
+    local l = {}
+    for _, e in ipairs(w.entities) do if e.alive and e.team == 2 and e.squad then l[#l + 1] = e end end
+    return l
+  end
+  local function ours()
+    local l = {}
+    for _, sq in ipairs(mine) do for _, u in ipairs(sq.members) do if u.alive then l[#l + 1] = u end end end
+    return l
+  end
+  for _ = 1, 60 do
+    if #theirs() <= 4 or #ours() < 9 then break end
+    simFast(5)
+  end
+  -- (staged from here: the two nearest are left, wounded; the rest fell out of shot)
+  local th = theirs()
+  local ox, oy = mid(mine)
+  table.sort(th, function(a, b) return U.dist(a.x, a.y, ox, oy) < U.dist(b.x, b.y, ox, oy) end)
+  SQ.MERCY_AT = 0
+  for i = 3, #th do w:kill(th[i]) end
+  th = theirs()
+  for _, u in ipairs(ours()) do u.hp = math.max(u.hp, u.maxhp * 0.6) end
+  for _, u in ipairs(th) do u.hp = u.maxhp * 0.35 end
+  local runner = th[1]
+  if runner then
+    -- our side stops to regroup (the hunt is ours to run)
+    local hold = game.ais
+    game.ais = {}
+    for _, u in ipairs(ours()) do w:issue(u, { type = "move", x = u.x, y = u.y }) end
+    simFast(1)
+    SQ.MERCY_AT = 2
+    game.notices = {}
+    game.cam.zoom = 0.9
+    local sx, sy = runner.x, runner.y
+    scene("The enemy breaks. Their last men run for cover.", 4.5, function() center(sx, sy) end)
+    simFast(8)
+    -- the hunters: recon and armor, along the blood
+    local hunters = {}
+    for _, sq in ipairs(mine) do
+      if sq.type == "recon" or sq.type == "armor" then for _, u in ipairs(sq.members) do if u.alive then hunters[#hunters + 1] = u end end end
+    end
+    if #hunters == 0 then hunters = ours() end
+    game:select(hunters)
+    game.notices = {}
+    game:commandMove(sx, sy, "amove", false)
+    local lead = hunters[1]
+    local function follow()
+      local l = lead.alive and lead or hunters[#hunters]
+      local tx, ty = runner.hideX or runner.x, runner.hideY or runner.y
+      center(l.x + (tx - l.x) * 0.3, l.y + (ty - l.y) * 0.3)
+    end
+    scene("The wounded bleed. Pick up the trail.", 4, follow, { speed = 1.6 })
+    game:commandMove(runner.hideX or runner.x, runner.hideY or runner.y, "amove", false)
+    for _ = 1, 14 do
+      if game.mercy then break end
+      scene("Follow the blood into the fog.", 1, follow, { speed = 1.8 })
+    end
+    for _ = 1, 30 do
+      if game.mercy then break end
+      simFast(1)
+    end
+    game.notices = {}
+    log("mercy", game.mercy and "yes" or "no", "runner alive", runner.alive)
+    if game.mercy then
+      scene("Found them. They're begging for mercy.", 7, function() end, { capY = 60 })
+      game:decideMercy("kill")
+      game.notices = {}
+      local target = runner.alive and runner or game.mercy.units[1]
+      if target and target.alive then
+        local tx0, ty0 = target.x, target.y
+        game.cam.zoom = 1.15
+        game:select({})
+        for _, u in ipairs(hunters) do if u.alive then w:issue(u, { type = "move", x = u.x, y = u.y }) end end
+        scene("Have mercy... or kill 'em all.", 5, function() center(tx0, ty0) end)
+        game:select(hunters)
+        for k, u in ipairs(hunters) do
+          local v = game.mercy.units[(k % #game.mercy.units) + 1]
+          if u.alive and v and v.alive then w:issue(u, { type = "attack", target = v }) end
+        end
+        scene("War is Hell.", 8, function() center(tx0, ty0) end)
+      end
+    end
+    for _, ai in ipairs(hold) do game.ais[#game.ais + 1] = ai end
+  end
   game.cam.zoom = 0.85
   pickAll()
-  local x, y = mid(mine)
   scene("Commander of Heroes: War is Hell - Partial Annihilation", 4, function() local a, b = mid(mine); center(a, b) end)
   saveAudio()
 end

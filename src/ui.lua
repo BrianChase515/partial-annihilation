@@ -2231,8 +2231,8 @@ end
 function UI.mercyRects(game)
   local w, h = lg.getDimensions()
   local nf = game.mercy and #game.mercy.fallen or 0
-  local cols = math.max(1, math.min(4, math.ceil(nf / 12)))
-  local pw, ph = math.min(w - 40, 760), math.min(h - 40, 250 + math.max(1, math.ceil(nf / cols)) * 18)
+  local pw = math.min(w - 40, 820)
+  local ph = math.min(h - 40, 250 + math.max(1, nf) * 19)
   local px, py = w / 2 - pw / 2, h / 2 - ph / 2
   return { panel = { x = px, y = py, w = pw, h = ph },
     spare = { x = w / 2 - 250, y = py + ph - 66, w = 240, h = 46, action = "spare" },
@@ -2260,26 +2260,36 @@ function UI.drawMercy(game)
   lg.print(title, w / 2 - font(30):getWidth(title) / 2, p.y + 18)
   lg.setFont(font(14))
   lg.setColor(0.8, 0.78, 0.74, k)
-  local sub = string.format("%d enemy soldier%s %s thrown down their arms. You lost %d %s to get here.", n, n == 1 and "" or "s",
-    n == 1 and "has" or "have", #m.fallen, #m.fallen == 1 and "man" or "men")
+  local sub = string.format("You found them. %d enemy soldier%s, unarmed, on their knees. You lost %d %s to get here.", n, n == 1 and "" or "s",
+    #m.fallen, #m.fallen == 1 and "man" or "men")
   lg.printf(sub, p.x + 20, p.y + 64, p.w - 40, "center")
-  -- the fallen, by name
+  -- the fallen, by name, and who they leave behind
   lg.setColor(0.75, 0.2, 0.16, k)
   lg.setFont(font(12))
   lg.printf("IN MEMORY OF", p.x + 20, p.y + 96, p.w - 40, "center")
   local top, bottom = p.y + 118, r.spare.y - 46
-  local rowH = 18
+  local rowH = 19
   local rows = math.max(1, math.floor((bottom - top) / rowH))
-  local cols = math.max(1, math.min(4, math.ceil(#m.fallen / rows)))
-  local colW = (p.w - 60) / cols
-  local cap = rows * cols
-  lg.setFont(font(13))
-  for i, name in ipairs(m.fallen) do
-    if i > cap then break end
-    local c, rr = math.floor((i - 1) / rows), (i - 1) % rows
-    local txt = (i == cap and #m.fallen > cap) and string.format("... and %d more", #m.fallen - cap + 1) or name
-    lg.setColor(0.86, 0.84, 0.8, k)
-    lg.printf(txt, p.x + 30 + c * colW, top + rr * rowH, colW - 10, cols == 1 and "center" or "left")
+  for i, f in ipairs(m.fallen) do
+    if i > rows then break end
+    local y = top + (i - 1) * rowH
+    if i == rows and #m.fallen > rows then
+      lg.setFont(font(13))
+      lg.setColor(0.7, 0.68, 0.64, k)
+      lg.printf(string.format("... and %d more", #m.fallen - rows + 1), p.x + 30, y, p.w - 60, "center")
+      break
+    end
+    local nm = f.age and string.format("%s, %d", f.name, f.age) or f.name
+    lg.setFont(font(13))
+    lg.setColor(0.95, 0.92, 0.86, k)
+    lg.print(nm, p.x + 34, y)
+    lg.setFont(font(12))
+    lg.setColor(0.68, 0.66, 0.62, k)
+    local lx = p.x + 34 + math.max(170, font(13):getWidth(nm) + 14)
+    local txt = f.line or ""
+    local maxW = p.x + p.w - 30 - lx
+    while font(12):getWidth(txt) > maxW and #txt > 4 do txt = txt:sub(1, -6) .. "..." end
+    lg.print(txt, lx, y + 1)
   end
   if #m.fallen == 0 then
     lg.setColor(0.6, 0.7, 0.6, k)
@@ -2287,7 +2297,7 @@ function UI.drawMercy(game)
   end
   lg.setFont(font(13))
   lg.setColor(0.7, 0.68, 0.64, k)
-  lg.printf("Take them prisoner and the battle is won. Or give no quarter, and finish it yourself.", p.x + 20, bottom + 8, p.w - 40, "center")
+  lg.printf("Take them prisoner and the battle is won. Or finish it yourself.", p.x + 20, bottom + 8, p.w - 40, "center")
   local mx, my = love.mouse.getPosition()
   for _, b in ipairs({ r.spare, r.kill }) do
     local hov = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
@@ -2298,7 +2308,7 @@ function UI.drawMercy(game)
     lg.rectangle("line", b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 6)
     lg.setFont(font(17))
     lg.setColor(1, 1, 1, k)
-    local lbl = b.action == "spare" and "Take them prisoner" or "No mercy"
+    local lbl = b.action == "spare" and "Have mercy" or "Kill 'em all"
     lg.print(lbl, b.x + b.w / 2 - font(17):getWidth(lbl) / 2, b.y + 12)
   end
 end

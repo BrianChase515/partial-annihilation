@@ -713,6 +713,47 @@ local function living(world, ally)
   return out
 end
 
+-- for the memorial: who a fallen man leaves behind
+local WIVES = { "Anna", "Maria", "Claire", "Rosa", "Helen", "Grace", "Elena", "Margaret", "Lucy", "Ruth", "Sofia", "Joan", "Irene", "Alice", "Nadia", "Mei" }
+local KIDS_B = { "Tommy", "Sam", "Danny", "Leo", "Joseph", "Eli", "Michael", "Luis", "Peter", "Jack" }
+local KIDS_G = { "Emma", "Lily", "Rose", "Sarah", "Ava", "Clara", "Hannah", "Mia", "Nora", "Ellie" }
+local function kid()
+  if love.math.random() < 0.5 then return KIDS_B[love.math.random(#KIDS_B)], love.math.random(1, 12), "son" end
+  return KIDS_G[love.math.random(#KIDS_G)], love.math.random(1, 12), "daughter"
+end
+function S.survivedBy()
+  local r = love.math.random
+  local age = r(18, 41)
+  local wife = WIVES[r(#WIVES)]
+  local line
+  if age < 22 then
+    local opts = {
+      "survived by his mother, " .. wife,
+      "survived by his parents and a little sister, " .. r(6, 15),
+      "survived by his parents and two brothers",
+      "survived by his fiancée, " .. wife .. ". They were to marry in the spring",
+      "survived by his grandmother, who raised him",
+      "survived by his mother and a dog called Buster",
+    }
+    line = opts[r(#opts)]
+  else
+    local n = age < 27 and r(0, 1) or r(0, 3)
+    if n == 0 then
+      line = r() < 0.7 and ("survived by his wife, " .. wife) or ("survived by his wife, " .. wife .. ", expecting their first child")
+    elseif n == 1 then
+      local nm, a, rel = kid()
+      line = string.format("survived by his wife, %s, and a %s, %s, %d", wife, rel, nm, a)
+    else
+      local ages = {}
+      for k = 1, n do ages[k] = r(1, 14) end
+      table.sort(ages, function(x, y) return x > y end)
+      local list = table.concat(ages, ", ", 1, n - 1) .. " and " .. ages[n]
+      line = string.format("survived by his wife, %s, and %s children, %s", wife, ({ "", "two", "three" })[n], list)
+    end
+  end
+  return age, line
+end
+
 function S.updateWih(world, dt)
   local st = world.squads
   local t = world.time
@@ -721,11 +762,11 @@ function S.updateWih(world, dt)
   -- the wounded bleed as they go
   for _, sq in ipairs(st.list) do
     for _, u in ipairs(sq.members) do
-      if u.alive and not u.def.air and u.hp < u.maxhp * S.TRAIL_HP then
+      if u.alive and not u.def.air and (u.hp < u.maxhp * S.TRAIL_HP or u.broken) then
         local moved = u.trailX and U.dist(u.x, u.y, u.trailX, u.trailY) or 999
         local still = t - (u.trailT or -99) > 5 and moved < 4
         if moved >= S.TRAIL_STEP or still then
-          local hurt = 1 - u.hp / u.maxhp
+          local hurt = math.max(0.4, 1 - u.hp / u.maxhp)
           local a = love.math.random() * math.pi * 2
           trail[#trail + 1] = { x = u.x + math.cos(a) * 5, y = u.y + math.sin(a) * 5, t = t,
             r = 2 + hurt * 3 + love.math.random() * 1.5, ally = world.ally[sq.team], pool = still }
@@ -752,41 +793,79 @@ function S.updateWih(world, dt)
     st.trail = keep
     trail = keep
   end
-  -- mercy: a computer side down to its last men, and outnumbered, throws down its arms
+  -- the break: a computer side down to its last men, and outnumbered, stops fighting. They run
+  -- off and hide (bleeding as they go); when the player's men find them, they beg
   local mine = world.ally[world.playerTeam]
-  local us = #living(world, mine)
+  local us = living(world, mine)
+  st.broken = st.broken or {}
   st.surrendered = st.surrendered or {}
+  local W, H = world.map.w * world.T, world.map.h * world.T
   for tt = 1, world.np do
     local ally = world.ally[tt]
-    if ally ~= mine and not st.surrendered[ally] then
+    if ally ~= mine and not st.broken[ally] then
       local them = living(world, ally)
-      if #them > 0 and #them <= S.MERCY_AT and us >= #them + 2 then
+      if #them > 0 and #them <= S.MERCY_AT and #us >= #them + 2 then
+        st.broken[ally] = t
+        local cx, cy = 0, 0
+        for _, f in ipairs(us) do cx, cy = cx + f.x, cy + f.y end
+        cx, cy = cx / #us, cy / #us
+        for _, u in ipairs(them) do
+          u.broken, u.holdFire, u.flagSeed = true, true, love.math.random() * 6
+          -- away from us, somewhere off in the fog
+          local ax, ay = U.norm(u.x - cx, u.y - cy)
+          if ax == 0 and ay == 0 then ax = 1 end
+          local d = 700 + love.math.random() * 400
+          u.hideX = math.max(150, math.min(W - 150, u.x + ax * d + love.math.random(-200, 200)))
+          u.hideY = math.max(150, math.min(H - 150, u.y + ay * d + love.math.random(-200, 200)))
+          world:issue(u, { type = "retreat", x = u.hideX, y = u.hideY })
+        end
+        for _, sq in ipairs(st.list) do if world.ally[sq.team] == ally then sq.surrendered = true end end
+        if world.onSquadBroken then world.onSquadBroken(ally, them) end
+      end
+    end
+  end
+  for ally, at in pairs(st.broken) do
+    -- (a few seconds' head start: they get away before anyone can find them)
+    if not st.surrendered[ally] and t - at > 8 then
+      -- found? (one of our men has eyes on one of them)
+      local them = living(world, ally)
+      local seen
+      for _, u in ipairs(them) do
+        for _, f in ipairs(us) do
+          if U.dist2(f.x, f.y, u.x, u.y) <= world:sightOf(f) ^ 2 then seen = true; break end
+        end
+        if seen then break end
+      end
+      if seen then
         st.surrendered[ally] = true
         for _, u in ipairs(them) do
-          u.surrendered, u.holdFire, u.flagSeed = true, true, love.math.random() * 6
+          u.surrendered = true
           u.begT = t + love.math.random() * 1.5
           world:issue(u, { type = "move", x = u.x, y = u.y })
         end
-        for _, sq in ipairs(st.list) do if world.ally[sq.team] == ally then sq.surrendered = true end end
         if world.onSquadSurrender then world.onSquadSurrender(ally, them) end
       end
     end
   end
-  -- the ones who gave up: hands up, in plain sight, pleading
   for _, sq in ipairs(st.list) do
     if sq.surrendered then
       for _, u in ipairs(sq.members) do
         if u.alive then
           u.holdFire = true
-          local o = u.orders[1]
-          if o and not (o.type == "move" and U.dist(o.x, o.y, u.x, u.y) < 10) then world:issue(u, { type = "move", x = u.x, y = u.y }) end
-          world.visionSources[#world.visionSources + 1] = { x = u.x, y = u.y, r = 110, untilT = t + 0.3, ally = mine }
-          world.fogDirty = true
-          if t >= (u.begT or 0) then
-            u.begT = t + 3.5 + love.math.random() * 2.5
-            u.begLine = S.BEGS[love.math.random(#S.BEGS)]
-            u.begShown = t
-            if world.onSquadBeg then world.onSquadBeg(u) end
+          if u.surrendered then
+            -- found: hands up, in plain sight, pleading
+            local o = u.orders[1]
+            if o and not (o.type == "move" and U.dist(o.x, o.y, u.x, u.y) < 10) then world:issue(u, { type = "move", x = u.x, y = u.y }) end
+            world.visionSources[#world.visionSources + 1] = { x = u.x, y = u.y, r = 110, untilT = t + 0.3, ally = mine }
+            world.fogDirty = true
+            if t >= (u.begT or 0) then
+              u.begT = t + 3.5 + love.math.random() * 2.5
+              u.begLine = S.BEGS[love.math.random(#S.BEGS)]
+              u.begShown = t
+              if world.onSquadBeg then world.onSquadBeg(u) end
+            end
+          elseif #u.orders == 0 and u.hideX and U.dist(u.x, u.y, u.hideX, u.hideY) > 60 then
+            world:issue(u, { type = "retreat", x = u.hideX, y = u.hideY })
           end
         end
       end
@@ -811,7 +890,7 @@ function S.drawWih(world, cam)
   for _, sq in ipairs(st.list) do
     if sq.surrendered then
       for _, u in ipairs(sq.members) do
-        if u.alive then
+        if u.alive and u.surrendered then
           local top = u.y - u.def.radius - 6
           -- a white flag
           lg.setColor(0.35, 0.28, 0.2)

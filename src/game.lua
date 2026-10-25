@@ -300,12 +300,28 @@ function G.new(opts)
       if ally == world.ally[1] then return end
       local fallen = {}
       for _, sq in ipairs(SQ.squadsOf(world, 1)) do
-        for _, u in ipairs(sq.roster or {}) do if not u.alive then fallen[#fallen + 1] = u.callsign or u.def.name end end
+        for _, u in ipairs(sq.roster or {}) do
+          if not u.alive then
+            if not u.survivedBy then u.age, u.survivedBy = SQ.survivedBy() end
+            fallen[#fallen + 1] = { name = u.callsign or u.def.name, age = u.age, line = u.survivedBy }
+          end
+        end
       end
       self.mercy = { ally = ally, units = units, fallen = fallen, t = love.timer.getTime() }
       -- (a computer-only test game: nobody to ask)
       if self.opts.autotest and not os.getenv("PA_MERCY") then self:decideMercy("spare"); return end
       if units[1] then require("src.cries").beg(units[1], nil, 1) end
+    end
+    world.onSquadBroken = function(ally, units)
+      if ally == world.ally[1] then return end
+      -- (a computer-only test game: nobody to hunt them down or ask)
+      if self.opts.autotest and not os.getenv("PA_MERCY") then
+        self.mercy = { ally = ally, units = units, fallen = {}, t = 0 }
+        self:decideMercy("spare")
+        return
+      end
+      self:notice(string.format("The enemy has broken! Their last %d %s running. Follow the blood and hunt them down.",
+        #units, #units == 1 and "man is" or "men are"), 5)
     end
     world.onSquadBeg = function(u)
       if world:isVisible(u) then require("src.cries").beg(u, self:soundView(), 0.9) end

@@ -73,7 +73,7 @@ end
 -- a man who has given up, pleading (War is Hell's mercy)
 function C.beg(u, view, vol)
   local s = play("cry_hurt_" .. love.math.random(NHURT), u, view, vol)
-  if s then hurtSrc[s] = true; s:setPitch(1.05 + love.math.random() * 0.1) end
+  if type(s) == "userdata" then hurtSrc[s] = true; s:setPitch(1.05 + love.math.random() * 0.1) end
 end
 
 -- blood: a fan of droplets on a hit; a pool and spatter where someone fell (kept, up to a cap)

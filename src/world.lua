@@ -915,6 +915,8 @@ function W:canTarget(e, o)
   if o.passive and (e.creep or e.arenaTower) then return false end
   if e.passive and not (e.aggro and e.aggro[o] and self.time < e.aggro[o]) then return false end
   if o.fadeUntil and self.time < o.fadeUntil then return false end
+  -- War is Hell: broken men running for cover aren't chased down until someone finds them
+  if o.broken and not o.surrendered then return false end
   -- Squad Tactics smoke: hidden from anything further than point-blank
   if o.smoked and U.dist2(e.x, e.y, o.x, o.y) > 90 * 90 then return false end
   if o.def.domain == "air" and e.mods and e.mods.hitsAir then return true end

@@ -309,6 +309,9 @@ local function runAutotest()
   end
   local dead = {}
   for t = 1, world.np do if world.teams[t].dead then dead[#dead + 1] = t .. "@" .. math.floor(world.teams[t].deadTime) end end
+  if world.wih then
+    for _, e in ipairs(world.entities) do if e.alive and e.squad then print("WIHLEFT", e.team, e.key, math.floor(e.x), math.floor(e.y), e.broken and "broken" or "", e.surrendered and "surr" or "") end end
+  end
   print("NUKES", world.nukeCount or 0)
   if world.alien then print("ALIEN captures", world.alien.captures, "state", world.alien.state, "lastOwner", world.alien.lastOwner) end
   if world.score then
