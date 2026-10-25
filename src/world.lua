@@ -509,12 +509,44 @@ function W:followPath(e, dt, arriveDist)
     e.pathI = e.pathI + 1
     return false
   end
+  -- the spot is taken: a friendly unit is standing on (or right next to) the destination and
+  -- we're as close as we can get - that counts as arriving (rather than shoving at it forever)
+  if last and len < 90 and e.def.domain ~= "air" then
+    local taken = false
+    self:query(p.x, p.y, 40, function(o)
+      if not taken and o ~= e and o.alive and not o.def.building and o.def.domain ~= "air" and o.team and e.team
+        and self.ally[o.team] == self.ally[e.team] and U.dist(o.x, o.y, p.x, p.y) < o.def.radius + e.def.radius
+        and len < e.def.radius + o.def.radius * 2 + 22 then taken = true end
+    end)
+    if taken then return true end
+  end
   local speed = self:speedOf(e)
   if e.def.domain == "land" then
     local tx, ty = self.map:tileAt(e.x, e.y)
     if self.map:terrainAt(tx, ty) == Map.HILL then speed = speed * 0.8 end
   end
   local step = math.min(len, speed * dt)
+  -- a friendly unit standing right in the way: steer round it instead of pushing into it head-on
+  -- (on the side it's already leaning to, so it doesn't dither)
+  if e.def.domain ~= "air" then
+    local r1 = e.def.radius
+    local bx, by, bd
+    self:query(e.x, e.y, r1 + 34, function(o)
+      if o ~= e and o.alive and not o.def.building and o.def.domain ~= "air" and o.team and e.team
+        and self.ally[o.team] == self.ally[e.team] and self:layerOf(o) == self:layerOf(e) then
+        local ox, oy = o.x - e.x, o.y - e.y
+        local d = math.sqrt(ox * ox + oy * oy)
+        if d > 0.01 and d < r1 + o.def.radius + 14 and (ox * nx + oy * ny) / d > 0.55 and (not bd or d < bd) then bx, by, bd = ox, oy, d end
+      end
+    end)
+    if bx then
+      local side = (nx * by - ny * bx) > 0 and -1 or 1
+      if e.sideStepT and self.time - e.sideStepT < 0.6 then side = e.sideStep end
+      e.sideStep, e.sideStepT = side, self.time
+      local px, py = -ny * side, nx * side
+      nx, ny = U.norm(nx * 0.45 + px, ny * 0.45 + py)
+    end
+  end
   local mx, my = nx * step, ny * step
   self:tryMove(e, mx, my)
   -- facing
@@ -567,6 +599,8 @@ function W:separate(dt)
             local d = math.sqrt(d2)
             if d < 0.01 then dx, dy, d = math.random() - 0.5, math.random() - 0.5, 0.5 end
             local push = (rr - d) / rr
+            -- standing still next to a friend who's on the move: step aside for him
+            if #e.orders == 0 and #o.orders > 0 and o.team and e.team and self.ally[o.team] == self.ally[e.team] then push = push * 1.8 end
             px = px + dx / d * push
             py = py + dy / d * push
           end
@@ -1058,7 +1092,7 @@ function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
   -- War is Hell: hits draw blood (and the badly hurt cry out)
   if self.wih and o.squad and self.onBlood then self.onBlood(o, amount) end
-  if self.wih and attacker and attacker.x then o.hitFrom = { x = attacker.x, y = attacker.y, t = self.time } end
+  if attacker and attacker.x and (self.wih or o.key == "commander") then o.hitFrom = { x = attacker.x, y = attacker.y, t = self.time } end
   -- Commander of Heroes: an HQ can't be hurt while its side still holds a capture point
   if o.key == "hq" and self.squads and self.capPoints then
     for _, p in ipairs(self.capPoints) do if p.owner == self.ally[o.team] then return end end

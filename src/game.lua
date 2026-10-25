@@ -2413,7 +2413,13 @@ function G:retreat(where)
   if where == "flag" and self.flag then x, y = self.flag.x, self.flag.y
   elseif hq and hq.alive then x, y = hq.x, hq.y + 90 -- Commander of Heroes: flee to the HQ (it heals)
   elseif self.world.squads then x, y = self.world.teams[1].startX, self.world.teams[1].startY -- War is Hell: back where we came in
-  elseif c and c.alive then x, y = c.x, c.y
+  elseif c and c.alive then
+    -- just behind the Commander (toward home), not on top of him: a unit sent to his exact spot
+    -- would only shove against him
+    local tm = self.world.teams[1]
+    local bx, by = U.norm(tm.startX - c.x, tm.startY - c.y)
+    if bx == 0 and by == 0 then bx = 1 end
+    x, y = c.x + bx * (c.def.radius + 70), c.y + by * (c.def.radius + 70)
   else x, y = self.world.teams[1].startX, self.world.teams[1].startY end
   local slots = self:formation(list, x, y)
   for _, u in ipairs(list) do

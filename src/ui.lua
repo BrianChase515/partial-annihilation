@@ -2225,15 +2225,6 @@ function UI.drawOver(game)
     px + 30, py + OVER_H - 150, OVER_W - 60)
   end
   for _, r in ipairs(UI.overRects(game)) do button(r.x, r.y, r.w, r.h, r.label) end
-  -- AI v2: who you were up against (its personality is drawn per game)
-  local who = {}
-  for _, ai in ipairs(game.ais or {}) do if ai.version == 2 and ai.p then who[#who + 1] = ai.p.name end end
-  if #who > 0 then
-    lg.setFont(font(12))
-    lg.setColor(0.85, 0.78, 0.55)
-    local t = "Opponent: AI v2, " .. table.concat(who, " + ") .. " personality"
-    lg.print(t, w / 2 - font(12):getWidth(t) / 2, h / 2 + OVER_H / 2 - 92)
-  end
   -- a ten-second rating, saved in the match log (how we check the AI's variety and difficulty)
   local rr = UI.rateRects(game)
   if #rr > 0 then
@@ -2256,13 +2247,14 @@ end
 function UI.rateRects(game)
   if not game.log then return {} end
   local w, h = lg.getDimensions()
-  local y = math.min(h - 34, h / 2 + OVER_H / 2 + 10)
+  -- inside the panel, in the gap under the two columns (above the scoring note)
+  local y = h / 2 - OVER_H / 2 + 412
   local items = {
     { group = "felt", value = "fresh", label = "Fresh" }, { group = "felt", value = "samey", label = "Samey" },
     { group = "difficulty", value = "too easy", label = "Too easy" }, { group = "difficulty", value = "about right", label = "About right" },
     { group = "difficulty", value = "too hard", label = "Too hard" },
   }
-  local bw, gap, x = 96, 8, w / 2 - (5 * 96 + 4 * 8 + 20) / 2 + 60
+  local bw, gap, x = 92, 6, w / 2 - (5 * 92 + 4 * 6 + 20) / 2 + 66
   for i, it in ipairs(items) do
     it.x, it.y, it.w, it.h = x, y, bw, 26
     x = x + bw + gap + (i == 2 and 20 or 0)

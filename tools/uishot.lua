@@ -27,6 +27,106 @@ local function script(mode, secs)
     print("UISHOT menu")
     return
   end
+  if os.getenv("PA_BLOCKTEST") then
+    -- a unit ordered straight through its own idle Commander (and through a line of tanks)
+    game = startFn({ size = 96, water = 0.0, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local c = w.teams[1].commander
+    local results = {}
+    for _, kind in ipairs({ "move", "retreat", "amove" }) do
+      local x0, y0 = c.x - 160, c.y
+      c.orders = {}
+      local u = w:spawn("tank", 1, x0, y0)
+      u.built = 1
+      local wall = {}
+      for k = -1, 1 do wall[#wall + 1] = w:spawn("tank", 1, c.x + 60, c.y + k * 26); wall[#wall].built = 1 end
+      w:issue(u, { type = kind, x = c.x + 220, y = c.y })
+      local t = 0
+      while t < 12 and U.dist(u.x, u.y, c.x + 220, c.y) > 20 do w:update(1 / 30); t = t + 1 / 30 end
+      results[#results + 1] = string.format("%s: %s in %.1fs (left %d)", kind, U.dist(u.x, u.y, c.x + 220, c.y) <= 20 and "arrived" or "STUCK", t,
+        math.floor(U.dist(u.x, u.y, c.x + 220, c.y)))
+      w:remove(u)
+      for _, o in ipairs(wall) do w:remove(o) end
+    end
+    print("BLOCKTEST", table.concat(results, "; "))
+    return
+  end
+  if os.getenv("PA_BLOCKTEST2") then
+    -- a unit retreating through its own Commander (busy assisting a plant), in the open and with
+    -- the Commander up against a building: does it get round?
+    game = startFn({ size = 96, water = 0.0, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local U2 = require("src.util")
+    local results = {}
+    for case = 1, 3 do
+      for _, e in ipairs(w.entities) do if e.alive and not e.def.building and e.key ~= "commander" then w:remove(e) end end
+      local c = w.teams[1].commander
+      local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+      c.x, c.y, c.orders = cx, cy, {}
+      local fac = w:spawn("landfac", 1, cx + (case == 2 and 0 or 300), cy + (case == 2 and -70 or 300))
+      fac.built = 1
+      w:issue(c, { type = "assist", target = fac })
+      local t = w:spawn("tank", 1, cx - 250, cy + (case == 3 and 10 or 0))
+      local o = { type = "retreat", x = cx + 400, y = cy + (case == 3 and 10 or 0) }
+      w:issue(t, o)
+      local passed
+      for i = 1, 30 * 20 do
+        w:update(1 / 30)
+        c.x, c.y = cx, cy -- (pinned: busy, as when building)
+        if not passed and t.x > cx + 60 then passed = i / 30 end
+      end
+      results[#results + 1] = string.format("case %d: %s", case, passed and string.format("got past in %.1fs", passed) or string.format("STUCK at x=%d (cmd at %d)", math.floor(t.x), math.floor(cx)))
+      w:remove(fac); w:remove(t)
+    end
+    for _, r in ipairs(results) do print("BLOCK", r) end
+    return
+  end
+  if os.getenv("PA_BLOCKTEST3") then
+    -- the player's Flee with no flag set: four tanks run to the (busy) Commander. Do they settle
+    -- around him, or shove at him?
+    game = startFn({ size = 96, water = 0.0, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local c = w.teams[1].commander
+    local fac = w:spawn("landfac", 1, c.x + 200, c.y + 200); fac.built = 1
+    w:issue(c, { type = "assist", target = fac })
+    local tanks = {}
+    for k = 1, 4 do tanks[k] = w:spawn("tank", 1, c.x + 500 + k * 30, c.y - 300 + k * 20); tanks[k].built = 1 end
+    game:select(tanks)
+    game:retreat("flag")
+    local t = 0
+    local cx, cy = c.x, c.y
+    print("BLOCK3 orders", tanks[1].orders[1] and tanks[1].orders[1].type, tanks[1].orders[1] and math.floor(tanks[1].orders[1].x), tanks[1].orders[1] and math.floor(tanks[1].orders[1].y), "tank at", math.floor(tanks[1].x), math.floor(tanks[1].y), "cmd", math.floor(c.x), math.floor(c.y))
+    while t < 20 do
+      w:update(1 / 30); t = t + 1 / 30
+      if math.floor(t * 30) % 90 == 0 then print("BLOCK3 t", math.floor(t), math.floor(tanks[1].x), math.floor(tanks[1].y), tanks[1].orders[1] and tanks[1].orders[1].type) end
+      local busy = 0
+      for _, u in ipairs(tanks) do if #u.orders > 0 then busy = busy + 1 end end
+      if busy == 0 then break end
+    end
+    local still = 0
+    for _, u in ipairs(tanks) do if #u.orders > 0 then still = still + 1 end end
+    local md = 1e9
+    for _, u in ipairs(tanks) do md = math.min(md, U.dist(u.x, u.y, cx, cy)) end
+    print(string.format("BLOCK3 flee to Commander: %s after %.1fs; nearest tank %d from him; Commander moved %d", still == 0 and "all settled" or (still .. " still pushing"), t, math.floor(md), math.floor(U.dist(c.x, c.y, cx, cy))))
+    return
+  end
+  if os.getenv("PA_OVERSHOT") then
+    -- the result screen after a win against AI v2 (rating row, opponent line)
+    game = startFn({ size = 96, water = 0.3, seed = 7, aiV2 = true, players = { { human = true, ally = 1 }, { ally = 2, level = 5, profile = "Boomer", aiV2 = true } } })
+    local w = game.world
+    for _ = 1, 30 do game:update(1 / 30) end
+    w:eliminate(2)
+    for _ = 1, 10 do game:update(1 / 30) end
+    game.overTime = love.timer.getTime() - 5
+    for _ = 1, 6 do frame() end
+    pending = "uishot_over.png"
+    frame(); frame()
+    print("UISHOT over")
+    return
+  end
   if os.getenv("PA_MAPVIEW") then
     -- the whole map from above (fog off), with deposits and starts: PA_MAPSEED, PA_SIZE, PA_WATER
     game = startFn({ size = tonumber(os.getenv("PA_SIZE") or "128"), water = tonumber(os.getenv("PA_WATER") or "0.3"),

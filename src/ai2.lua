@@ -215,7 +215,7 @@ function AI2:launchRaid(army, inWave)
   local want = o.guard == 0 and self.rng:random(1, 2) or 4
   local squad = {}
   for _, u in ipairs(army) do
-    if not inWave[u] and fast[u.key] and #squad < want and not (self.isHunter and self.isHunter[u]) and not (self.spotters and self.spotters[u]) then
+    if not inWave[u] and fast[u.key] and #squad < want and not u.disarmed and not (self.isHunter and self.isHunter[u]) and not (self.spotters and self.spotters[u]) then
       local layer = world:layerOf(u)
       if not layer or world.map:canReach(layer, u.x, u.y, o.e.x, o.e.y, u.def.weapon.range) then squad[#squad + 1] = u end
     end
@@ -241,9 +241,16 @@ function AI2:thinkCommander()
   -- where we want it, so it goes in looking like build duty)
   if self.cmdMode == "front" then self.cmdMode = "build" end
   local before = self.cmdMode
-  AI.thinkCommander(self)
   local w = self.world
   local c = w.teams[self.team].commander
+  -- while it's handling a fight at home (or getting out of shellfire) the classic logic would
+  -- flip it back and forth every second; let v2 see that through
+  if (self.cmdMode == "homefight" or self.cmdMode == "evade") and c and c.alive and w.time < (self.cmdHoldUntil or 0) then
+    self:guardCommander(c, before)
+    self:goForTheKill()
+    return
+  end
+  AI.thinkCommander(self)
   if c and c.alive and c.key == "commander" then
     self:guardCommander(c, before)
     self:goForTheKill()
@@ -296,12 +303,34 @@ function AI2:guardCommander(c, before)
   local hpf = c.hp / c.maxhp
   local tm = w.teams[self.team]
   -- being hit by something it can't see (artillery out in the fog): get out early
+  local hf = c.hitFrom
+  local unseen = hf and w.time - hf.t < 2 and self:strengthNear(c.x, c.y, 450, true) <= 0
   if c.lastHit and w.time - c.lastHit < 2 and hpf < 0.62 and self.cmdMode ~= "retreat" and self.cmdMode ~= "covered"
-    and self.cmdMode ~= "homefight" then
-    self.cmdMode = "retreat"
-    w:issue(c, { type = "retreat", x = tm.startX, y = tm.startY })
-    Tel.note(w, "commander", self.team, string.format("taking fire at %d%%: pulls out", math.floor(hpf * 100)))
+    and self.cmdMode ~= "homefight" and self.cmdMode ~= "evade" then
+    if unseen then
+      -- shelled from out of sight (artillery): get out of its reach, sideways and back - running
+      -- home in a straight line can mean running down the guns' line of fire. Guns stay up
+      local ax, ay = U.norm(c.x - hf.x, c.y - hf.y)
+      local hx, hy = U.norm(tm.startX - c.x, tm.startY - c.y)
+      local dx, dy = U.norm(ax * 0.7 + hx * 0.5, ay * 0.7 + hy * 0.5)
+      local map = w.map
+      local tx, ty = map:tileAt(c.x + dx * 420, c.y + dy * 420)
+      local nx, ny = map:nearestTile(math.max(1, math.min(map.w - 2, tx)), math.max(1, math.min(map.h - 2, ty)),
+        function(x, y) return map:passable("land", x, y) end, 10)
+      if nx then
+        local fx, fy = map:center(nx, ny)
+        c.disarmed = nil
+        self.cmdMode, self.cmdHoldUntil = "evade", w.time + 6
+        w:issue(c, { type = "move", x = fx, y = fy })
+        Tel.note(w, "commander", self.team, string.format("shelled from out of sight at %d%%: moves out of range", math.floor(hpf * 100)))
+      end
+    else
+      self.cmdMode = "retreat"
+      w:issue(c, { type = "retreat", x = tm.startX, y = tm.startY })
+      Tel.note(w, "commander", self.team, string.format("taking fire at %d%%: pulls out", math.floor(hpf * 100)))
+    end
   end
+  if self.cmdMode == "evade" and w.time >= (self.cmdHoldUntil or 0) then self.cmdMode = nil end
   -- home, but the fight followed it there: sitting powered down at the spawn is death. Fight
   -- with the base if that's a fight it can win, otherwise slip away (guns up) and come back
   local spawnD = U.dist(c.x, c.y, tm.startX, tm.startY)
@@ -309,6 +338,7 @@ function AI2:guardCommander(c, before)
     local support = self:strengthNear(c.x, c.y, 550, false)
     c.disarmed = nil
     local th = self:enemyNearBase()
+    self.cmdHoldUntil = w.time + 5
     if support + 500 * hpf >= danger * 0.75 and th then
       self.cmdMode = "homefight"
       w:issue(c, { type = "amove", x = th.x, y = th.y })
@@ -338,7 +368,7 @@ function AI2:guardCommander(c, before)
   local near = {}
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == self.team and e.def.weapon and not e.def.building and e.key ~= "commander" and e.key ~= "builder"
-      and e.def.domain ~= "sea" and e.def.domain ~= "sub" and not (self.isHunter and self.isHunter[e]) then
+      and not e.disarmed and e.def.domain ~= "sea" and e.def.domain ~= "sub" and not (self.isHunter and self.isHunter[e]) then
       local d = U.dist(e.x, e.y, c.x, c.y)
       if d < 900 then near[#near + 1] = { e = e, d = d } end
     end
@@ -386,7 +416,7 @@ function AI2:goForTheKill()
         local hunters = {}
         for _, u in ipairs(w.entities) do
           if u.alive and u.team == self.team and u.def.weapon and not u.def.building and u.key ~= "commander" and u.key ~= "builder"
-            and U.dist2(u.x, u.y, e.x, e.y) < 800 * 800 and w:canTarget(u, e) then
+            and not u.disarmed and U.dist2(u.x, u.y, e.x, e.y) < 800 * 800 and w:canTarget(u, e) then
             hunters[#hunters + 1] = u
           end
         end
@@ -463,6 +493,7 @@ function AI2:thinkPosture()
   local odds = ours / math.max(1, ours + theirs * (self.omniscient and 1 or 1.3))
   local threat = self:enemyNearBase() and 1 or 0
   local since = t - (self.lastWave or -999)
+  self:balanceArmy(ours)
   local opts = {
     { key = "strike", label = "strike now", score = 0.55 * P.aggression * (0.3 + odds) * (P.risk ^ 0.5) * (since > 90 and 1.2 or 0.7) },
     { key = "mass", label = "mass up first", score = 0.5 * P.patience * (1.25 - odds) },
@@ -484,6 +515,31 @@ function AI2:thinkPosture()
   end
 end
 
+-- an economy is only worth what it fields. Past 2:30, a standing army worth about 25 seconds of
+-- income (more for aggressive personalities) is the floor; below it, v2 stops expanding, stops
+-- adding specialist plants and constructors, and puts everything into units until it's back
+function AI2:balanceArmy(ours)
+  local w = self.world
+  local tm = w.teams[self.team]
+  if not self.baseEco then self.baseEco = { expand = self.diff.expandMul, spec = self.specFrom, builders = self.diff.builderBonus } end
+  if w.time < 150 then return end
+  local want = tm.mIncome * 25 * (0.8 + 0.25 * self.p.w.aggression)
+  local short = ours < want
+  if short and not self.arming then
+    self.arming = true
+    self.diff.expandMul = self.baseEco.expand * 0.35
+    self.specFrom = 99999
+    self.diff.builderBonus = self.baseEco.builders - 2
+    self.navyPaused = true
+    Tel.note(w, "economy", self.team, string.format("army %d is thin for %.0f metal/s (wants %d): stops expanding, builds units", math.floor(ours), tm.mIncome, math.floor(want)))
+  elseif self.arming and ours > want * 1.15 then
+    self.arming = false
+    self.diff.expandMul, self.specFrom, self.diff.builderBonus = self.baseEco.expand, self.baseEco.spec, self.baseEco.builders
+    self.navyPaused = false
+    Tel.note(w, "economy", self.team, string.format("army %d is enough: back to growing", math.floor(ours)))
+  end
+end
+
 function AI2:thinkArmy()
   if not self.announced and self.world.tel then
     self.announced = true
@@ -498,8 +554,28 @@ function AI2:thinkArmy()
   self:updateStage()
   self.tgtPick = nil -- a fresh target choice for any wave launched this think
   local r = AI.thinkArmy(self)
+  self:sendHurtHome()
   self:defendHome()
   return r
+end
+
+-- a unit that ran from a fight is powered down until it's repaired. The classic code can still
+-- pick it up for the next push (it's idle, it's in the wave list); v2 keeps it home instead
+function AI2:sendHurtHome()
+  local w = self.world
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == self.team and e.disarmed and not e.def.building and e.key ~= "commander" then
+      self.wave[e] = nil
+      if self.raidSquad then for i = #self.raidSquad, 1, -1 do if self.raidSquad[i] == e then table.remove(self.raidSquad, i) end end end
+      local o = e.orders[1]
+      local home = U.dist(e.x, e.y, self.baseX, self.baseY)
+      if (not o or (o.type ~= "retreat" and o.type ~= "move")) and home > 350 then
+        w:issue(e, { type = "retreat", x = self.baseX + self.rng:random(-120, 120), y = self.baseY + self.rng:random(-120, 120) })
+      elseif o and o.type == "move" and U.dist(o.x, o.y, self.baseX, self.baseY) > 450 and not w:isFleeing(e) then
+        w:issue(e, { type = "retreat", x = self.baseX + self.rng:random(-120, 120), y = self.baseY + self.rng:random(-120, 120) })
+      end
+    end
+  end
 end
 
 -- the army is out at the centre and they're in our base: bring it home (the staged army first;
@@ -516,7 +592,7 @@ function AI2:defendHome()
   local cands = {}
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == self.team and e.def.weapon and not e.def.building and e.key ~= "commander" and e.key ~= "builder"
-      and (e.def.domain == "land" or e.def.domain == "air") and not (self.isHunter and self.isHunter[e]) then
+      and not e.disarmed and (e.def.domain == "land" or e.def.domain == "air") and not (self.isHunter and self.isHunter[e]) then
       local d = U.dist(e.x, e.y, self.baseX, self.baseY)
       if d > 600 and d < 3000 then
         -- the wave only comes back when home is badly outmatched
@@ -647,8 +723,8 @@ function AI2:pick(wts)
     artillery = (1 + 0.04 * k * tanks) * P.guns,
     tank = (1 + 0.03 * k * guns) * (0.8 + 0.2 * P.aggression),
     scout = (guns > 2 and 1 + 0.4 * k or 1) * (0.7 + 0.3 * P.raid),
-    boat = self.navyPlan and 1.4 or 1, destroyer = self.navyPlan and 1.4 or 1,
-    battleship = self.navyPlan and 1.6 or 1, sub = self.navyPlan and 1.2 or 1,
+    boat = (self.navyPlan and not self.navyPaused) and 1.4 or 1, destroyer = (self.navyPlan and not self.navyPaused) and 1.4 or 1,
+    battleship = (self.navyPlan and not self.navyPaused) and 1.6 or 1, sub = (self.navyPlan and not self.navyPaused) and 1.2 or 1,
   }
   local adj = {}
   for key, v in pairs(wts) do adj[key] = v * (mul[key] or 1) end
