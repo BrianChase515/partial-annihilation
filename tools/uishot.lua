@@ -156,6 +156,40 @@ local function script(mode, secs)
     end
     return
   end
+  if os.getenv("PA_BBSPOT") then
+    -- a battleship far off, an extractor on land, two enemy scouts raiding it: does the
+    -- extractor's sight let the battleship shell them?
+    game = startFn({ size = 96, water = 0.6, seed = 11, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = false
+    local map = w.map
+    local sx, sy = map:nearestTile(math.floor(map.w / 2), math.floor(map.h / 2), function(x, y) return map:passable("sea", x, y) end, 40)
+    local bx, by = map:center(sx, sy)
+    local bb = w:spawn("battleship", 1, bx, by); bb.built = 1
+    local lx, ly
+    for r = 20, 40 do
+      for a = 0, 15 do
+        local tx, ty = math.floor(sx + math.cos(a / 16 * 6.28) * r), math.floor(sy + math.sin(a / 16 * 6.28) * r)
+        if not lx and map:inBounds(tx, ty) and map:passable("land", tx, ty) then lx, ly = tx, ty end
+      end
+    end
+    local mx, my = map:center(lx, ly)
+    local mex = w:spawn("mex", 1, mx, my); mex.built = 1
+    local raiders = {}
+    for k = 1, 2 do raiders[k] = w:spawn("scout", 2, mx + 120 + k * 15, my + 40); raiders[k].built = 1; w:issue(raiders[k], { type = "attack", target = mex }) end
+    local shots, t = 0, 0
+    local n0 = #w.projectiles
+    while t < 30 and mex.alive do
+      w:update(1 / 30); t = t + 1 / 30
+      for _, p in ipairs(w.projectiles) do if p.source == bb and not p.counted then p.counted = true; shots = shots + 1 end end
+    end
+    local left = 0
+    for _, r in ipairs(raiders) do if r.alive then left = left + 1 end end
+    print(string.format("BBSPOT battleship %d away; shots fired %d; extractor %s after %.0fs; raiders left %d", math.floor(U.dist(bx, by, mx, my)), shots,
+      mex.alive and "standing" or "lost", t, left))
+    return
+  end
   if os.getenv("PA_MAPVIEW") then
     -- the whole map from above (fog off), with deposits and starts: PA_MAPSEED, PA_SIZE, PA_WATER
     game = startFn({ size = tonumber(os.getenv("PA_SIZE") or "128"), water = tonumber(os.getenv("PA_WATER") or "0.3"),
