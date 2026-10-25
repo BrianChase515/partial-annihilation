@@ -56,6 +56,8 @@ function W.new(opts)
   end
   if opts.aiIncome then
     for t, mul in pairs(opts.aiIncome) do self.teams[t].incomeMul = mul end
+    -- (experiment: PA_ECO scales everyone's income)
+    if os.getenv("PA_ECO") then for t = 1, #self.teams do self.teams[t].incomeMul = (self.teams[t].incomeMul or 1) * tonumber(os.getenv("PA_ECO")) end end
   end
   self.spendTimer = 0
 
