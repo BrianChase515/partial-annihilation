@@ -67,6 +67,8 @@ function AI2.new(world, team, level, profileKey)
   -- air defence it keeps whether or not it has seen aircraft: about one flak per eight land
   -- fighters, and flak riding with the Commander (its Defense Towers cover the base)
   self.flakShare = 0.12
+  self.facPerIncome = tonumber(os.getenv("PA_FPI") or "") or 13
+  self.facCap = 10
   self.reserved = {}
   -- personality shapes the opening
   local P = self.p.w

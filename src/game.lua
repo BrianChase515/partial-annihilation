@@ -59,6 +59,7 @@ function G.new(opts)
   for i, p in ipairs(players) do if p.human then world.humanTeams[i] = true end end
   R.init(world)
   self.ais = {}
+  world.game = self
   for i, p in ipairs(players) do
     if world.squads then
       if not p.human then

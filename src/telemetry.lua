@@ -89,6 +89,26 @@ function Tel:update()
         end
       end
       self["army" .. mark] = v
+      local fac, bank = {}, {}
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.team and e.team >= 1 and e.def.factory and (e.built or 1) >= 1 then fac[e.team] = (fac[e.team] or 0) + 1 end
+      end
+      for t2 = 1, w.np do bank[t2] = { m = w.teams[t2].metal, inc = w.teams[t2].mIncome } end
+      self["fac" .. mark], self["bank" .. mark] = fac, bank
+      if os.getenv("PA_ECOLOG") then
+        for t2 = 1, w.np do
+          local cnt = {}
+          for _, e in ipairs(w.entities) do
+            if e.alive and e.team == t2 and e.def.income and (e.built or 1) >= 1 then cnt[e.key] = (cnt[e.key] or 0) + 1 end
+          end
+          local parts = {}
+          for k, n in pairs(cnt) do parts[#parts + 1] = k .. "=" .. n end
+          local ai
+          for _, a2 in ipairs((w.game and w.game.ais) or {}) do if a2.team == t2 then ai = a2 end end
+          if ai and ai.taskLog then local q = {}; for k, n in pairs(ai.taskLog) do q[#q + 1] = k .. "=" .. n end; print("ECOLOG tasks", t2, table.concat(q, " ")) end
+          print(string.format("ECOLOG t=%d team %d income %.1f mul %.2f: %s", mark, t2, w.teams[t2].mIncome, w.teams[t2].incomeMul, table.concat(parts, " ")))
+        end
+      end
       local nv = {}
       for _, e in ipairs(w.entities) do
         if e.alive and e.team and e.team >= 1 and (e.def.domain == "sea" or e.def.domain == "sub") and e.def.weapon and not e.def.building then
@@ -203,6 +223,11 @@ function Tel.fingerprint(world, team)
   f.kills, f.losses = k, l
   f.army3 = self.army180 and self.army180[team] or 0
   f.army6 = self.army360 and self.army360[team] or 0
+  f.fac3 = self.fac180 and self.fac180[team] or 0
+  f.fac6 = self.fac360 and self.fac360[team] or 0
+  f.bank3 = self.bank180 and self.bank180[team] and self.bank180[team].m or 0
+  f.inc3 = self.bank180 and self.bank180[team] and self.bank180[team].inc or 0
+  f.inc6 = self.bank360 and self.bank360[team] and self.bank360[team].inc or 0
   f.navy3 = self.navy180 and self.navy180[team] or 0
   f.navy6 = self.navy360 and self.navy360[team] or 0
   f.yardAt = self.yardAt and self.yardAt[team] or nil

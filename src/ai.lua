@@ -777,6 +777,13 @@ function AI:thinkEconomy()
         self.fortWhere = (self.fortN % 3 == 0) and "outpost" or "ring"
       elseif needEnergy and solars < 60 then
         task = "solar"
+      elseif self.facPerIncome and factories >= 1 and factories < math.min(self.facCap or 10, 1 + math.floor(mInc / self.facPerIncome))
+        and (self.lastFacOrder or -99) < t - 10 and t > 60 then
+        -- (v2) production keeps pace with income: a plant per facPerIncome metal/s, so the
+        -- economy turns into an army instead of sitting full in storage
+        self.lastFacOrder = t
+        local airShare = p.factoryAirShare or 0.3
+        task = (landfacs >= 2 and airfacs < math.max(1, math.floor(landfacs * airShare + 0.5))) and "airfac" or "landfac"
       elseif t > 150 and factories < self.diff.maxFactories + 2 and (self.lastFacOrder or -99) < t - 25
         and (tm.metal > tm.mStore * 0.45 or factories < 1 + math.floor(mInc / 12)) then
         -- production keeps pace with income (about one factory per 12 metal/s), and
@@ -841,6 +848,7 @@ function AI:thinkEconomy()
             tx, ty = self:findSite(key, bx, by, 3, 20)
           end
         end
+        if os.getenv("PA_ECOLOG") then self.taskLog = self.taskLog or {}; local k2 = key .. (tx and "" or "!FAIL"); self.taskLog[k2] = (self.taskLog[k2] or 0) + 1 end
         if tx then
           world:issue(b, { type = "build", key = key, tx = tx, ty = ty })
           -- extractors: chain the next two nearest free deposits so the builder never idles
