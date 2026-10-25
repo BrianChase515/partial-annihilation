@@ -456,6 +456,14 @@ function G.new(opts)
     if ok then self.log = lg else print("match log disabled:", lg) end
   end
   self.musicScan = 0
+  -- telemetry: what happened and what the computer decided (match log, tournament harness)
+  self.world.tel = require("src.telemetry").new(self.world)
+  if self.log then
+    local lg = self.log
+    self.world.onTelNote = function(n)
+      lg:event(string.format("(%s) %s: %s", D.teamName[n.team] or "-", n.kind, n.text or ""))
+    end
+  end
   return self
 end
 
@@ -1693,6 +1701,7 @@ function G:decideMercy(choice)
   if not m or m.choice then return end
   m.choice = choice
   local world = self.world
+  require("src.telemetry").note(world, "mercy", 1, (choice == "spare" and "have mercy: " or "kill 'em all: ") .. #m.units .. " men")
   if choice == "spare" then
     local n = 0
     for _, u in ipairs(m.units) do if u.alive then n = n + 1; world:remove(u) end end

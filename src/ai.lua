@@ -2,6 +2,7 @@
 -- produces a mixed army, defends its base and attacks in growing waves.
 local D = require("src.defs")
 local U = require("src.util")
+local Tel = require("src.telemetry")
 local Map = require("src.map")
 
 local AI = {}
@@ -1259,6 +1260,7 @@ function AI:launchRaid(army, inWave)
     end
   end
   if not best then return end
+  Tel.note(world, "raid", self.team, "raid on a " .. best.key)
   local fast = { scout = true, gunship = true, bomber = true, boat = true, tank = true }
   local squad = {}
   for _, u in ipairs(army) do
@@ -1594,6 +1596,15 @@ function AI:thinkArmy()
     self.waveSpots = self.rng:random() < self.spotChance
     self.waves = self.waves + 1
     self.lastWave = t
+    do
+      local comp = {}
+      for _, u in ipairs(home) do comp[u.key] = (comp[u.key] or 0) + 1 end
+      local ks = {}
+      for k, n in pairs(comp) do ks[#ks + 1] = n .. " " .. k end
+      table.sort(ks)
+      Tel.note(world, "wave", self.team, string.format("wave %d: %d units (%s)%s", self.waves, #home, table.concat(ks, ", "),
+        self.waveSpots and ", with spotters" or ""))
+    end
     -- better players march the land army together (slowest pace) until first contact
     local march
     if ((world.kiteSkill or {})[self.team] or 0) >= 0.4 then

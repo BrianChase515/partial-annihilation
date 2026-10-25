@@ -2225,6 +2225,40 @@ function UI.drawOver(game)
     px + 30, py + OVER_H - 150, OVER_W - 60)
   end
   for _, r in ipairs(UI.overRects(game)) do button(r.x, r.y, r.w, r.h, r.label) end
+  -- a ten-second rating, saved in the match log (how we check the AI's variety and difficulty)
+  local rr = UI.rateRects(game)
+  if #rr > 0 then
+    lg.setFont(font(12))
+    lg.setColor(0.75, 0.8, 0.88)
+    local q = "How did that feel?"
+    lg.print(q, rr[1].x - font(12):getWidth(q) - 12, rr[1].y + 6)
+    local mx, my = love.mouse.getPosition()
+    for _, r in ipairs(rr) do
+      local on = game.rating and game.rating[r.group] == r.value
+      local hov = mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h
+      lg.setColor(on and 0.25 or (hov and 0.2 or 0.12), on and 0.5 or (hov and 0.26 or 0.16), on and 0.3 or (hov and 0.34 or 0.22), 0.95)
+      lg.rectangle("fill", r.x, r.y, r.w, r.h, 5)
+      lg.setColor(1, 1, 1, on and 1 or 0.8)
+      lg.print(r.label, r.x + r.w / 2 - font(12):getWidth(r.label) / 2, r.y + 6)
+    end
+  end
+end
+
+function UI.rateRects(game)
+  if not game.log then return {} end
+  local w, h = lg.getDimensions()
+  local y = math.min(h - 34, h / 2 + OVER_H / 2 + 10)
+  local items = {
+    { group = "felt", value = "fresh", label = "Fresh" }, { group = "felt", value = "samey", label = "Samey" },
+    { group = "difficulty", value = "too easy", label = "Too easy" }, { group = "difficulty", value = "about right", label = "About right" },
+    { group = "difficulty", value = "too hard", label = "Too hard" },
+  }
+  local bw, gap, x = 96, 8, w / 2 - (5 * 96 + 4 * 8 + 20) / 2 + 60
+  for i, it in ipairs(items) do
+    it.x, it.y, it.w, it.h = x, y, bw, 26
+    x = x + bw + gap + (i == 2 and 20 or 0)
+  end
+  return items
 end
 
 -- War is Hell: the enemy's last men have thrown down their arms. Before you decide, the names
@@ -2324,6 +2358,17 @@ end
 
 function UI.overClick(game, x, y, b)
   if b ~= 1 then return end
+  for _, r in ipairs(UI.rateRects(game)) do
+    if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
+      game.rating = game.rating or {}
+      game.rating[r.group] = r.value
+      if game.log then
+        game.log:raw(string.format("RATING: %s = %s", r.group, r.value))
+        game.log:flush()
+      end
+      return
+    end
+  end
   for _, r in ipairs(UI.overRects(game)) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "again" then game.playAgain = true

@@ -6,6 +6,7 @@
 -- replaced at the HQ (faster the more points you hold); a fallen leader returns after 45 s.
 -- Win when the enemy's tickets run out or their HQ falls.
 local U = require("src.util")
+local Tel = require("src.telemetry")
 local D = require("src.defs")
 
 local S = {}
@@ -647,6 +648,7 @@ function S.update(world, dt)
             if world.onPointLost then world.onPointLost(p) end
           else
             p.owner, p.amt, p.capBy = who, 0, nil
+            Tel.note(world, "capture", nil, string.format("%s taken by side %d", p.name or "point", who))
             if world.onPointTaken then world.onPointTaken(p, who) end
           end
         end
@@ -809,6 +811,7 @@ function S.updateWih(world, dt)
         local cx, cy = 0, 0
         for _, f in ipairs(us) do cx, cy = cx + f.x, cy + f.y end
         S.breakUnits(world, them, cx / #us, cy / #us)
+        Tel.note(world, "break", them[1] and them[1].team, string.format("last %d men break and run", #them))
         if world.onSquadBroken then world.onSquadBroken(ally, them, true) end
       end
     end
@@ -843,6 +846,7 @@ function S.updateWih(world, dt)
         end
       end
     end
+    Tel.note(world, "surrender", found.team, string.format("%d men found and surrender", #group))
     if world.onSquadSurrender then world.onSquadSurrender(ally, group) end
   end
   for _, sq in ipairs(st.list) do
@@ -1246,6 +1250,11 @@ function AI:armyPlan(mine)
   end
   local dx, dy = U.norm(obj.x - ax, obj.y - ay)
   if dx == 0 and dy == 0 then dx = 1 end
+  local mode = seen and "hunt where they were last seen" or (obj.hold and "hold good ground" or "sweep")
+  if mode ~= self.lastMode then
+    self.lastMode = mode
+    Tel.note(w, "plan", self.team, mode)
+  end
   return { by = by, ax = ax, ay = ay, obj = obj, dx = dx, dy = dy, contact = seen and U.dist(ax, ay, seen.x, seen.y) < 900 }
 end
 
@@ -1275,6 +1284,11 @@ function AI:groupPlan(list, keyName, taken)
     local blocked = {}
     for k, v in pairs(taken) do if v ~= keyName then blocked[k] = true end end
     pi = self:pickPoint(lead, blocked)
+    if pi ~= self.gobj[keyName] then
+      local p = pi and w.capPoints[pi]
+      Tel.note(w, "objective", self.team, string.format("%s group (%d squads) -> %s", keyName, #list,
+        p and (p.name or ("point " .. pi)) .. (p.owner == me and " (ours, slipping)" or (p.owner and " (theirs)" or " (neutral)")) or "hold the middle"))
+    end
     self.gobj[keyName] = pi
   end
   local obj
@@ -1330,6 +1344,10 @@ function AI:conquestPlan(mine)
       local blocked = {}
       for k in pairs(taken) do blocked[k] = true end
       pi = self:pickPoint(sq, blocked) or self:pickPoint(sq, {})
+      if pi ~= sq.raidPoint then
+        local p = pi and w.capPoints[pi]
+        Tel.note(w, "raid", self.team, string.format("scouts (squad %d) -> %s", sq.idx, p and (p.name or ("point " .. pi)) or "nothing left"))
+      end
       sq.raidPoint = pi
     end
     if pi then taken[pi] = "raid" end
@@ -1469,6 +1487,7 @@ function AI:update(dt)
         -- War is Hell: there's nowhere to heal. A squad that pulls back is done fighting
         if self.team ~= w.playerTeam and w.ally[self.team] ~= w.ally[w.playerTeam] then
           S.breakUnits(w, sq.members, foe and foe.x or L.x, foe and foe.y or L.y)
+          Tel.note(w, "break", self.team, string.format("squad %d (%s) breaks at %d%% strength", sq.idx, sq.type, math.floor(frac * 100)))
           if w.onSquadBroken then w.onSquadBroken(w.ally[self.team], sq.members, false) end
           goto nextsq
         end

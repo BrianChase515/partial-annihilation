@@ -254,6 +254,28 @@ function L:finish()
     self:raw(string.format("  %-7s %s  kills %d losses %d", D.teamName[t] or "?",
       tm.dead and ("eliminated at " .. mmss(tm.deadTime or 0)) or "survived", self.kills[t] or 0, self.losses[t] or 0))
   end
+  -- how each side played (the same numbers the tournament harness compares)
+  if w.tel then
+    local Tel = require("src.telemetry")
+    self:raw("")
+    self:raw("HOW EACH SIDE PLAYED")
+    for t = 1, w.np do self:raw(string.format("  %-7s %s", D.teamName[t] or "?", Tel.describe(Tel.fingerprint(w, t)))) end
+    -- who killed what
+    local pairs2 = {}
+    for _, r in ipairs(w.tel.kills) do
+      if r.at and r.at ~= r.vt then
+        local k = string.format("%s %s > %s %s", D.teamName[r.at] or "?", r.ak or "?", D.teamName[r.vt] or "?", r.vk or "?")
+        pairs2[k] = (pairs2[k] or 0) + 1
+      end
+    end
+    local ks = {}
+    for k in pairs(pairs2) do ks[#ks + 1] = k end
+    table.sort(ks, function(a, b) return pairs2[a] > pairs2[b] end)
+    if #ks > 0 then
+      self:raw("KILLS (killer > victim)")
+      for i = 1, math.min(14, #ks) do self:raw(string.format("  %3d  %s", pairs2[ks[i]], ks[i])) end
+    end
+  end
   self:flush()
 end
 

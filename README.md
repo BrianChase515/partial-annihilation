@@ -336,6 +336,14 @@ love . --arenatest 25 <seed> <size> 1v1|2v2|1v2 <level> [class1,class2,...]
 love . --smoketest     # a scripted "player" drives the real input handlers
 ```
 
+The AI tournament plays many computer-vs-computer games at full speed and fingerprints how each side played (when it made contact, how many groups it fought in, how much of the map it covered, its kill range, which unit types did the damage). It reports win rates and a variety score: how far apart the games are, and how many are near-repeats of another. `fixed` replays the same map, armies and levels, so the variety left is the AI's own.
+
+```sh
+love . --tourney <coh|wih|rts> [games] [level2|mix] [level1|mix] [fixed]
+```
+
+Every match log now ends with how each side played (the same fingerprint), who killed what, and the computer's decisions as they happened (objectives, raids, waves, breaks). The result screen asks how the game felt (fresh or samey, too easy or too hard) and saves the answer in the log.
+
 ### Releasing
 
 Bump `VERSION` and `D.VERSION` in `src/defs.lua` together, then run `tools/build.sh` (it refreshes `dist/PartialAnnihilation.love`) and push. Players get the update from the title screen, and the leaderboard starts a new season for the new version.

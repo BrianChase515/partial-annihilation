@@ -1115,6 +1115,7 @@ function W:damage(o, amount, attacker)
       self:gainXP(attacker, xp)
     end
   end
+  if self.tel then self.tel:damage(o, amount, attacker) end
   o.hp = o.hp - amount
   o.hitTimer = 0.15
   o.lastHit = self.time
@@ -1159,6 +1160,7 @@ end
 
 function W:kill(o, attacker)
   if not o.alive then return end
+  if self.tel then self.tel:kill(o, attacker) end
   self:remove(o)
   if self.craft then
     CRAFT.onKill(self, o, attacker)
@@ -1923,6 +1925,7 @@ end
 -- Main tick
 
 function W:update(dt)
+  if self.tel then self.tel:update() end
   if self.over and self.time > self.over.time + 3 then
     -- keep effects animating only
     self:updateEffects(dt)

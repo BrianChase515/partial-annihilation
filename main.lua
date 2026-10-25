@@ -184,6 +184,15 @@ function love.load(args)
       smoke.start(function(opts) startGame(opts) return game end, rest)
       return
     end
+    if a == "--tourney" then
+      smoke = require("tools.tourney")
+      menu = Menu.new()
+      state = "menu"
+      local rest = {}
+      for k = i + 1, #args do rest[#rest + 1] = args[k] end
+      smoke.start(function(opts) startGame(opts) return game end, rest)
+      return
+    end
     if a == "--uishot" then
       smoke = require("tools.uishot")
       menu = Menu.new()
