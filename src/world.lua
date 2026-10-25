@@ -1211,6 +1211,12 @@ function W:damage(o, amount, attacker)
       self:gainXP(attacker, xp)
     end
   end
+  -- (Annihilation) home ground: a Commander inside his own base takes less damage - taking the
+  -- base comes before killing him there
+  if o.key == "commander" and self.rtsTune and (self.rtsTune.homeArmor or 0) > 0 and o.team then
+    local tm = self.teams[o.team]
+    if tm and tm.startX and U.dist2(o.x, o.y, tm.startX, tm.startY) < 500 * 500 then amount = amount * (1 - self.rtsTune.homeArmor) end
+  end
   -- towers stop Commanders: a gun tower hits a Commander 2.5x as hard (Annihilation)
   local tvc = D.towerVsCmd or D.TOWER_VS_COMMANDER
   if tvc and o.key == "commander" and attacker and attacker.def and (attacker.def.antiCommander or (D.towerVsCmd and attacker.def.building))
