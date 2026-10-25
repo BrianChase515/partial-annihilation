@@ -53,6 +53,11 @@ end
 local function run()
   frame()
   local mode = args[1] or "coh"
+  -- (experiment: PA_CMDHP=1.5 scales the Annihilation Commander's health)
+  if os.getenv("PA_CMDHP") then
+    local D = require("src.defs")
+    D.units.commander.hp = math.floor(D.units.commander.hp * tonumber(os.getenv("PA_CMDHP")))
+  end
   local n = tonumber(args[2]) or 20
   local rng = love.math.newRandomGenerator(os.time())
   -- "v2": side 2 plays AI v2 against v1 on side 1; "v2both": both sides v2
