@@ -727,8 +727,8 @@ function AI:thinkEconomy()
   -- planned solars count toward energy
   local plannedSolar = solars - world:count(self.team, "solar")
   local plannedMex = mexes - world:count(self.team, "mex")
-  local eFuture = eInc + plannedSolar * 14 * tm.incomeMul
-  local mFuture = mInc + plannedMex * 1.6 * tm.incomeMul
+  local eFuture = eInc + plannedSolar * D.units.solar.income.energy * tm.incomeMul
+  local mFuture = mInc + plannedMex * D.units.mex.income.metal * tm.incomeMul
   local enemyAir = self:enemyAirCount()
 
   -- (a claimed Power Core nobody is building any more - the builder died or gave up - is free again)
@@ -795,6 +795,8 @@ function AI:thinkEconomy()
       end
       if not task then
         local wantAA = math.min(6, (enemyAir > 2 and 1 + math.floor(enemyAir / 4) or 0) + (t > 300 and self.diff.aaBonus or 0))
+        -- (v2) an AA Tower for every couple of gun towers, so a Commander that runs home is covered from the air too
+        if self.aaPerTowers and turrets >= 1 then wantAA = math.max(wantAA, math.min(4, math.ceil(turrets / self.aaPerTowers))) end
         -- (from level 5 the specialists grab land first: their plant comes once the economy runs)
         local lateSpec = (self.diff.level or 5) >= 5 and (t < (self.specFrom or 200) or mFuture < 14)
         if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "shipyard"
@@ -849,7 +851,7 @@ function AI:thinkEconomy()
               local nd = self:nearestFreeDeposit(lx, ly, 700)
               if not nd then break end
               world:issue(b, { type = "build", key = "mex", tx = nd.x, ty = nd.y }, true)
-              mexes = mexes + 1; mFuture = mFuture + 1.6 * tm.incomeMul
+              mexes = mexes + 1; mFuture = mFuture + D.units.mex.income.metal * tm.incomeMul
               lx, ly = world.map:center(nd.x, nd.y)
             end
           end
@@ -857,8 +859,8 @@ function AI:thinkEconomy()
           if key == "landfac" then landfacs = landfacs + 1 end
           if key == "airfac" then airfacs = airfacs + 1 end
           if key == "shipyard" then yards = yards + 1 end
-          if key == "solar" then solars = solars + 1; eFuture = eFuture + 14 * tm.incomeMul end
-          if key == "mex" then mexes = mexes + 1; mFuture = mFuture + 1.6 * tm.incomeMul end
+          if key == "solar" then solars = solars + 1; eFuture = eFuture + D.units.solar.income.energy * tm.incomeMul end
+          if key == "mex" then mexes = mexes + 1; mFuture = mFuture + D.units.mex.income.metal * tm.incomeMul end
           if key == "turret" then turrets = turrets + 1 end
           if key == "aaturret" then aas = aas + 1 end
           if key == "storage" then storages = storages + 1 end
@@ -986,6 +988,11 @@ function AI:pickUnit(f)
       scout = t < 240 and 14 or 5,
       flak = enemyAir > 0 and math.max(0, enemyAir * 6 - myFlak * 6) or 0,
     }
+    -- (v2) a standing share of flak, air or no air: when the gunships come it's too late to start
+    if self.flakShare and t > 75 then
+      local fighters = self:countPlanned("tank") + self:countPlanned("artillery") + self:countPlanned("scout")
+      if myFlak < math.max(1, math.floor(fighters * self.flakShare + 0.5)) then w.flak = math.max(w.flak, 30) end
+    end
     return self:pick(w)
   elseif f.key == "airfac" then
     local myFighters = self:countPlanned("fighter") + self:queued("fighter")
@@ -1143,6 +1150,11 @@ function AI:thinkBattleships(army)
         world:issue(b, { type = "retreat", x = tx, y = ty })
       else
         local siege = self.navalReach and (#esc >= 2 or self.profile.navalFirst) and not self.profile.harbor
+        if self.bbParkSpot then
+          -- (v2) a fixed firing position: its own water nearest the centre
+          local px, py = self:bbParkSpot(b)
+          if px then tx, ty = px, py; siege = false end
+        end
         if siege then
           tx, ty = self:waterNear(self.enemyX, self.enemyY, 30)
         end
@@ -1519,6 +1531,12 @@ function AI:thinkArmy()
     army = rest
   end
   self:huntBattleships(army)
+  -- units on a special duty (v2's flak escort for the Commander) stay out of the waves
+  if self.reserved and next(self.reserved) then
+    local rest = {}
+    for _, u in ipairs(army) do if not self.reserved[u] then rest[#rest + 1] = u end end
+    army = rest
+  end
 
   -- clean wave set
   local inWave = {}

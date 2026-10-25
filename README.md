@@ -117,7 +117,7 @@ Fights start early and in the open, but walking your Commander into a defended b
 
 ### The Power Core, and metal that belongs to the navy
 
-Every Annihilation map has a Power Core node in the middle (the blue pad): any constructor can build on it for +4 metal and +60 energy a second, so the centre is always worth fighting over. Offshore metal - the teal rings - can only be claimed by a Sea Constructor, so a shipyard opens up a whole economy instead of just costing you one; a shipyard and sea constructors cost the same as their land versions.
+Every Annihilation map has a Power Core node in the middle (the blue pad): any constructor can build on it for +10 metal and +150 energy a second (about four extractors' worth), so the centre is always worth fighting over. Offshore metal - the teal rings - can only be claimed by a Sea Constructor, so a shipyard opens up a whole economy instead of just costing you one; a shipyard and sea constructors cost the same as their land versions.
 
 ### Battleships reach across the map
 
@@ -157,7 +157,7 @@ Victory and defeat get their own fanfares. A robotic voice calls out "Warning. N
 Combine them however you like. Score keeps running, but only games without gameplay modifiers (Groovy is cosmetic) count as official, or teach Mirror and Nemesis.
 
 ### Metal you have to go and take
-Metal near your base is scarce. Most deposits sit out in the contested middle of the map, and the richest ones (+2.6 metal, against +1.6 for a normal deposit) are a gold-ringed cluster at the very center and teal-ringed fields offshore. Turtling at home means falling behind.
+Metal near your base is scarce. Most deposits sit out in the contested middle of the map, and the richest ones (+3.9 metal, against +2.4 for a normal deposit) are a gold-ringed cluster at the very center and teal-ringed fields offshore. Turtling at home means falling behind.
 
 ### A navy worth fighting for
 Most maps are ringed by ocean, and every body of water connects. Much of the richest metal sits offshore, and only Sea Constructors can reach most of it. They also build Tidal Generators, which outproduce solar. A player who hides inland is leaving that economy to whoever controls the sea.

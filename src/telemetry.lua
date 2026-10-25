@@ -89,7 +89,30 @@ function Tel:update()
         end
       end
       self["army" .. mark] = v
+      local nv = {}
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.team and e.team >= 1 and (e.def.domain == "sea" or e.def.domain == "sub") and e.def.weapon and not e.def.building then
+          local c = e.def.cost
+          nv[e.team] = (nv[e.team] or 0) + (c and (c.metal + c.energy / 10) or 50)
+        end
+      end
+      self["navy" .. mark] = nv
     end
+  end
+  -- the biggest fleet each side ever had, and what its shipyards turned out
+  self.navyMax = self.navyMax or {}
+  local nvNow = {}
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team and e.team >= 1 and (e.def.domain == "sea" or e.def.domain == "sub") and e.def.weapon and not e.def.building then
+      local c = e.def.cost
+      nvNow[e.team] = (nvNow[e.team] or 0) + (c and (c.metal + c.energy / 10) or 50)
+    end
+  end
+  for t2, v in pairs(nvNow) do self.navyMax[t2] = math.max(self.navyMax[t2] or 0, v) end
+  -- when each side first had a working shipyard
+  self.yardAt = self.yardAt or {}
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.key == "shipyard" and e.built >= 1 and e.team and not self.yardAt[e.team] then self.yardAt[e.team] = w.time end
   end
   -- groups: single-linkage clusters (units within 350 of each other are one group)
   for t, l in pairs(byTeam) do
@@ -174,6 +197,10 @@ function Tel.fingerprint(world, team)
   f.kills, f.losses = k, l
   f.army3 = self.army180 and self.army180[team] or 0
   f.army6 = self.army360 and self.army360[team] or 0
+  f.navy3 = self.navy180 and self.navy180[team] or 0
+  f.navy6 = self.navy360 and self.navy360[team] or 0
+  f.yardAt = self.yardAt and self.yardAt[team] or nil
+  f.navyMax = self.navyMax and self.navyMax[team] or 0
   -- decisions it logged, by kind
   f.decisions = self.decisions[team] or {}
   local nd = 0

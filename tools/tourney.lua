@@ -262,12 +262,17 @@ local function run()
       for k2, v in pairs(r.f.dmgShare or {}) do if k2 == "gunship" or k2 == "bomber" or k2 == "fighter" then air = air + v end end
       a.air = (a.air or 0) + air
       a.rd = (a.rd or 0) + ((r.f.decisions or {}).raid or 0)
+      a.n6 = (a.n6 or 0) + (r.f.navy6 or 0)
+      a.nm = (a.nm or 0) + (r.f.navyMax or 0)
+      if r.f.yardAt then a.ny, a.yt = (a.ny or 0) + 1, (a.yt or 0) + r.f.yardAt end
       if r.over == 1 then a.d, a.w = a.d + 1, a.w + r.won end
     end
     print("  army at 3:00 / 6:00, time in the centre, air and navy share of damage, raids, Commander level, wins:")
     for k, a in pairs(agg) do
       print(string.format("    %-8s %5d / %5d   centre %2d%%  air %2d%%  navy %2d%%  raids %.1f  cmd L%.1f   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n),
         math.floor(100 * a.c / a.n), math.floor(100 * (a.air or 0) / a.n), math.floor(100 * a.nv / a.n), a.rd / a.n, a.cl / a.n, a.w, a.d))
+      print(string.format("             shipyard in %d of %d sides (avg at %ds), fleet value at 6:00 %d, biggest fleet %d", a.ny or 0, a.n,
+        math.floor((a.yt or 0) / math.max(1, a.ny or 0)), math.floor((a.n6 or 0) / a.n), math.floor((a.nm or 0) / a.n)))
     end
   end
   if mode ~= "rts" then table_by("comp") end

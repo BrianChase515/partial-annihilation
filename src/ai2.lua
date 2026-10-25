@@ -63,6 +63,11 @@ function AI2.new(world, team, level, profileKey)
   self.turretFrom = 140
   self.diff.turrets = math.max(2, self.diff.turrets)
   self.storageFrom = 480
+  -- air defence it keeps whether or not it has seen aircraft: about one flak per eight land
+  -- fighters, an AA Tower beside every two gun towers, and flak riding with the Commander
+  self.flakShare = 0.12
+  self.aaPerTowers = 2
+  self.reserved = {}
   -- personality shapes the opening
   local P = self.p.w
   self.diff.firstWave = math.floor(self.diff.firstWave * (1.25 - 0.3 * P.aggression + 0.15 * P.patience))
@@ -314,8 +319,82 @@ end
 -- losing the Commander loses the game. When it's in trouble: nearby units turn to cover it, and
 -- if our army is closer and strong enough, it falls back behind the army (guns still up)
 -- instead of powering down for the long run home
+-- Battleships guard the middle: the gun reaches 4000, so the best spot is our own water
+-- nearest the centre - everything our units (and a Power Core) can see there is in range, and
+-- the ship stays on our side, under our cover, instead of sailing into theirs
+function AI2:bbParkSpot(b)
+  local w = self.world
+  if self.bbPark == nil then
+    self.bbPark = false
+    local map = w.map
+    local cx, cy
+    if map.coreNode then cx, cy = map:center(map.coreNode.x, map.coreNode.y) else cx, cy = map.w * w.T / 2, map.h * w.T / 2 end
+    local best, bs
+    for _, k in ipairs({ 0.55, 0.4, 0.25, 0.7 }) do
+      local x, y = self:waterNear(self.baseX + (cx - self.baseX) * k, self.baseY + (cy - self.baseY) * k, 40)
+      if x then
+        local dc, de = U.dist(x, y, cx, cy), U.dist(x, y, self.enemyX or cx, self.enemyY or cy)
+        local db = U.dist(x, y, self.baseX, self.baseY)
+        -- in range of the centre, nearer us than them
+        if dc < 3400 and db < de then
+          local sc = dc + 0.5 * db
+          if not bs or sc < bs then best, bs = { x = x, y = y }, sc end
+        end
+      end
+    end
+    if best then
+      self.bbPark = best
+      Tel.note(w, "navy", self.team, string.format("battleships take station %d from the centre to cover it", math.floor(U.dist(best.x, best.y, cx, cy))))
+    end
+  end
+  if not self.bbPark then return nil end
+  -- spread several ships out a little
+  local k = 0
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == self.team and e.key == "battleship" then k = k + 1; if e == b then break end end
+  end
+  local a = k * 2.3
+  local x, y = self:waterNear(self.bbPark.x + math.cos(a) * 90 * (k - 1), self.bbPark.y + math.sin(a) * 90 * (k - 1), 6)
+  return x or self.bbPark.x, y or self.bbPark.y
+end
+
+-- one or two flak trucks stay with the Commander wherever it goes (gunships are what kill it)
+function AI2:escortFlak(c)
+  local w = self.world
+  if w.time < (self.nextEscort or 0) then return end
+  self.nextEscort = w.time + 2
+  local have, flak = {}, {}
+  for u in pairs(self.reserved) do
+    if u.alive and not u.disarmed then have[#have + 1] = u else self.reserved[u] = nil end
+  end
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == self.team and e.key == "flak" and e.built >= 1 and not e.disarmed and not self.reserved[e] then flak[#flak + 1] = e end
+  end
+  local want = (#have + #flak) >= 3 and 2 or ((#have + #flak) >= 1 and 1 or 0)
+  table.sort(flak, function(a, b) return U.dist2(a.x, a.y, c.x, c.y) < U.dist2(b.x, b.y, c.x, c.y) end)
+  local i = 1
+  while #have < want and flak[i] do
+    self.reserved[flak[i]] = true
+    self.wave[flak[i]] = nil
+    have[#have + 1] = flak[i]
+    i = i + 1
+  end
+  if #have > 0 and not self.escortNoted then
+    self.escortNoted = true
+    Tel.note(w, "commander", self.team, string.format("%d flak truck%s ride with the Commander", #have, #have > 1 and "s" or ""))
+  end
+  -- keep them a little behind it (toward home), close enough to cover it
+  local bx, by = U.norm(self.baseX - c.x, self.baseY - c.y)
+  for k, u in ipairs(have) do
+    local side = (k == 1) and 1 or -1
+    local tx, ty = c.x + bx * 70 - by * 50 * side, c.y + by * 70 + bx * 50 * side
+    if U.dist(u.x, u.y, tx, ty) > 140 then w:issue(u, { type = "move", x = tx, y = ty }) end
+  end
+end
+
 function AI2:guardCommander(c, before)
   local w = self.world
+  self:escortFlak(c)
   local danger = self:strengthNear(c.x, c.y, 500, true)
   local hpf = c.hp / c.maxhp
   local tm = w.teams[self.team]

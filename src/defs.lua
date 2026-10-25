@@ -24,8 +24,8 @@ D.units = {
     buildPower = 12, buildRange = 130, regen = 4,
     builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "powercore", "refinery" },
     weapon = { damage = 45, range = 210, reload = 0.6, speed = 560, targets = { land = true, sea = true } },
-    income = { metal = 1.0, energy = 15 },
-    storage = { metal = 600, energy = 2500 },
+    income = { metal = 1.5, energy = 22 },
+    storage = { metal = 900, energy = 3750 },
     desc = "Your leader. Builds anything. If it dies, you lose.",
   },
   builder = {
@@ -227,16 +227,16 @@ D.units = {
   mex = {
     name = "Metal Extractor", short = "M", domain = "building", building = true,
     w = 1, h = 1, place = "deposit", hp = 400,
-    income = { metal = 1.6 },
+    income = { metal = 2.4 },
     cost = { metal = 50, energy = 300, work = 45 },
-    desc = "Build on a metal deposit. +1.6 metal per second (+2.6 on a rich deposit: gold ring in the middle, teal ring offshore).",
+    desc = "Build on a metal deposit. +2.4 metal per second (+3.9 on a rich deposit: gold ring in the middle, teal ring offshore).",
   },
   solar = {
     name = "Solar Collector", short = "E", domain = "building", building = true,
     w = 2, h = 2, place = "land", hp = 500,
-    income = { energy = 14 },
+    income = { energy = 21 },
     cost = { metal = 70, energy = 0, work = 55 },
-    desc = "+14 energy per second.",
+    desc = "+21 energy per second.",
   },
   seabattery = {
     name = "Sea Battery", short = "SB", domain = "building", building = true,
@@ -270,10 +270,10 @@ D.units = {
   },
   powercore = {
     name = "Power Core", short = "PC", domain = "building", building = true, coreOnly = true,
-    w = 2, h = 2, place = "core", hp = 2200,
-    income = { metal = 4, energy = 60 },
-    cost = { metal = 150, energy = 600, work = 130 },
-    desc = "Only on the Power Core node in the middle of the map: +4 metal and +60 energy a second. Everyone will want it.",
+    w = 2, h = 2, place = "core", hp = 3200,
+    income = { metal = 10, energy = 150 },
+    cost = { metal = 200, energy = 900, work = 160 },
+    desc = "Only on the Power Core node in the middle of the map: +10 metal and +150 energy a second - about four extractors' worth. Whoever holds the centre runs two fronts.",
   },
   refinery = {
     name = "Refinery", short = "RF", domain = "building", building = true, convoyOnly = true,
@@ -285,16 +285,16 @@ D.units = {
   tidal = {
     name = "Tidal Generator", short = "TG", domain = "building", building = true,
     w = 2, h = 2, place = "water", hp = 450,
-    income = { energy = 24 },
+    income = { energy = 36 },
     cost = { metal = 80, energy = 0, work = 60 },
-    desc = "+24 energy per second. Must be built on water (Sea Constructor).",
+    desc = "+36 energy per second. Must be built on water (Sea Constructor).",
   },
   storage = {
     name = "Storage", short = "S", domain = "building", building = true,
     w = 2, h = 2, place = "land", hp = 800,
-    storage = { metal = 1000, energy = 4000 },
+    storage = { metal = 1500, energy = 6000 },
     cost = { metal = 90, energy = 400, work = 60 },
-    desc = "+1000 metal and +4000 energy storage.",
+    desc = "+1500 metal and +6000 energy storage.",
   },
   landfac = {
     name = "Vehicle Plant", short = "VP", domain = "building", building = true,
