@@ -25,7 +25,7 @@ end
 local function newGame(mode, seed, l1, l2, rng)
   if mode == "rts" then
     return startFn({ size = 112, water = 0.3, seed = seed, autotest = true, level = l2, level1 = l1,
-      profile = "Random", profile1 = "Random" })
+      profile = "Random", profile1 = "Random", aiV2Teams = { [1] = S.v2both, [2] = S.v2 or S.v2both } })
   end
   local SQ = require("src.squads")
   local nSq = rng:random(3, 5)

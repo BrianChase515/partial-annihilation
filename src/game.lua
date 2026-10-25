@@ -74,7 +74,8 @@ function G.new(opts)
         p.profileName = ai.profileName
       end
     elseif not p.human then
-      local ai = AI.new(world, i, p.level, p.profile or "Balanced")
+      local v2 = p.aiV2 or opts.aiV2 or (opts.aiV2Teams and opts.aiV2Teams[i])
+      local ai = (v2 and require("src.ai2") or AI).new(world, i, p.level, p.profile or "Balanced")
       self.ais[#self.ais + 1] = ai
       p.profileName = ai.profileName
     end
