@@ -53,6 +53,27 @@ end
 local function run()
   frame()
   local mode = args[1] or "coh"
+  -- experiments (never shipped by themselves):
+  --   PA_RULES=towers,structguns,cmdhp   towers x2.5 vs Commanders; every structure a small gun;
+  --                                      Commander 15% less health
+  local rules = os.getenv("PA_RULES") or ""
+  do
+    local D = require("src.defs")
+    if rules:find("towers") then D.towerVsCmd = 2.5 end
+    if rules:find("unarmed") then
+      -- (back to the old rules: structures without guns, towers normal against Commanders)
+      for _, k in ipairs({ "mex", "solar", "storage", "landfac", "airfac", "shipyard" }) do D.units[k].weapon = nil end
+      D.TOWER_VS_COMMANDER = nil
+    end
+    if rules:find("structguns") then
+      local light = { damage = 7, range = 170, reload = 0.7, speed = 600, minRange = 0, splash = 0, targets = { land = true, sea = true } }
+      local plant = { damage = 16, range = 230, reload = 0.6, speed = 600, minRange = 0, splash = 0, targets = { land = true, sea = true } }
+      for _, k in ipairs({ "mex", "solar", "storage" }) do D.units[k].weapon = light end
+      for _, k in ipairs({ "landfac", "airfac" }) do D.units[k].weapon = plant end
+    end
+    if rules:find("cmdhp") then D.units.commander.hp = math.floor(D.units.commander.hp * 0.85) end
+    if rules ~= "" then log("rules:", rules) end
+  end
   -- (experiment: PA_CMDHP=1.5 scales the Annihilation Commander's health)
   if os.getenv("PA_CMDHP") then
     local D = require("src.defs")
@@ -222,7 +243,7 @@ local function run()
   do
     local agg = {}
     for _, r in ipairs(rows) do
-      local k = (r.profile or "?"):find("v2") and "v2" or "classic"
+      local k = (r.profile or "?"):find("Rush") and "Rush" or ((r.profile or "?"):find("v2") and "v2" or "classic")
       agg[k] = agg[k] or { a3 = 0, a6 = 0, n = 0, w = 0, d = 0 }
       local a = agg[k]
       a.a3, a.a6, a.n = a.a3 + (r.f.army3 or 0), a.a6 + (r.f.army6 or 0), a.n + 1
@@ -230,13 +251,16 @@ local function run()
       local navy = 0
       for k2, v in pairs(r.f.dmgShare or {}) do if k2 == "boat" or k2 == "destroyer" or k2 == "sub" or k2 == "battleship" then navy = navy + v end end
       a.nv = (a.nv or 0) + navy
+      local air = 0
+      for k2, v in pairs(r.f.dmgShare or {}) do if k2 == "gunship" or k2 == "bomber" or k2 == "fighter" then air = air + v end end
+      a.air = (a.air or 0) + air
       a.rd = (a.rd or 0) + ((r.f.decisions or {}).raid or 0)
       if r.over == 1 then a.d, a.w = a.d + 1, a.w + r.won end
     end
-    print("  army at 3:00 / 6:00, time in the centre, navy's share of damage, raids, Commander level, wins:")
+    print("  army at 3:00 / 6:00, time in the centre, air and navy share of damage, raids, Commander level, wins:")
     for k, a in pairs(agg) do
-      print(string.format("    %-8s %5d / %5d   centre %2d%%  navy %2d%%  raids %.1f  cmd L%.1f   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n),
-        math.floor(100 * a.c / a.n), math.floor(100 * a.nv / a.n), a.rd / a.n, a.cl / a.n, a.w, a.d))
+      print(string.format("    %-8s %5d / %5d   centre %2d%%  air %2d%%  navy %2d%%  raids %.1f  cmd L%.1f   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n),
+        math.floor(100 * a.c / a.n), math.floor(100 * (a.air or 0) / a.n), math.floor(100 * a.nv / a.n), a.rd / a.n, a.cl / a.n, a.w, a.d))
     end
   end
   if mode ~= "rts" then table_by("comp") end

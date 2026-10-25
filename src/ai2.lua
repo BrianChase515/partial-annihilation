@@ -23,6 +23,9 @@ local ARCHETYPES = {
   { name = "Hunter", weights = { aggression = 1.3, patience = 1.0, raid = 1.1, hold = 0.7, weakness = 1.1, hunt = 1.9, guns = 1.0, air = 1.2, risk = 1.1 } },
   { name = "Opportunist", weights = { aggression = 1.1, patience = 1.0, raid = 1.3, hold = 0.9, weakness = 1.9, hunt = 1.1, guns = 1.0, air = 1.1, risk = 0.9 } },
   { name = "Admiral", weights = { aggression = 1.1, patience = 1.1, raid = 1.1, hold = 0.9, weakness = 1.1, hunt = 1.0, guns = 0.9, air = 0.9, risk = 1.0, navy = 2.0 } },
+  -- (Rush: the human's own favourite - vehicle plants, then the Commander pushes in with a few units.
+  -- Never drawn at random; forced for balance experiments with PA_ARCH / PA_ARCH1 / PA_ARCH2)
+  { name = "Rush", weights = { aggression = 2.2, patience = 0.4, raid = 0.6, hold = 0.2, weakness = 1.0, hunt = 1.6, guns = 0.6, air = 0.4, risk = 1.8 } },
   { name = "Skyborne", weights = { aggression = 1.1, patience = 1.1, raid = 1.2, hold = 0.8, weakness = 1.2, hunt = 1.2, guns = 0.7, air = 2.0, risk = 1.0 } },
 }
 AI2.ARCHETYPES = ARCHETYPES
@@ -36,7 +39,7 @@ function AI2.new(world, team, level, profileKey)
   self.rng = love.math.newRandomGenerator(os.time() + team * 7919 + math.floor(love.math.random() * 1e6))
   -- read the map first (terrain isn't hidden, only units): it decides which personalities fit
   self:readMap()
-  self.p = self:pickPersonality(os.getenv("PA_ARCH"))
+  self.p = self:pickPersonality(os.getenv("PA_ARCH" .. team) or os.getenv("PA_ARCH"))
   self.level = self.diff.level or level or 5
   self.omniscient = self.level >= 8
   self.baseWave, self.baseGrow, self.baseRaid = self.diff.waveBase, self.diff.waveGrow, self.diff.raidEvery
@@ -135,7 +138,7 @@ function AI2:pickPersonality(forced)
     Blitz = 0.8 + 0.6 * m.rush + 0.4 * m.center, Siege = 0.7 + 0.6 * m.center,
     Raider = 0.3 + 1.4 * m.raid, Fortress = 0.7 + 0.3 * (1 - m.rush),
     Hunter = 0.8 + 0.3 * m.center, Opportunist = 0.6 + 0.5 * m.raid + 0.3 * m.center,
-    Admiral = m.naval > 0.55 and (0.2 + 1.6 * m.naval) or 0.02, Skyborne = 0.7,
+    Admiral = m.naval > 0.55 and (0.2 + 1.6 * m.naval) or 0.02, Skyborne = 0.7, Rush = 0,
   }
   local opts = {}
   for _, a in ipairs(ARCHETYPES) do opts[#opts + 1] = { key = a.name, label = a.name, score = fit[a.name] or 0.5, a = a } end
@@ -148,6 +151,7 @@ function AI2:pickPersonality(forced)
     for _, o in ipairs(opts) do r = r - o.score; if r <= 0 and not pick then pick = o end end
     pick = pick or opts[1]
   end
+  if pick.score <= 0 and not forced then pick = opts[1] end
   local p = { name = pick.a.name, w = {} }
   for k, v in pairs(pick.a.weights) do p.w[k] = v * (0.8 + self.rng:random() * 0.4) end
   p.w.navy = p.w.navy or 1
@@ -157,6 +161,15 @@ end
 -- turn the map read + personality into a plan for the game
 function AI2:applyMapPlan()
   local m, P, prof = self.mapRead, self.p.w, self.profile
+  if self.p.name == "Rush" then
+    -- plants and tanks, first push early, the Commander leading it in
+    self.rush = true
+    self.diff.firstWave, self.diff.waveBase, self.diff.waveGrow = 110, 3, 1
+    self.diff.turrets, self.diff.raidEvery = 0, nil
+    self.specFrom, self.turretFrom = 99999, 99999
+    self.stageK = 0.55
+    return
+  end
   -- where the army waits between waves: out toward the centre when the centre is the game
   self.stageK = math.min(0.75, (0.2 + 0.55 * m.center) * (0.7 + 0.3 * P.aggression) * (1.15 - 0.35 * (P.hold - 1)))
   -- a navy when the water allows it (Admirals above all)
@@ -257,7 +270,7 @@ function AI2:thinkCommander()
   end
   if not c or not c.alive or c.key ~= "commander" or self.cmdMode ~= "build" then return end
   local P = self.p.w
-  if P.hold > 1.4 or w.time < 150 or c.hp < c.maxhp * 0.7 then return end
+  if P.hold > 1.4 or w.time < (self.rush and 100 or 150) or c.hp < c.maxhp * (self.rush and 0.45 or 0.7) then return end
   local builders, army = 0, 0
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == self.team then
@@ -265,25 +278,25 @@ function AI2:thinkCommander()
       elseif e.def.weapon and not e.def.building and e.key ~= "commander" and U.dist2(e.x, e.y, self.stageX, self.stageY) < 500 * 500 then army = army + 1 end
     end
   end
-  if builders < 3 then return end
+  if builders < (self.rush and 2 or 3) then return end
   -- ride with an attack wave (from behind), or wait with the army at the staging point
   local wl, wx, wy = 0, 0, 0
   for u in pairs(self.wave) do
     if u.alive and u.def.domain == "land" and u.key ~= "scout" then wl, wx, wy = wl + 1, wx + u.x, wy + u.y end
   end
   local tx, ty, why
-  if wl >= 5 then
+  if wl >= (self.rush and 2 or 5) then
     wx, wy = wx / wl, wy / wl
     local bx, by = U.norm(self.baseX - wx, self.baseY - wy)
     tx, ty, why = wx + bx * 150, wy + by * 150, "with the wave"
-  elseif army >= 3 then
+  elseif army >= (self.rush and 2 or 3) then
     local bx, by = U.norm(self.baseX - self.stageX, self.baseY - self.stageY)
     tx, ty, why = self.stageX + bx * 120, self.stageY + by * 120, "at the staging point"
   else
     return
   end
   -- danger there (more than our side can handle): stay home
-  if self:strengthNear(tx, ty, 600, true) > self:strengthNear(tx, ty, 600, false) * 1.3 + 400 then return end
+  if self:strengthNear(tx, ty, 600, true) > self:strengthNear(tx, ty, 600, false) * (self.rush and 2.2 or 1.3) + (self.rush and 900 or 400) then return end
   if self.cmdMode ~= "front" and not self.frontNoted then
     self.frontNoted = true
     Tel.note(w, "commander", self.team, "goes forward " .. why .. " to fight and level up")

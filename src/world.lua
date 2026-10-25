@@ -1149,6 +1149,11 @@ function W:damage(o, amount, attacker)
       self:gainXP(attacker, xp)
     end
   end
+  -- armed bases: towers (and every armed structure) hit a Commander hard - in Annihilation
+  local tvc = D.towerVsCmd or D.TOWER_VS_COMMANDER
+  if tvc and o.key == "commander" and attacker and attacker.def and attacker.def.building and not self.heroes and not self.craft and not self.squads then
+    amount = amount * tvc
+  end
   if self.tel then self.tel:damage(o, amount, attacker) end
   o.hp = o.hp - amount
   o.hitTimer = 0.15
