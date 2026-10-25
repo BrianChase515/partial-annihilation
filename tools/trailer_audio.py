@@ -64,6 +64,11 @@ def main():
         reps = int(np.ceil(n / len(s))) + 1
         loop = np.tile(s, (reps, 1))[:n]
         mix += loop * g[:, None] * 0.55
+    # War is Hell: the distant battle bed the game plays under it
+    bed = os.path.join(ROOT, "assets", "sfx", "wih_bed.ogg")
+    if suite in ("_m", "_n", "_o") and os.path.exists(bed):
+        b = load(bed)
+        mix += np.tile(b, (int(np.ceil(n / len(b))) + 1, 1))[:n] * 0.45
     # the battle
     last = {}
     for kind, name, at, v, pan, pitch, gap in events:

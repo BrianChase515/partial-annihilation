@@ -652,6 +652,9 @@ local function wihScript()
   local w = game.world
   SQ.MERCY_AT = 0 -- (the endgame is staged below)
   game.ais[#game.ais + 1] = SQ.newAI(w, 1, 8)
+  for _, ai in ipairs(game.ais) do ai.ambush = false end -- (the trailer wants them to meet)
+  game.edgePan = false
+  love.mouse.setPosition(love.graphics.getWidth() / 2, love.graphics.getHeight() - 90) -- (no hover tooltips)
   local mine = SQ.squadsOf(w, 1)
   local function mid(list)
     local x, y, n = 0, 0, 0
@@ -664,8 +667,8 @@ local function wihScript()
   simFast(4)
   game.cam.zoom = 0.75
   pickAll()
-  scene("WAR IS HELL", 3, function() game.notices = {}; local x, y = mid(mine); center(x, y) end, { capY = 300 })
-  scene("No base. No reinforcements. Every man has a name.", 4.5, function() game.notices = {}; local x, y = mid(mine); center(x, y) end)
+  scene("WAR IS HELL", 2, function() game.notices = {}; local x, y = mid(mine); center(x, y) end, { capY = 300 })
+  scene("No base. No reinforcements. Every man has a name.", 2.6, function() game.notices = {}; local x, y = mid(mine); center(x, y) end)
   -- 2. contact
   local fx, fy
   for _ = 1, 90 do
@@ -675,9 +678,22 @@ local function wihScript()
   end
   game.cam.zoom = 0.95
   game:select({})
-  scene("Deep fog. Find them before they find you.", 4.5, function(i) game.notices = {}; if i % 8 == 0 then focusFight(3) end end)
-  scene("Take the high ground - or dig into a bunker.", 4.5, function(i) if i % 8 == 0 then focusFight(3) end end)
-  scene("When they die, they die.", 4.5, function(i) if i % 8 == 0 then focusFight(2) end end)
+  scene("Deep fog. Find them before they find you.", 2.4, function(i) game.notices = {}; if i % 8 == 0 then focusFight(3) end end)
+  scene("High ground. Bunkers.", 2, function(i) if i % 8 == 0 then focusFight(3) end end)
+  scene("When they die, they die.", 2.6, function(i)
+    if i % 8 == 0 then focusFight(2) end
+    -- (staged: a couple of them fall in shot)
+    if i == 6 or i == 22 then
+      local best, bd
+      for _, o in ipairs(w.entities) do
+        if o.alive and o.squad and not o.def.air then
+          local d = U.dist(o.x, o.y, game.cam.x, game.cam.y)
+          if d < 300 and (not bd or d < bd) then best, bd = o, d end
+        end
+      end
+      if best then w:damage(best, best.hp + 1, nil) end
+    end
+  end)
   -- a barrage from our battery onto whatever it can reach
   local bat
   for _, sq in ipairs(mine) do if sq.type == "battery" and sq.leader and sq.leader.alive then bat = sq end end
@@ -698,7 +714,7 @@ local function wihScript()
     SQ.cast(w, bat, 1, foe.x, foe.y)
     local fx2, fy2 = foe.x, foe.y
     game.cam.zoom = 0.9
-    scene("Every squad has a veteran leader and two skills: Barrage!", 5, function() center(fx2, fy2) end)
+    scene("Barrage!", 2.6, function() center(fx2, fy2) end)
   end
   -- 3. the hunt: the enemy is bled down to a few men; a wounded one runs, and leaves a trail
   local function theirs()
@@ -735,9 +751,9 @@ local function wihScript()
     game.notices = {}
     game.cam.zoom = 0.9
     local sx, sy = runner.x, runner.y
-    scene("The enemy breaks. Their last men run for cover.", 4.5, function() center(sx, sy) end)
-    simFast(8)
-    -- the hunters: recon and armor, along the blood
+    scene("They break and run.", 2.2, function() center(sx, sy) end, { speed = 1.5 })
+    simFast(6)
+    -- the hunters: recon and armor, along the blood, all the way back to where they came in
     local hunters = {}
     for _, sq in ipairs(mine) do
       if sq.type == "recon" or sq.type == "armor" then for _, u in ipairs(sq.members) do if u.alive then hunters[#hunters + 1] = u end end end
@@ -745,49 +761,65 @@ local function wihScript()
     if #hunters == 0 then hunters = ours() end
     game:select(hunters)
     game.notices = {}
-    game:commandMove(sx, sy, "amove", false)
+    game:commandMove(runner.hideX or sx, runner.hideY or sy, "amove", false)
     local lead = hunters[1]
     local function follow()
       local l = lead.alive and lead or hunters[#hunters]
       local tx, ty = runner.hideX or runner.x, runner.hideY or runner.y
-      center(l.x + (tx - l.x) * 0.3, l.y + (ty - l.y) * 0.3)
+      center(l.x + (tx - l.x) * 0.25, l.y + (ty - l.y) * 0.25)
     end
-    scene("The wounded bleed. Pick up the trail.", 4, follow, { speed = 1.6 })
-    game:commandMove(runner.hideX or runner.x, runner.hideY or runner.y, "amove", false)
-    for _ = 1, 14 do
+    scene("Follow the blood.", 3, follow, { speed = 2 })
+    -- (the long walk, off camera)
+    for _ = 1, 240 * 30 do
       if game.mercy then break end
-      scene("Follow the blood into the fog.", 1, follow, { speed = 1.8 })
+      local l = lead.alive and lead or hunters[#hunters]
+      if l and runner.hideX and U.dist(l.x, l.y, runner.hideX, runner.hideY) < 900 then break end
+      w:update(1 / 30)
     end
-    for _ = 1, 30 do
+    scene("Back to where they came in.", 1.6, follow, { speed = 1.5 })
+    -- (still looking: keep after them, off camera, until they're found)
+    for _ = 1, 300 * 30 do
       if game.mercy then break end
-      simFast(1)
+      if not runner.alive then break end
+      local l = lead.alive and lead or hunters[#hunters]
+      if l and #l.orders == 0 then for _, u in ipairs(hunters) do if u.alive then w:issue(u, { type = "amove", x = runner.x, y = runner.y }) end end end
+      w:update(1 / 30)
     end
-    game.notices = {}
     log("mercy", game.mercy and "yes" or "no", "runner alive", runner.alive)
+    game.notices = {}
     if game.mercy then
-      scene("Found them. They're begging for mercy.", 7, function() end, { capY = 60 })
+      scene("Found them.", 3.6, function() end, { capY = 60 })
       game:decideMercy("kill")
       game.notices = {}
-      local target = runner.alive and runner or game.mercy.units[1]
+      local target = runner.alive and runner or nil
+      for _, u in ipairs(game.mercy.units) do if not target and u.alive then target = u end end
       if target and target.alive then
         local tx0, ty0 = target.x, target.y
-        game.cam.zoom = 1.15
-        game:select({})
+        game.cam.zoom = 1.2
         for _, u in ipairs(hunters) do if u.alive then w:issue(u, { type = "move", x = u.x, y = u.y }) end end
-        scene("Have mercy... or kill 'em all.", 5, function() center(tx0, ty0) end)
+        game:select({})
+        local function plead(i)
+          center(tx0, ty0)
+          if i == 3 or i == 32 then
+            for _, u in ipairs(game.mercy.units) do
+              if u.alive then u.begLine = SQ.BEGS[love.math.random(#SQ.BEGS)]; u.begShown = w.time; w.onSquadBeg(u); break end
+            end
+          end
+        end
+        scene("Have mercy...", 2.6, plead)
         game:select(hunters)
         for k, u in ipairs(hunters) do
           local v = game.mercy.units[(k % #game.mercy.units) + 1]
           if u.alive and v and v.alive then w:issue(u, { type = "attack", target = v }) end
         end
-        scene("War is Hell.", 8, function() center(tx0, ty0) end)
+        scene("...or kill 'em all.", 3.5, function(i) if i == 3 then plead(32) else center(tx0, ty0) end end)
       end
     end
     for _, ai in ipairs(hold) do game.ais[#game.ais + 1] = ai end
   end
   game.cam.zoom = 0.85
   pickAll()
-  scene("Commander of Heroes: War is Hell - Partial Annihilation", 4, function() local a, b = mid(mine); center(a, b) end)
+  scene("Commander of Heroes: War is Hell - Partial Annihilation", 2.6, function() local a, b = mid(mine); center(a, b) end)
   saveAudio()
 end
 

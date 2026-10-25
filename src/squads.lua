@@ -793,81 +793,100 @@ function S.updateWih(world, dt)
     st.trail = keep
     trail = keep
   end
-  -- the break: a computer side down to its last men, and outnumbered, stops fighting. They run
-  -- off and hide (bleeding as they go); when the player's men find them, they beg
+  -- the break. Men who have run from the fight have, for all purposes, laid down their arms: a
+  -- squad of the computer's that pulls back, or a side down to its last men and outnumbered.
+  -- They stop shooting and make for cover (bleeding as they go); nothing chases them down by
+  -- itself. When the player's men find a group of them, that group begs for mercy
   local mine = world.ally[world.playerTeam]
   local us = living(world, mine)
-  st.broken = st.broken or {}
-  st.surrendered = st.surrendered or {}
-  local W, H = world.map.w * world.T, world.map.h * world.T
   for tt = 1, world.np do
     local ally = world.ally[tt]
-    if ally ~= mine and not st.broken[ally] then
+    if ally ~= mine then
       local them = living(world, ally)
-      if #them > 0 and #them <= S.MERCY_AT and #us >= #them + 2 then
-        st.broken[ally] = t
+      local fighting = 0
+      for _, u in ipairs(them) do if not u.broken then fighting = fighting + 1 end end
+      if fighting > 0 and #them <= S.MERCY_AT and #us >= #them + 2 then
         local cx, cy = 0, 0
         for _, f in ipairs(us) do cx, cy = cx + f.x, cy + f.y end
-        cx, cy = cx / #us, cy / #us
-        for _, u in ipairs(them) do
-          u.broken, u.holdFire, u.flagSeed = true, true, love.math.random() * 6
-          -- away from us, somewhere off in the fog
-          local ax, ay = U.norm(u.x - cx, u.y - cy)
-          if ax == 0 and ay == 0 then ax = 1 end
-          local d = 700 + love.math.random() * 400
-          u.hideX = math.max(150, math.min(W - 150, u.x + ax * d + love.math.random(-200, 200)))
-          u.hideY = math.max(150, math.min(H - 150, u.y + ay * d + love.math.random(-200, 200)))
-          world:issue(u, { type = "retreat", x = u.hideX, y = u.hideY })
-        end
-        for _, sq in ipairs(st.list) do if world.ally[sq.team] == ally then sq.surrendered = true end end
-        if world.onSquadBroken then world.onSquadBroken(ally, them) end
+        S.breakUnits(world, them, cx / #us, cy / #us)
+        if world.onSquadBroken then world.onSquadBroken(ally, them, true) end
       end
     end
   end
-  for ally, at in pairs(st.broken) do
-    -- (a few seconds' head start: they get away before anyone can find them)
-    if not st.surrendered[ally] and t - at > 8 then
-      -- found? (one of our men has eyes on one of them)
-      local them = living(world, ally)
-      local seen
-      for _, u in ipairs(them) do
-        for _, f in ipairs(us) do
-          if U.dist2(f.x, f.y, u.x, u.y) <= world:sightOf(f) ^ 2 then seen = true; break end
-        end
-        if seen then break end
-      end
-      if seen then
-        st.surrendered[ally] = true
-        for _, u in ipairs(them) do
-          u.surrendered = true
-          u.begT = t + love.math.random() * 1.5
-          world:issue(u, { type = "move", x = u.x, y = u.y })
-        end
-        if world.onSquadSurrender then world.onSquadSurrender(ally, them) end
-      end
-    end
-  end
+  -- found? any broken man one of ours can see (after a few seconds' head start) gives up, and
+  -- so does everyone broken who's with him
+  local found
   for _, sq in ipairs(st.list) do
-    if sq.surrendered then
-      for _, u in ipairs(sq.members) do
-        if u.alive then
-          u.holdFire = true
-          if u.surrendered then
-            -- found: hands up, in plain sight, pleading
-            local o = u.orders[1]
-            if o and not (o.type == "move" and U.dist(o.x, o.y, u.x, u.y) < 10) then world:issue(u, { type = "move", x = u.x, y = u.y }) end
-            world.visionSources[#world.visionSources + 1] = { x = u.x, y = u.y, r = 110, untilT = t + 0.3, ally = mine }
-            world.fogDirty = true
-            if t >= (u.begT or 0) then
-              u.begT = t + 3.5 + love.math.random() * 2.5
-              u.begLine = S.BEGS[love.math.random(#S.BEGS)]
-              u.begShown = t
-              if world.onSquadBeg then world.onSquadBeg(u) end
-            end
-          elseif #u.orders == 0 and u.hideX and U.dist(u.x, u.y, u.hideX, u.hideY) > 60 then
-            world:issue(u, { type = "retreat", x = u.hideX, y = u.hideY })
+    for _, u in ipairs(sq.members) do
+      -- (only once they've made it back to where they gather - not while they're running)
+      if u.alive and u.broken and not u.surrendered and u.hideX and U.dist(u.x, u.y, u.hideX, u.hideY) < 180 then
+        for _, f in ipairs(us) do
+          if U.dist2(f.x, f.y, u.x, u.y) <= world:sightOf(f) ^ 2 then found = u; break end
+        end
+      end
+      if found then break end
+    end
+    if found then break end
+  end
+  if found then
+    local group = {}
+    local ally = world.ally[found.team]
+    for _, sq in ipairs(st.list) do
+      if world.ally[sq.team] == ally then
+        for _, u in ipairs(sq.members) do
+          if u.alive and u.broken and not u.surrendered and U.dist(u.x, u.y, found.x, found.y) < 450 then
+            u.surrendered = true
+            u.begT = t + love.math.random() * 1.5
+            world:issue(u, { type = "move", x = u.x, y = u.y })
+            group[#group + 1] = u
           end
         end
+      end
+    end
+    if world.onSquadSurrender then world.onSquadSurrender(ally, group) end
+  end
+  for _, sq in ipairs(st.list) do
+    for _, u in ipairs(sq.members) do
+      if u.alive and u.broken then
+        u.holdFire = true
+        if u.surrendered then
+          -- found: hands up, in plain sight, pleading
+          local o = u.orders[1]
+          if o and not (o.type == "move" and U.dist(o.x, o.y, u.x, u.y) < 10) then world:issue(u, { type = "move", x = u.x, y = u.y }) end
+          world.visionSources[#world.visionSources + 1] = { x = u.x, y = u.y, r = 110, untilT = t + 0.3, ally = mine }
+          world.fogDirty = true
+          if t >= (u.begT or 0) then
+            u.begT = t + 3.5 + love.math.random() * 2.5
+            u.begLine = S.BEGS[love.math.random(#S.BEGS)]
+            u.begShown = t
+            if world.onSquadBeg then world.onSquadBeg(u) end
+          end
+        elseif #u.orders == 0 and u.hideX and U.dist(u.x, u.y, u.hideX, u.hideY) > 60 then
+          world:issue(u, { type = "retreat", x = u.hideX, y = u.hideY })
+        end
+      end
+    end
+  end
+end
+
+-- these men are done fighting: they run off into the fog, away from (fx, fy)
+function S.breakUnits(world, units, fx, fy)
+  local W, H = world.map.w * world.T, world.map.h * world.T
+  local t = world.time
+  for _, u in ipairs(units) do
+    if u.alive and not u.broken then
+      u.broken, u.brokenT, u.holdFire, u.flagSeed = true, t, true, love.math.random() * 6
+      -- back to where they came in, where the broken gather
+      local tm = world.teams[u.team]
+      local sx, sy = tm.startX or u.x, tm.startY or u.y
+      local a, r = love.math.random() * math.pi * 2, 40 + love.math.random() * 110
+      u.hideX = math.max(150, math.min(W - 150, sx + math.cos(a) * r))
+      u.hideY = math.max(150, math.min(H - 150, sy + math.sin(a) * r))
+      world:issue(u, { type = "retreat", x = u.hideX, y = u.hideY })
+      if u.squad then
+        local all = true
+        for _, m in ipairs(u.squad.members) do if m.alive and not m.broken then all = false end end
+        if all then u.squad.broken = true end
       end
     end
   end
@@ -888,7 +907,7 @@ function S.drawWih(world, cam)
   end
   local R = require("src.render")
   for _, sq in ipairs(st.list) do
-    if sq.surrendered then
+    do
       for _, u in ipairs(sq.members) do
         if u.alive and u.surrendered then
           local top = u.y - u.def.radius - 6
@@ -1076,6 +1095,13 @@ function S.newAI(world, team, level)
   -- attention: a person can only look after so many squads at once. Easy bots attend to one
   -- squad per decision, the best to all of them
   self.attend = self.level <= 3 and 1 or (self.level <= 6 and 2 or (self.level <= 8 and 3 or 99))
+  if world.wih then
+    -- War is Hell: one army, closely watched, that fights it out
+    self.attend = self.attend + 1
+    self.retreatAt = 0.12 + 0.012 * self.level
+    -- the better ones lie in wait: some squads dig in on good ground and let you come to them
+    self.ambush = self.level >= 5
+  end
   self.cursor = 0
   self.profileName = "Heroes"
   return self
@@ -1153,6 +1179,22 @@ function AI:huntGoal(sq, foe, fighting)
     end
     if best then return { x = best.x, y = best.y, hold = true } end
   end
+  -- ambush: every other squad waits in a bunker (the nearest free one) until there's a fight
+  if self.ambush and not fighting and sq.idx % 2 == 0 and not (self.lastSeen and w.time - self.lastSeen.t < 20 and U.dist(L.x, L.y, self.lastSeen.x, self.lastSeen.y) < 900) then
+    self.dug = self.dug or {}
+    local b = self.dug[sq]
+    if not b then
+      local bd
+      for _, bk in ipairs(w.bunkers or {}) do
+        local taken
+        for _, other in pairs(self.dug) do if other == bk then taken = true end end
+        local d = U.dist(L.x, L.y, bk.x, bk.y)
+        if not taken and d < 1600 and (not bd or d < bd) then b, bd = bk, d end
+      end
+      self.dug[sq] = b or false
+    end
+    if b then return { x = b.x, y = b.y, hold = true } end
+  end
   if self.lastSeen and w.time - self.lastSeen.t < 40 then return { x = self.lastSeen.x, y = self.lastSeen.y } end
   -- sweep: waypoints spread over the enemy half, a new one when we get there
   if not self.sweep or U.dist(L.x, L.y, self.sweep.x, self.sweep.y) < 250 or w.time > self.sweep.untilT then
@@ -1186,7 +1228,7 @@ function AI:update(dt)
   for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
   for _, sq in ipairs(mine) do
     local L = sq.leader
-    if L and L.alive and look[sq] and not sq.surrendered then
+    if L and L.alive and look[sq] and not sq.broken then
       local frac = squadHp(sq)
       -- nearest enemy to the leader (units first, then their HQ)
       local foe, fd
@@ -1203,11 +1245,30 @@ function AI:update(dt)
         end
       end
       if w.wih and foe then self.lastSeen = { x = foe.x, y = foe.y, t = w.time } end
+      -- War is Hell: shot at by something it can't see (artillery in the fog)? It knows roughly
+      -- where from, and goes for it
+      if w.wih and not foe then
+        for _, u in ipairs(sq.members) do
+          local hf = u.alive and u.hitFrom
+          if hf and w.time - hf.t < 6 then
+            foe, fd = { x = hf.x + self.rng:random(-80, 80), y = hf.y + self.rng:random(-80, 80), def = {} }, U.dist(L.x, L.y, hf.x, hf.y)
+            self.lastSeen = { x = foe.x, y = foe.y, t = w.time }
+            break
+          end
+        end
+      end
       local fighting = foe and fd < 520
       -- pull back to heal, come back when healthy
       if sq.healing then
         if frac > 0.85 then sq.healing = nil end
-      elseif frac < self.retreatAt and ((hq and hq.alive) or w.wih) then
+      elseif w.wih and frac < self.retreatAt then
+        -- War is Hell: there's nowhere to heal. A squad that pulls back is done fighting
+        if self.team ~= w.playerTeam and w.ally[self.team] ~= w.ally[w.playerTeam] then
+          S.breakUnits(w, sq.members, foe and foe.x or L.x, foe and foe.y or L.y)
+          if w.onSquadBroken then w.onSquadBroken(w.ally[self.team], sq.members, false) end
+          goto nextsq
+        end
+      elseif frac < self.retreatAt and (hq and hq.alive) then
         sq.healing = true
         -- (War is Hell: no HQ - fall back toward where we came in, out of the fight)
         local rx, ry = hq and hq.x or tm.startX, hq and hq.y or tm.startY
@@ -1249,6 +1310,7 @@ function AI:update(dt)
       end
       self:useSkills(sq, foe, fd, fighting, frac, goal)
     end
+    ::nextsq::
   end
 end
 

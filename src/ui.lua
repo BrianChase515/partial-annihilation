@@ -2053,6 +2053,7 @@ function UI.drawOver(game)
     if not win then sub = "Every one of your men is gone."
     elseif world.mercyChoice == "spare" then sub = string.format("%d prisoner%s taken. The war is over for them.", world.captives or 0, (world.captives or 0) == 1 and "" or "s")
     elseif world.mercyChoice == "kill" then sub = "No quarter given. Not one of them walked away."
+    elseif world.mercyChoice == "mixed" then sub = string.format("%d prisoner%s taken. Some of them were shown no mercy.", world.captives or 0, (world.captives or 0) == 1 and "" or "s")
     else sub = "The last of them is dead." end
   end
   lg.print(sub, w / 2 - font(14):getWidth(sub) / 2, py + 68)
@@ -2260,7 +2261,7 @@ function UI.drawMercy(game)
   lg.print(title, w / 2 - font(30):getWidth(title) / 2, p.y + 18)
   lg.setFont(font(14))
   lg.setColor(0.8, 0.78, 0.74, k)
-  local sub = string.format("You found them. %d enemy soldier%s, unarmed, on their knees. You lost %d %s to get here.", n, n == 1 and "" or "s",
+  local sub = string.format("You found them: %d enemy soldier%s who ran from the fight, unarmed, on their knees. You've lost %d %s.", n, n == 1 and "" or "s",
     #m.fallen, #m.fallen == 1 and "man" or "men")
   lg.printf(sub, p.x + 20, p.y + 64, p.w - 40, "center")
   -- the fallen, by name, and who they leave behind

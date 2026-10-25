@@ -3,7 +3,7 @@
 -- screams from OpenGameArt), placed in the world like combat sounds, and blood: sprays on hits, pools where
 -- someone fell (they stay on the ground).
 local C = {}
-local NDEATH, NHURT = 33, 22
+local NDEATH, NHURT, NBEG = 66, 31, 20
 local cache = {}
 local lastAny, lastBy = -99, setmetatable({}, { __mode = "k" })
 local hurtSrc = setmetatable({}, { __mode = "k" })
@@ -72,9 +72,27 @@ end
 
 -- a man who has given up, pleading (War is Hell's mercy)
 function C.beg(u, view, vol)
-  local s = play("cry_hurt_" .. love.math.random(NHURT), u, view, vol)
-  if type(s) == "userdata" then hurtSrc[s] = true; s:setPitch(1.05 + love.math.random() * 0.1) end
+  local s = play("cry_beg_" .. love.math.random(NBEG), u, view, vol)
+  if type(s) == "userdata" then hurtSrc[s] = true end
 end
+
+-- the battle all around you: a distant bed of gunfire and shouting under War is Hell
+local bedSrc
+function C.bed(quiet)
+  if not love.audio then return end
+  if not bedSrc then
+    local ok, s = pcall(love.audio.newSource, "assets/sfx/wih_bed.ogg", "stream")
+    if not ok then bedSrc = false; return end
+    bedSrc = s
+    bedSrc:setLooping(true)
+  end
+  if not bedSrc then return end
+  local SFX = require("src.sfx")
+  local v = (SFX.muted or quiet) and 0 or 0.55 * math.min(1, SFX.volume * 1.6)
+  bedSrc:setVolume(v)
+  if not bedSrc:isPlaying() then bedSrc:play() end
+end
+function C.stopBed() if bedSrc then bedSrc:stop() end end
 
 -- blood: a fan of droplets on a hit; a pool and spatter where someone fell (kept, up to a cap)
 function C.blood(world, u, dead)

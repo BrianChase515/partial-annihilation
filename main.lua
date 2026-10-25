@@ -356,6 +356,8 @@ function love.update(dt)
     game:update(dt)
     if (game.quitToTitle or game.playAgain) and game.log then game.log:finish() end
     if game.quitToTitle then
+      require("src.cries").stopBed()
+      require("src.voice").modeMuted = false
       menu = Menu.new(lastOpts)
       state = "menu"
     elseif game.playAgain then

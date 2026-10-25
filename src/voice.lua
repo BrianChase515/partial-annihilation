@@ -19,6 +19,7 @@ local function src(key)
 end
 
 function V.say(key)
+  if V.modeMuted then return end
   if V.recorder then return V.recorder(key) end -- (trailer tool)
   if V.muted or not love.audio then return end
   local now = love.timer.getTime()

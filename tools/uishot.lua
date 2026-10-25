@@ -1,3 +1,4 @@
+local U = require("src.util")
 -- Dev tool: start a 2v2 (RTS or Arena), let the AIs play a while, take a screenshot.
 -- love . --uishot <rts|arena> [seconds]   (not shipped)
 local S = {}
@@ -209,9 +210,9 @@ local function script(mode, secs)
         w:issue(f, { type = "move", x = f.x + 500, y = f.y + 300 })
       end
       local surr, broke
-      for i = 1, 2400 do
+      for i = 1, 9000 do
         game:update(1 / 30)
-        if not broke and w.squads.broken and next(w.squads.broken) then
+        if not broke and foes[1].broken then
           broke = i
           print("BROKEN at frame", i, "hide at", math.floor(foes[1].hideX or -1), math.floor(foes[1].hideY or -1))
         end
@@ -221,6 +222,12 @@ local function script(mode, secs)
           for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and not e.def.building then l[#l + 1] = e end end
           game:select(l)
           game:commandMove(foes[1].hideX, foes[1].hideY, "amove", false)
+        end
+        if i % 600 == 0 then
+          local f = foes[1]
+          local nd = 1e9
+          for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and not e.def.building then nd = math.min(nd, U.dist(e.x, e.y, f.x, f.y)) end end
+          print("T", i, "alive", f.alive, "broken", f.broken, "hide", f.hideX and math.floor(U.dist(f.x, f.y, f.hideX, f.hideY)), "ours", math.floor(nd), "orders", f.orders[1] and f.orders[1].type)
         end
         if game.mercy and not surr then surr = i; print("MERCY at frame", i, "fallen", #game.mercy.fallen, "units", #game.mercy.units); break end
       end

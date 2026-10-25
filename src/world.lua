@@ -1043,6 +1043,7 @@ function W:damage(o, amount, attacker)
   if not o.alive or o.dormant or o.neutral then return end
   -- War is Hell: hits draw blood (and the badly hurt cry out)
   if self.wih and o.squad and self.onBlood then self.onBlood(o, amount) end
+  if self.wih and attacker and attacker.x then o.hitFrom = { x = attacker.x, y = attacker.y, t = self.time } end
   -- Commander of Heroes: an HQ can't be hurt while its side still holds a capture point
   if o.key == "hq" and self.squads and self.capPoints then
     for _, p in ipairs(self.capPoints) do if p.owner == self.ally[o.team] then return end end

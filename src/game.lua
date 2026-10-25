@@ -281,6 +281,8 @@ function G.new(opts)
     if o.team == 1 then self:notice("Ore truck destroyed! That extractor rolls out a new one in 60s", 3) end
   end
   SFX.combatVolume, SFX.pitchMul = nil, nil -- (War is Hell turns these up below)
+  VOICE.modeMuted = false -- (War is Hell: no robot announcer)
+  require("src.cries").stopBed()
   if world.squads then
     -- your squads start on control groups 1, 2, 3
     local SQ = require("src.squads")
@@ -295,33 +297,37 @@ function G.new(opts)
         self:notice(string.format("%s: %s", SQ.byType[sq.type].name, sk.name), 1.4)
       end
     end
-    -- War is Hell: the enemy's last men give up - stop and decide what becomes of them
+    -- War is Hell: a group of the enemy's broken men has been found - stop and decide their fate
     world.onSquadSurrender = function(ally, units)
-      if ally == world.ally[1] then return end
-      local fallen = {}
-      for _, sq in ipairs(SQ.squadsOf(world, 1)) do
-        for _, u in ipairs(sq.roster or {}) do
-          if not u.alive then
-            if not u.survivedBy then u.age, u.survivedBy = SQ.survivedBy() end
-            fallen[#fallen + 1] = { name = u.callsign or u.def.name, age = u.age, line = u.survivedBy }
-          end
-        end
-      end
-      self.mercy = { ally = ally, units = units, fallen = fallen, t = love.timer.getTime() }
-      -- (a computer-only test game: nobody to ask)
-      if self.opts.autotest and not os.getenv("PA_MERCY") then self:decideMercy("spare"); return end
-      if units[1] then require("src.cries").beg(units[1], nil, 1) end
-    end
-    world.onSquadBroken = function(ally, units)
-      if ally == world.ally[1] then return end
-      -- (a computer-only test game: nobody to hunt them down or ask)
+      if ally == world.ally[1] or #units == 0 then return end
       if self.opts.autotest and not os.getenv("PA_MERCY") then
         self.mercy = { ally = ally, units = units, fallen = {}, t = 0 }
         self:decideMercy("spare")
         return
       end
-      self:notice(string.format("The enemy has broken! Their last %d %s running. Follow the blood and hunt them down.",
-        #units, #units == 1 and "man is" or "men are"), 5)
+      if self.mercy and not self.mercy.choice then
+        self.mercyQueue = self.mercyQueue or {}
+        self.mercyQueue[#self.mercyQueue + 1] = { ally = ally, units = units }
+        return
+      end
+      self:openMercy(ally, units)
+    end
+    world.onSquadBroken = function(ally, units, last)
+      if ally == world.ally[1] then return end
+      -- (a computer-only test game: nobody to hunt them down; they're simply taken)
+      if self.opts.autotest and not os.getenv("PA_MERCY") then
+        self.mercy = { ally = ally, units = units, fallen = {}, t = 0 }
+        self:decideMercy("spare")
+        return
+      end
+      local n = 0
+      for _, u in ipairs(units) do if u.alive then n = n + 1 end end
+      if last then
+        self:notice(string.format("The enemy has broken! Their last %d %s running. Follow the blood and hunt them down.",
+          n, n == 1 and "man is" or "men are"), 5)
+      else
+        self:notice(string.format("Enemy squad broken: %d %s running for cover.", n, n == 1 and "man" or "men"), 3)
+      end
     end
     world.onSquadBeg = function(u)
       if world:isVisible(u) then require("src.cries").beg(u, self:soundView(), 0.9) end
@@ -344,6 +350,8 @@ function G.new(opts)
       -- brutality: everything hits harder and deeper
       SFX.combatVolume = 1.7
       SFX.pitchMul = 0.86
+      -- no robot announcer here: just the men, and the battle all around
+      VOICE.modeMuted = true
     end
     world.onSquadPromoted = function(sq, new, old)
       if sq.team == 1 then self:notice(string.format("%s takes command of squad %d", new.callsign or "A survivor", sq.idx), 2.5) end
@@ -1255,6 +1263,7 @@ end
 -- Update
 
 function G:update(dt)
+  if self.world.wih then require("src.cries").bed(self.paused or self.menuOpen or self.world.over) end
   -- (re)center on the Commander on the first frame: the window may have been resized
   -- after the game was created (browser builds especially)
   local gw, gh = love.graphics.getDimensions()
@@ -1662,20 +1671,45 @@ end
 -- Input
 
 -- War is Hell: spare the ones who surrendered (they're marched off; the battle is won) or not
+function G:openMercy(ally, units)
+  local SQ = require("src.squads")
+  local world = self.world
+  local fallen = {}
+  for _, sq in ipairs(SQ.squadsOf(world, 1)) do
+    for _, u in ipairs(sq.roster or {}) do
+      if not u.alive then
+        if not u.survivedBy then u.age, u.survivedBy = SQ.survivedBy() end
+        fallen[#fallen + 1] = { name = u.callsign or u.def.name, age = u.age, line = u.survivedBy }
+      end
+    end
+  end
+  self.mercy = { ally = ally, units = units, fallen = fallen, t = love.timer.getTime() }
+  if units[1] then require("src.cries").beg(units[1], nil, 1) end
+end
+
+-- War is Hell: spare the ones who surrendered (they're marched off as prisoners) or not
 function G:decideMercy(choice)
   local m = self.mercy
   if not m or m.choice then return end
   m.choice = choice
   local world = self.world
-  world.mercyChoice = choice
   if choice == "spare" then
     local n = 0
     for _, u in ipairs(m.units) do if u.alive then n = n + 1; world:remove(u) end end
-    world.captives = n
-    for t = 1, world.np do if world.ally[t] == m.ally then world:eliminate(t) end end
+    world.captives = (world.captives or 0) + n
+    world.mercyChoice = world.mercyChoice == "kill" and "mixed" or "spare"
+    -- nobody of theirs left standing: the battle is won
+    local left = false
+    for _, e in ipairs(world.entities) do if e.alive and e.squad and world.ally[e.team] == m.ally then left = true end end
+    if not left then for t = 1, world.np do if world.ally[t] == m.ally then world:eliminate(t) end end end
+    if n > 0 and not left then self:notice(string.format("%d taken prisoner.", n), 2.5) end
   else
+    world.mercyChoice = world.mercyChoice == "spare" and "mixed" or "kill"
     self:notice("No quarter.", 2.5)
   end
+  -- another group found meanwhile?
+  local q = self.mercyQueue and table.remove(self.mercyQueue, 1)
+  if q then self:openMercy(q.ally, q.units) end
 end
 
 function G:mousepressed(x, y, button)
@@ -2251,7 +2285,10 @@ function G:pickSquad(sq, add)
     local L = sq.leader
     if L and L.alive then self:centerOn(L.x, L.y) elseif alive[1] then self:centerOn(alive[1].x, alive[1].y) end
   end
-  if #alive == 0 then self:notice(string.format("Squad %d is gone for now - replacements are on the way from the HQ", sq.idx), 1.8) end
+  if #alive == 0 then
+    if self.world.wih then self:notice(string.format("Squad %d is gone. Every man of them killed in action.", sq.idx), 2.2)
+    else self:notice(string.format("Squad %d is gone for now - replacements are on the way from the HQ", sq.idx), 1.8) end
+  end
 end
 
 -- Q / W: skill 1 or 2 of the selected squads. Self skills fire for every selected squad that has
