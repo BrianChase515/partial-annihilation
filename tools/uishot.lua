@@ -179,6 +179,61 @@ local function script(mode, secs)
       print("SQUADS", t, table.concat(l, ","))
     end
     local nextOrder, nextLog = 0, 0
+    if os.getenv("PA_PLANSHOT") then
+      -- War is Hell: how the computer's force moves (fog off, zoomed out, on the red army)
+      game.ais[#game.ais + 1] = SQ.newAI(w, 1, 5)
+      w.noFog = true
+      local secs3 = tonumber(os.getenv("PA_PLANSHOT")) or 40
+      local dmg = {}
+      local d0 = w.damage
+      w.damage = function(self2, o, amount, attacker)
+        if attacker and attacker.team and o.alive then
+          local k = attacker.team .. " " .. (attacker.key or "?")
+          dmg[k] = (dmg[k] or 0) + math.min(amount, o.hp)
+        end
+        return d0(self2, o, amount, attacker)
+      end
+      if os.getenv("PA_FULL") then
+        for i = 1, 600 * 30 do
+          if w.over then break end
+          if os.getenv("PA_AIRDBG") and i % 300 == 0 then
+            for _, sq in ipairs(SQ.squadsOf(w, 2)) do
+              if sq.type == "air" then
+                local L = sq.leader
+                local o = L and L.alive and L.orders[1]
+                print("AIR", math.floor(w.time), L and L.alive, o and o.type, o and o.x and math.floor(o.x), o and o.y and math.floor(o.y), L and math.floor(L.x), L and math.floor(L.y), L and L.target and L.target.key, sq.broken)
+              end
+            end
+          end
+          w:update(1 / 30); for _, ai in ipairs(game.ais) do ai:update(1 / 30) end
+        end
+        local ks = {}
+        for k, v in pairs(dmg) do ks[#ks + 1] = k end
+        table.sort(ks)
+        for _, k in ipairs(ks) do print("DMG", k, math.floor(dmg[k])) end
+        print("OVER", w.over and w.over.winnerAlly, math.floor(w.time))
+        return
+      end
+      for _ = 1, secs3 * 30 do w:update(1 / 30); for _, ai in ipairs(game.ais) do ai:update(1 / 30) end end
+      local x, y, n = 0, 0, 0
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 2 and e.squad then x, y, n = x + e.x, y + e.y, n + 1 end end
+      for _, sq in ipairs(SQ.squadsOf(w, 2)) do
+        local L = sq.leader
+        if L and L.alive then print("RED", sq.type, math.floor(L.x), math.floor(L.y)) end
+      end
+      for _, sq in ipairs(SQ.squadsOf(w, 1)) do
+        local L = sq.leader
+        if L and L.alive then print("BLUE", sq.type, math.floor(L.x), math.floor(L.y)) end
+      end
+      game.cam.zoom = 0.5
+      if n > 0 then game:centerOn(x / n, y / n) end
+      game:select({})
+      for _ = 1, 4 do frame() end
+      pending = "uishot_plan.png"
+      frame(); frame()
+      print("UISHOT plan")
+      return
+    end
     if os.getenv("PA_PAD") then
       -- controller hints (and the command wheel held open on an entry)
       for _ = 1, 30 do game:update(1 / 30) end

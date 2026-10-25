@@ -652,7 +652,7 @@ local function wihScript()
   local w = game.world
   SQ.MERCY_AT = 0 -- (the endgame is staged below)
   game.ais[#game.ais + 1] = SQ.newAI(w, 1, 8)
-  for _, ai in ipairs(game.ais) do ai.ambush = false end -- (the trailer wants them to meet)
+  for _, ai in ipairs(game.ais) do ai.defend = false end -- (the trailer wants them to meet)
   game.edgePan = false
   love.mouse.setPosition(love.graphics.getWidth() / 2, love.graphics.getHeight() - 90) -- (no hover tooltips)
   local mine = SQ.squadsOf(w, 1)

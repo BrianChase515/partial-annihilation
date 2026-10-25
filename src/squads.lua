@@ -1099,8 +1099,8 @@ function S.newAI(world, team, level)
     -- War is Hell: one army, closely watched, that fights it out
     self.attend = self.attend + 1
     self.retreatAt = 0.12 + 0.012 * self.level
-    -- the better ones lie in wait: some squads dig in on good ground and let you come to them
-    self.ambush = self.level >= 5
+    -- some games the computer holds its ground and lets you come (always as one combined force)
+    self.defend = self.level >= 4 and self.rng:random() < 0.35
   end
   self.cursor = 0
   self.profileName = "Heroes"
@@ -1179,22 +1179,6 @@ function AI:huntGoal(sq, foe, fighting)
     end
     if best then return { x = best.x, y = best.y, hold = true } end
   end
-  -- ambush: every other squad waits in a bunker (the nearest free one) until there's a fight
-  if self.ambush and not fighting and sq.idx % 2 == 0 and not (self.lastSeen and w.time - self.lastSeen.t < 20 and U.dist(L.x, L.y, self.lastSeen.x, self.lastSeen.y) < 900) then
-    self.dug = self.dug or {}
-    local b = self.dug[sq]
-    if not b then
-      local bd
-      for _, bk in ipairs(w.bunkers or {}) do
-        local taken
-        for _, other in pairs(self.dug) do if other == bk then taken = true end end
-        local d = U.dist(L.x, L.y, bk.x, bk.y)
-        if not taken and d < 1600 and (not bd or d < bd) then b, bd = bk, d end
-      end
-      self.dug[sq] = b or false
-    end
-    if b then return { x = b.x, y = b.y, hold = true } end
-  end
   if self.lastSeen and w.time - self.lastSeen.t < 40 then return { x = self.lastSeen.x, y = self.lastSeen.y } end
   -- sweep: waypoints spread over the enemy half, a new one when we get there
   if not self.sweep or U.dist(L.x, L.y, self.sweep.x, self.sweep.y) < 250 or w.time > self.sweep.untilT then
@@ -1206,6 +1190,124 @@ function AI:huntGoal(sq, foe, fighting)
     self.sweep = { x = x, y = y, untilT = w.time + 60 }
   end
   return self.sweep
+end
+
+
+---------------------------------------------------------------------------
+-- War is Hell: combined arms. One plan for the whole force, then each squad plays its part:
+-- recon screens ahead and spots, armor leads and takes the fight, the battery stays back at
+-- the edge of its reach and shells what the others can see, AA rides with the guns, air
+-- strikes what's been found (their guns first)
+
+
+function AI:armyPlan(mine)
+  local w = self.world
+  local tm = w.teams[self.team]
+  local by = {}
+  local cx, cy, n = 0, 0, 0
+  for _, sq in ipairs(mine) do
+    local L = sq.leader
+    if L and L.alive and not sq.broken then
+      by[sq.type] = by[sq.type] or sq
+      cx, cy, n = cx + L.x, cy + L.y, n + 1
+    end
+  end
+  if n == 0 then return nil end
+  cx, cy = cx / n, cy / n
+  -- the anchor: the armor if there is any (it leads), else the middle of the force
+  local A = by.armor and by.armor.leader or nil
+  local ax, ay = A and A.x or cx, A and A.y or cy
+  -- where we're going: the last place we saw them, or (defending) our ground, or a sweep
+  local obj
+  local seen = self.lastSeen and w.time - self.lastSeen.t < 45 and self.lastSeen
+  if seen then obj = { x = seen.x, y = seen.y }
+  elseif self.defend and w.time < (self.defendUntil or 170) then
+    if not self.holdAt then
+      -- the bunker (else just a spot) a third of the way from our start to the middle
+      local W, H = w.map.w * w.T, w.map.h * w.T
+      local px, py = tm.startX + (W / 2 - tm.startX) * 0.33, tm.startY + (H / 2 - tm.startY) * 0.33
+      local best, bd
+      for _, b in ipairs(w.bunkers or {}) do
+        local d = U.dist(px, py, b.x, b.y)
+        if d < 900 and (not bd or d < bd) then best, bd = b, d end
+      end
+      self.holdAt = best and { x = best.x, y = best.y, bunker = true } or { x = px, y = py }
+    end
+    obj = { x = self.holdAt.x, y = self.holdAt.y, hold = true }
+  else
+    if not self.sweep or U.dist(ax, ay, self.sweep.x, self.sweep.y) < 300 or w.time > self.sweep.untilT then
+      local ex, ey
+      for t = 1, w.np do if w:hostile(t, self.team) then ex, ey = w.teams[t].startX, w.teams[t].startY end end
+      local W, H = w.map.w * w.T, w.map.h * w.T
+      self.sweep = { x = U.clamp((ex or W / 2) + self.rng:random(-W * 0.3, W * 0.3), 200, W - 200),
+        y = U.clamp((ey or H / 2) + self.rng:random(-H * 0.3, H * 0.3), 200, H - 200), untilT = w.time + 70 }
+    end
+    obj = { x = self.sweep.x, y = self.sweep.y }
+  end
+  local dx, dy = U.norm(obj.x - ax, obj.y - ay)
+  if dx == 0 and dy == 0 then dx = 1 end
+  return { by = by, ax = ax, ay = ay, obj = obj, dx = dx, dy = dy, contact = seen and U.dist(ax, ay, seen.x, seen.y) < 900 }
+end
+
+-- where this squad should be, given the plan; { x, y, move = true } means just get there
+function AI:roleGoal(sq, plan, foe, fd, fighting)
+  local w = self.world
+  local L = sq.leader
+  local t = sq.type
+  local W, H = w.map.w * w.T, w.map.h * w.T
+  local function at(x, y, move) return { role = true, x = U.clamp(x, 120, W - 120), y = U.clamp(y, 120, H - 120), move = move } end
+  local ax, ay, dx, dy, obj = plan.ax, plan.ay, plan.dx, plan.dy, plan.obj
+  local px, py = -dy, dx -- sideways
+  local side = (sq.idx % 2 == 0) and 1 or -1
+  local range = w:rangeOf(L)
+  if t == "armor" then
+    if fighting and foe then return at(foe.x, foe.y) end
+    -- lead, but never so far out that the guns can't cover us
+    local bat = plan.by.battery and plan.by.battery.leader
+    if bat and U.dist(L.x, L.y, bat.x, bat.y) > 520 then return at(L.x, L.y) end
+    if obj.hold then return at(obj.x, obj.y) end
+    return at(obj.x, obj.y)
+  elseif t == "recon" then
+    -- too close to the fight: fall back behind the tanks and keep spotting from the edge of sight
+    if foe and fd < 260 then
+      local bx, by2 = U.norm(L.x - foe.x, L.y - foe.y)
+      return at(L.x + bx * 220, L.y + by2 * 220, true)
+    end
+    -- screen out ahead and to one side of the force
+    local ahead = obj.hold and 420 or 380
+    return at(ax + dx * ahead + px * side * 160, ay + dy * ahead + py * side * 160)
+  elseif t == "battery" then
+    if foe and fd < 230 then
+      -- something's on the guns: back off toward the armor
+      local bx, by2 = U.norm(L.x - foe.x, L.y - foe.y)
+      return at(L.x + bx * 200, L.y + by2 * 200, true)
+    end
+    if foe and fd < range * 0.95 then return at(L.x, L.y) end -- in reach: stay and shoot
+    if foe and fd < range + 260 and S.sees(w, self.team, foe.x, foe.y) then
+      -- creep up just until it's in reach
+      local bx, by2 = U.norm(foe.x - L.x, foe.y - L.y)
+      return at(foe.x - bx * range * 0.9, foe.y - by2 * range * 0.9)
+    end
+    return at(ax - dx * 240 + px * side * 60, ay - dy * 240 + py * side * 60, true)
+  elseif t == "aa" then
+    -- ride with the guns (or the tanks), between them and the enemy
+    local g = plan.by.battery and plan.by.battery.leader or plan.by.armor and plan.by.armor.leader
+    local gx, gy = g and g.x or ax, g and g.y or ay
+    return at(gx + dx * 90, gy + dy * 90)
+  elseif t == "air" then
+    -- strike: their guns if we can see them, else whatever we're fighting; else circle the force
+    local best, bd
+    for _, o in ipairs(w.entities) do
+      if o.alive and o.squad and w:hostile(o.team, self.team) and not o.broken and S.sees(w, self.team, o.x, o.y) then
+        local d = U.dist(L.x, L.y, o.x, o.y) - (o.key == "artillery" and 500 or 0) - (o.key == "flak" and -400 or 0)
+        if not bd or d < bd then best, bd = o, d end
+      end
+    end
+    if best then return at(best.x, best.y) end
+    return at(ax + dx * 120, ay + dy * 120)
+  end
+  if fighting and foe then return at(foe.x, foe.y) end
+  return at(obj.x, obj.y)
 end
 
 function AI:update(dt)
@@ -1226,6 +1328,7 @@ function AI:update(dt)
   end
   -- points the others are already heading for stay claimed
   for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
+  local plan = w.wih and self:armyPlan(mine)
   for _, sq in ipairs(mine) do
     local L = sq.leader
     if L and L.alive and look[sq] and not sq.broken then
@@ -1277,7 +1380,9 @@ function AI:update(dt)
         end
       end
       local goal
-      if w.wih then
+      if w.wih and plan then
+        goal = self:roleGoal(sq, plan, foe, fd, fighting)
+      elseif w.wih then
         goal = self:huntGoal(sq, foe, fighting)
       else
         local pi = self:pickPoint(sq, taken)
@@ -1288,7 +1393,7 @@ function AI:update(dt)
       if not sq.healing then
         -- fight what's close; otherwise go take the point; everyone stays with the leader
         local tx, ty
-        if goal and goal.hold then tx, ty = goal.x, goal.y -- into the bunker, then fight from it
+        if goal and (goal.hold or goal.role) then tx, ty = goal.x, goal.y -- (War is Hell: its part in the plan)
         elseif fighting then tx, ty = foe.x, foe.y
         elseif goal then tx, ty = goal.x, goal.y
         elseif foe then tx, ty = foe.x, foe.y end
@@ -1299,6 +1404,18 @@ function AI:update(dt)
               local far = u ~= L and U.dist(u.x, u.y, L.x, L.y) > 320
               if far then
                 if not (o and o.type == "move") then w:issue(u, { type = "move", x = L.x, y = L.y }) end
+              elseif goal and goal.role then
+                -- spread out around the spot rather than piling onto it
+                local kind = goal.move and "move" or "amove"
+                if not o or o.type == "attack" and kind == "move" or ((o.type == "amove" or o.type == "move") and (o.type ~= kind or U.dist(o.x, o.y, tx, ty) > 110)) then
+                  local jx, jy = 0, 0
+                  if u ~= L then
+                    local k = u.slotK or self.rng:random(1, 8); u.slotK = k
+                    local a = k / 8 * math.pi * 2
+                    jx, jy = math.cos(a) * 55, math.sin(a) * 55
+                  end
+                  w:issue(u, { type = kind, x = tx + jx, y = ty + jy })
+                end
               elseif not o or (o.type == "amove" and U.dist(o.x, o.y, tx, ty) > 140) or o.type == "move" then
                 local jx, jy = 0, 0
                 if u ~= L then jx, jy = self.rng:random(-60, 60), self.rng:random(-60, 60) end
