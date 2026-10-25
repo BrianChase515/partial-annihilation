@@ -1220,7 +1220,23 @@ function AI:armyPlan(mine)
   -- where we're going: the last place we saw them, or (defending) our ground, or a sweep
   local obj
   local seen = self.lastSeen and w.time - self.lastSeen.t < 45 and self.lastSeen
-  if seen then obj = { x = seen.x, y = seen.y }
+  if not w.wih then
+    -- Conquest: the whole force goes for one point at a time - the one most worth taking (or
+    -- the one we're losing), measured from the lead squad; when it's ours and quiet, the next
+    local me = w.ally[self.team]
+    local cur = self.objPoint and w.capPoints[self.objPoint]
+    if not cur or (cur.owner == me and not cur.contested and not (cur.capBy and cur.capBy ~= me and cur.amt > 0)) then
+      local lead = by.armor or by.recon or by.battery or by.aa or by.air
+      self.objPoint = lead and self:pickPoint(lead, {}) or nil
+      cur = self.objPoint and w.capPoints[self.objPoint]
+    end
+    if cur then obj = { x = cur.x, y = cur.y, point = true }
+    else
+      -- every point is ours: hold the middle one
+      local p = w.capPoints[math.ceil(#w.capPoints / 2)]
+      obj = { x = p.x, y = p.y, hold = true }
+    end
+  elseif seen then obj = { x = seen.x, y = seen.y }
   elseif self.defend and w.time < (self.defendUntil or 170) then
     if not self.holdAt then
       -- the bunker (else just a spot) a third of the way from our start to the middle
@@ -1328,7 +1344,7 @@ function AI:update(dt)
   end
   -- points the others are already heading for stay claimed
   for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
-  local plan = w.wih and self:armyPlan(mine)
+  local plan = self:armyPlan(mine)
   for _, sq in ipairs(mine) do
     local L = sq.leader
     if L and L.alive and look[sq] and not sq.broken then
@@ -1380,7 +1396,7 @@ function AI:update(dt)
         end
       end
       local goal
-      if w.wih and plan then
+      if plan then
         goal = self:roleGoal(sq, plan, foe, fd, fighting)
       elseif w.wih then
         goal = self:huntGoal(sq, foe, fighting)
