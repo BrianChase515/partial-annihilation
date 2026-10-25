@@ -354,7 +354,9 @@ D.TOWER_VS_COMMANDER = 2.5
 -- Heroes uses the same units at their plain numbers). Tuned for ~12-minute games on a medium map
 -- xpf: unit veterancy speed (xp per level = hp x xpf x ...); lead: share of what his army kills
 -- within leadR that the Commander earns as XP; cthr: scales his level thresholds
-D.RTS_TUNE = { unithp = 1, bldhp = 1, cmdhp = 1, xpf = 0.7, lead = 0, leadR = 600, cthr = 1 }
+-- (tested AI vs AI on a medium map with some water: ~11.5-minute games, first fighting ~2:05, a
+-- level-5 Commander in about two games of three, a General in nearly every game)
+D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0 }
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do

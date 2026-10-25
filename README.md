@@ -111,13 +111,17 @@ In Annihilation it keeps the classic economy and building and adds:
 
 The result screen names the personality you faced; the match log has its map read and every choice with the runners-up.
 
+### Fight early, decide late
+
+Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up quickly and a level-5 unit becomes a named General. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
+
 ### Towers stop Commanders
 
 Fights start early and in the open, but walking your Commander into a defended base isn't free: Defense Towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (95 metal), carry a flak mount as well (one tower covers a base from tanks and aircraft alike) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 
 ### The Power Core, and metal that belongs to the navy
 
-Every Annihilation map has a Power Core node in the middle (the blue pad): any constructor can build on it for +10 metal and +150 energy a second (about four extractors' worth), so the centre is always worth fighting over. Offshore metal - the teal rings - can only be claimed by a Sea Constructor, so a shipyard opens up a whole economy instead of just costing you one; a shipyard and sea constructors cost the same as their land versions.
+Every Annihilation map has a Power Core node in the middle (the blue pad): any constructor can build on it for +10 metal and +150 energy a second (about four extractors' worth). It's a tall sensor tower that sees 1100 around it, so whoever holds it can shell the whole middle with artillery and battleships, and the centre is always worth fighting over. Offshore metal - the teal rings - can only be claimed by a Sea Constructor, so a shipyard opens up a whole economy instead of just costing you one; a shipyard and sea constructors cost about the same as their land versions.
 
 ### Battleships reach across the map
 
