@@ -1001,6 +1001,21 @@ function W:fire(e, o)
     speed = w.speed, damage = dmg, splash = math.max(w.splash, m.splash or 0), team = e.team,
     weapon = wpn, sx = e.x, sy = e.y, source = e, hitsAir = m.hitsAir,
   }
+  -- Commander of Heroes: direct fire can miss. Firing on the move, at a fast mover, or into a
+  -- bunker is harder; veterans and leaders shoot straighter. (So two scouts trading shots isn't
+  -- a coin toss decided by who saw whom first: the one standing still usually wins)
+  if self.squads and not w.ballistic and w.splash == 0 and not o.def.building then
+    local hit = 0.88
+    if e.moving then hit = hit * 0.78 end
+    if o.moving and (o.def.speed or 0) >= 120 then hit = hit * 0.88 end
+    if o.inBunker then hit = hit * 0.85 end
+    hit = hit + 0.02 * L + (e.squadLeader and 0.05 or 0)
+    if math.random() > U.clamp(hit, 0.4, 0.97) then
+      local p = self.projectiles[#self.projectiles]
+      local a, r = math.random() * math.pi * 2, o.def.radius + 6 + math.random() * 14
+      p.target, p.tx, p.ty, p.miss = nil, o.x + math.cos(a) * r, o.y + math.sin(a) * r, true
+    end
+  end
   e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.heroes and (self:bv(e, "rof") or 1) or 1) / (e.sqRof or 1)
   if self.heroes and (m.chill or e.stanceChill) then self.projectiles[#self.projectiles].chill = true end
   if self.heroes and e.stancePoison then self.projectiles[#self.projectiles].poison = e.stancePoison end
@@ -1231,6 +1246,8 @@ function W:updateProjectiles(dt)
         if p.poison and self.heroes then require("src.arena").dot(self, p.source, p.target, p.poison, 3) end
         self:damage(p.target, p.damage, p.source)
         self.effects[#self.effects + 1] = { kind = "hit", x = p.tx, y = p.ty, t = 0, life = p.melee and 0.22 or 0.15, size = p.melee and 13 or 6 }
+      elseif p.miss then
+        self.effects[#self.effects + 1] = { kind = "hit", x = p.tx, y = p.ty, t = 0, life = 0.12, size = 3 }
       end
     else
       p.x, p.y = p.x + nx * step, p.y + ny * step

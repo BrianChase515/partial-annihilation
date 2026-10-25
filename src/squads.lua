@@ -1220,23 +1220,7 @@ function AI:armyPlan(mine)
   -- where we're going: the last place we saw them, or (defending) our ground, or a sweep
   local obj
   local seen = self.lastSeen and w.time - self.lastSeen.t < 45 and self.lastSeen
-  if not w.wih then
-    -- Conquest: the whole force goes for one point at a time - the one most worth taking (or
-    -- the one we're losing), measured from the lead squad; when it's ours and quiet, the next
-    local me = w.ally[self.team]
-    local cur = self.objPoint and w.capPoints[self.objPoint]
-    if not cur or (cur.owner == me and not cur.contested and not (cur.capBy and cur.capBy ~= me and cur.amt > 0)) then
-      local lead = by.armor or by.recon or by.battery or by.aa or by.air
-      self.objPoint = lead and self:pickPoint(lead, {}) or nil
-      cur = self.objPoint and w.capPoints[self.objPoint]
-    end
-    if cur then obj = { x = cur.x, y = cur.y, point = true }
-    else
-      -- every point is ours: hold the middle one
-      local p = w.capPoints[math.ceil(#w.capPoints / 2)]
-      obj = { x = p.x, y = p.y, hold = true }
-    end
-  elseif seen then obj = { x = seen.x, y = seen.y }
+  if seen then obj = { x = seen.x, y = seen.y }
   elseif self.defend and w.time < (self.defendUntil or 170) then
     if not self.holdAt then
       -- the bunker (else just a spot) a third of the way from our start to the middle
@@ -1265,6 +1249,97 @@ function AI:armyPlan(mine)
   return { by = by, ax = ax, ay = ay, obj = obj, dx = dx, dy = dy, contact = seen and U.dist(ax, ay, seen.x, seen.y) < 900 }
 end
 
+
+-- Conquest: points want different things than a hunt. The scouts run off and take what they
+-- can on their own; the rest march in order as one force - or, with four or more squads, as two
+-- (the guns with the main body on one point, the rest on another)
+local function pointDone(w, p, me)
+  return p.owner == me and not p.contested and not (p.capBy and p.capBy ~= me and p.amt > 0)
+end
+
+function AI:groupPlan(list, keyName, taken)
+  local w = self.world
+  local me = w.ally[self.team]
+  local by, cx, cy, n = {}, 0, 0, 0
+  for _, sq in ipairs(list) do
+    by[sq.type] = by[sq.type] or sq
+    cx, cy, n = cx + sq.leader.x, cy + sq.leader.y, n + 1
+  end
+  if n == 0 then return nil end
+  local A = by.armor and by.armor.leader
+  local ax, ay = A and A.x or cx / n, A and A.y or cy / n
+  self.gobj = self.gobj or {}
+  local pi = self.gobj[keyName]
+  if not pi or not w.capPoints[pi] or pointDone(w, w.capPoints[pi], me) or (taken[pi] and taken[pi] ~= keyName) then
+    local lead = by.armor or by.battery or by.aa or by.air or list[1]
+    local blocked = {}
+    for k, v in pairs(taken) do if v ~= keyName then blocked[k] = true end end
+    pi = self:pickPoint(lead, blocked)
+    self.gobj[keyName] = pi
+  end
+  local obj
+  if pi then
+    taken[pi] = keyName
+    obj = { x = w.capPoints[pi].x, y = w.capPoints[pi].y, point = true }
+  else
+    local p = w.capPoints[math.ceil(#w.capPoints / 2)]
+    obj = { x = p.x, y = p.y, hold = true }
+  end
+  local dx, dy = U.norm(obj.x - ax, obj.y - ay)
+  if dx == 0 and dy == 0 then dx = 1 end
+  return { by = by, ax = ax, ay = ay, obj = obj, dx = dx, dy = dy }
+end
+
+function AI:conquestPlan(mine)
+  local w = self.world
+  local recon, rest = {}, {}
+  for _, sq in ipairs(mine) do
+    local L = sq.leader
+    if L and L.alive and not sq.healing then
+      if sq.type == "recon" then recon[#recon + 1] = sq else rest[#rest + 1] = sq end
+    end
+  end
+  local plan = { of = {} }
+  local taken = {}
+  -- the main body (and, with 4+ squads, a second group), then the scouts on whatever's left
+  local main, flank = rest, nil
+  if #rest >= 4 then
+    main, flank = {}, {}
+    local armorSeen = false
+    for _, sq in ipairs(rest) do
+      local t = sq.type
+      if t == "battery" or t == "aa" or (t == "armor" and not armorSeen) then
+        main[#main + 1] = sq
+        if t == "armor" then armorSeen = true end
+      else
+        flank[#flank + 1] = sq
+      end
+    end
+    if #flank == 0 then flank = nil end
+  end
+  local gm = self:groupPlan(main, "main", taken)
+  for _, sq in ipairs(main) do plan.of[sq] = gm end
+  if flank then
+    local gf = self:groupPlan(flank, "flank", taken)
+    for _, sq in ipairs(flank) do plan.of[sq] = gf end
+  end
+  local me = w.ally[self.team]
+  for _, sq in ipairs(recon) do
+    local pi = sq.raidPoint
+    if not pi or not w.capPoints[pi] or pointDone(w, w.capPoints[pi], me) then
+      local blocked = {}
+      for k in pairs(taken) do blocked[k] = true end
+      pi = self:pickPoint(sq, blocked) or self:pickPoint(sq, {})
+      sq.raidPoint = pi
+    end
+    if pi then taken[pi] = "raid" end
+    local p = pi and w.capPoints[pi]
+    plan.of[sq] = { raid = true, obj = p and { x = p.x, y = p.y } or { x = sq.leader.x, y = sq.leader.y } }
+  end
+  plan.main = gm
+  return plan
+end
+
 -- where this squad should be, given the plan; { x, y, move = true } means just get there
 function AI:roleGoal(sq, plan, foe, fd, fighting)
   local w = self.world
@@ -1272,6 +1347,16 @@ function AI:roleGoal(sq, plan, foe, fd, fighting)
   local t = sq.type
   local W, H = w.map.w * w.T, w.map.h * w.T
   local function at(x, y, move) return { role = true, x = U.clamp(x, 120, W - 120), y = U.clamp(y, 120, H - 120), move = move } end
+  if plan.of then plan = plan.of[sq] end
+  if not plan then return nil end
+  if plan.raid then
+    -- a scout raid: straight for the point; give way to anything heavier than scouts
+    if foe and fd < 240 and foe.key ~= "scout" and foe.def and foe.def.weapon then
+      local bx, by2 = U.norm(L.x - foe.x, L.y - foe.y)
+      return { role = true, x = U.clamp(L.x + bx * 260, 120, W - 120), y = U.clamp(L.y + by2 * 260, 120, H - 120), move = true }
+    end
+    return { role = true, x = plan.obj.x, y = plan.obj.y }
+  end
   local ax, ay, dx, dy, obj = plan.ax, plan.ay, plan.dx, plan.dy, plan.obj
   local px, py = -dy, dx -- sideways
   local side = (sq.idx % 2 == 0) and 1 or -1
@@ -1344,7 +1429,7 @@ function AI:update(dt)
   end
   -- points the others are already heading for stay claimed
   for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
-  local plan = self:armyPlan(mine)
+  local plan = w.wih and self:armyPlan(mine) or (w.capPoints and self:conquestPlan(mine))
   for _, sq in ipairs(mine) do
     local L = sq.leader
     if L and L.alive and look[sq] and not sq.broken then
