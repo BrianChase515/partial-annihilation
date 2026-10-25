@@ -1,4 +1,4 @@
-# Partial Annihilation leaderboard - season 0.17
+# Partial Annihilation leaderboard - season 0.18
 
 Each season (0.9, 0.10, ...) starts a fresh board; patch releases keep it. Submit from the end-of-game screen (**Submit score online**).
 
