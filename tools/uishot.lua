@@ -156,6 +156,62 @@ local function script(mode, secs)
     end
     return
   end
+  if os.getenv("PA_DDTEST") then
+    -- a destroyer in the shallows against land armies of rising size, then gunships
+    game = startFn({ size = 96, water = 0.6, seed = 11, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local map = w.map
+    -- a sea tile right next to land
+    local sx, sy
+    for r = 0, 40 do
+      for dy = -r, r do for dx = -r, r do
+        local x, y = math.floor(map.w / 2) + dx, math.floor(map.h / 2) + dy
+        if not sx and map:inBounds(x, y) and map:passable("sea", x, y) and map:inBounds(x + 1, y) and map:passable("land", x + 1, y) then sx, sy = x, y end
+      end end
+    end
+    for _, case in ipairs({ { "tank", 3 }, { "tank", 5 }, { "tank", 7 }, { "artillery", 3 }, { "gunship", 2 }, { "battleship", 1 } }) do
+      local key, n = case[1], case[2]
+      local x, y = map:center(sx, sy)
+      local dd = w:spawn("destroyer", 1, x, y); dd.built = 1
+      local foes = {}
+      for k = 1, n do
+        local fx, fy
+        if key == "battleship" then
+          local tx, ty = map:nearestTile(sx - 6, sy, function(a, b) return map:passable("sea", a, b) end, 20)
+          fx, fy = map:center(tx, ty)
+        elseif key == "gunship" then
+          fx, fy = x + 420 + k * 26, y + (k % 3) * 30
+        else
+          -- on the shore, already in their own range of it (a standing fight)
+          local rng = key == "artillery" and 380 or 170
+          local tx, ty = map:nearestTile(sx + 1 + (k % 3), sy + math.floor(k / 3) - 1, function(a, b)
+            local cx2, cy2 = map:center(a, b)
+            return map:passable("land", a, b) and U.dist(cx2, cy2, x, y) <= rng and U.dist(cx2, cy2, x, y) > (key == "artillery" and 120 or 0)
+          end, 12)
+          fx, fy = map:center(tx, ty)
+          fx, fy = fx + (k % 2) * 8, fy + (k % 2) * 8
+        end
+        foes[k] = w:spawn(key, 2, fx, fy); foes[k].built = 1
+        w:issue(foes[k], { type = "attack", target = dd })
+      end
+      local t = 0
+      while t < 90 and dd.alive do
+        local any = false
+        for _, f in ipairs(foes) do if f.alive then any = true end end
+        if not any then break end
+        w:update(1 / 30); t = t + 1 / 30
+      end
+      local left, metal = 0, 0
+      for _, f in ipairs(foes) do if f.alive then left = left + 1 end; metal = metal + f.def.cost.metal end
+      print(string.format("DDTEST destroyer vs %d %-10s (%4d metal): %s after %.1fs; %d of them left", n, key, metal,
+        dd.alive and string.format("WON (%d%% hp)", math.floor(dd.hp / dd.maxhp * 100)) or "sunk", t, left))
+      for _, f in ipairs(foes) do if f.alive then w:remove(f) end end
+      if dd.alive then w:remove(dd) end
+    end
+    return
+  end
   if os.getenv("PA_BBSPOT") then
     -- a battleship far off, an extractor on land, two enemy scouts raiding it: does the
     -- extractor's sight let the battleship shell them?

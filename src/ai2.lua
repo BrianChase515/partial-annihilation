@@ -367,7 +367,9 @@ function AI2:escortFlak(c)
   self.nextEscort = w.time + 2
   local have, flak = {}, {}
   for u in pairs(self.reserved) do
-    if u.alive and not u.disarmed then have[#have + 1] = u else self.reserved[u] = nil end
+    if u.key == "flak" then
+      if u.alive and not u.disarmed then have[#have + 1] = u else self.reserved[u] = nil end
+    end
   end
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == self.team and e.key == "flak" and e.built >= 1 and not e.disarmed and not self.reserved[e] then flak[#flak + 1] = e end
@@ -652,9 +654,56 @@ function AI2:thinkArmy()
   self:updateStage()
   self.tgtPick = nil -- a fresh target choice for any wave launched this think
   local r = AI.thinkArmy(self)
+  self:centreFleet()
   self:sendHurtHome()
   self:defendHome()
   return r
+end
+
+-- Where the water reaches the middle, destroyers go and hold it: they're the sea's brawlers,
+-- and from there they fight for the Power Core alongside the army
+function AI2:centreFleet()
+  local w = self.world
+  if self.centreWater == nil then
+    self.centreWater = false
+    local map = w.map
+    local cx, cy
+    if map.coreNode then cx, cy = map:center(map.coreNode.x, map.coreNode.y) else cx, cy = map.w * w.T / 2, map.h * w.T / 2 end
+    local x, y = self:waterNear(cx, cy, 16)
+    if x and U.dist(x, y, cx, cy) < 700 then
+      self.centreWater = { x = x, y = y }
+      Tel.note(w, "navy", self.team, string.format("water reaches the centre (%d from the core): destroyers will hold it", math.floor(U.dist(x, y, cx, cy))))
+    end
+  end
+  local cw = self.centreWater
+  if not cw then return end
+  local n = 0
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == self.team and e.key == "destroyer" and e.built >= 1 then
+      if e.hp < e.maxhp * 0.35 then
+        -- badly hurt: home to repair, it rejoins later
+        if self.reserved[e] then
+          self.reserved[e] = nil
+          if self.waterTX then
+            local hx, hy = w.map:center(self.waterTX, self.waterTY)
+            w:issue(e, { type = "retreat", x = hx, y = hy })
+          end
+        end
+      elseif not e.retreating then
+        n = n + 1
+        self.reserved[e] = true
+        self.wave[e] = nil
+        local a = n * 2.4
+        local tx, ty = self:waterNear(cw.x + math.cos(a) * 70 * math.min(n - 1, 3), cw.y + math.sin(a) * 70 * math.min(n - 1, 3), 5)
+        tx, ty = tx or cw.x, ty or cw.y
+        if #e.orders == 0 or U.dist(e.x, e.y, tx, ty) > 220 then w:issue(e, { type = "amove", x = tx, y = ty }) end
+      end
+    end
+  end
+  if n > 0 and not self.centreFleetNoted then
+    self.centreFleetNoted = true
+    Tel.note(w, "navy", self.team, "destroyers sail in to hold the centre")
+  end
 end
 
 -- the navy as base defense: once the enemy shows aircraft (or the base is being hit), a couple of
@@ -851,7 +900,8 @@ function AI2:pick(wts)
     artillery = (1 + 0.04 * k * tanks) * P.guns,
     tank = (1 + 0.03 * k * guns) * (0.8 + 0.2 * P.aggression),
     scout = (guns > 2 and 1 + 0.4 * k or 1) * (0.7 + 0.3 * P.raid),
-    boat = (self.navyPlan and not self.navyPaused) and 1.4 or 1, destroyer = (self.navyPlan and not self.navyPaused) and 1.4 or 1,
+    boat = (self.navyPlan and not self.navyPaused) and 1.4 or 1,
+    destroyer = ((self.navyPlan and not self.navyPaused) and 1.4 or 1) * (self.centreWater and 1.8 or 1),
     battleship = (self.navyPlan and not self.navyPaused) and 1.6 or 1, sub = (self.navyPlan and not self.navyPaused) and 1.2 or 1,
   }
   local adj = {}

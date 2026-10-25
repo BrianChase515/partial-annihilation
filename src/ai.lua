@@ -1137,7 +1137,7 @@ function AI:thinkBattleships(army)
     -- escorts: nearest free destroyers / boats
     local esc = {}
     for _, u in ipairs(army) do
-      if #esc < 3 and not ctl[u] and (u.key == "destroyer" or u.key == "boat") and not self.wave[u]
+      if #esc < 3 and not ctl[u] and (u.key == "destroyer" or u.key == "boat") and not self.wave[u] and not (self.reserved and self.reserved[u])
         and U.dist(u.x, u.y, b.x, b.y) < 1400 then
         esc[#esc + 1] = u; ctl[u] = true
       end

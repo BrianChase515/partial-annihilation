@@ -94,10 +94,12 @@ D.units = {
   },
   destroyer = {
     name = "Destroyer", short = "2", domain = "sea", shape = "circle",
-    radius = 16, hp = 1500, speed = 70, sight = 360,
-    weapon = { damage = 62, range = 330, reload = 1.5, speed = 560, targets = { land = true, sea = true, sub = true } },
-    cost = { metal = 260, energy = 1700, work = 200 },
-    desc = "Heavy warship. Long guns and depth charges for subs. Can't hit aircraft.",
+    radius = 16, hp = 3200, speed = 70, sight = 360,
+    -- the sea's brawler: shorter guns than before (260, still past a tank's 190), but it hits
+    -- hard, splashes, and takes a beating. Where water reaches the middle, it holds the centre
+    weapon = { damage = 80, range = 260, reload = 1.0, speed = 600, splash = 30, targets = { land = true, sea = true, sub = true } },
+    cost = { metal = 300, energy = 2000, work = 220 },
+    desc = "Heavy warship and the navy's brawler: very tough, heavy guns with splash, depth charges for subs - but shorter range (260). Where water reaches the middle of the map it can hold the centre against a land army. Can't hit aircraft.",
   },
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
