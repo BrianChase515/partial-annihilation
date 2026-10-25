@@ -115,9 +115,9 @@ The result screen names the personality you faced; the match log has its map rea
 
 Fights start early and in the open, but walking your Commander into a defended base isn't free: gun towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (70 metal) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 
-### A navy that guards the sky
+### Battleships reach across the map
 
-Aircraft can only be hit by what's built for it: flak trucks, fighters, AA towers - and ships. Patrol boats shoot at aircraft, destroyers carry AA machine guns (a destroyer can see off three gunships), and battleships add long-range flak to their 40-tile guns. So a fleet is a mobile alternative to a tower line: park it off your coast and it covers the base against air while its guns reach across the map - which makes it a target the enemy has to deal with.
+A battleship shells almost anywhere on the map - as long as something of yours can see the target. Your units' and buildings' eyes are its eyes, so one parked off your coast guards every extractor you own: raiders that hit your metal get shelled. It's slow-firing, it can't hit aircraft or subs, and everyone will want it dead - bombers above all. A navy is a mobile alternative to a tower line; air is the answer to a navy.
 
 ### Your Commander is a roguelike hero with a nuke
 Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:

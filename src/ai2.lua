@@ -179,6 +179,8 @@ function AI2:applyMapPlan()
     prof.navalFirst = true
     self.specFrom = 150
     self.navyPlan = true
+    -- a battleship is the point of a navy here: start one as soon as the economy allows
+    self.bbFrom, self.bbIncome = 200, 16
   end
   -- raiding: how often, and how small a party it will send at unguarded metal
   local rp = m.raid * P.raid
@@ -569,7 +571,6 @@ function AI2:thinkArmy()
   self:updateStage()
   self.tgtPick = nil -- a fresh target choice for any wave launched this think
   local r = AI.thinkArmy(self)
-  self:harborGuard()
   self:sendHurtHome()
   self:defendHome()
   return r

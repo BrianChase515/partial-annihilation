@@ -159,16 +159,17 @@ local function script(mode, secs)
   if os.getenv("PA_BBSPOT") then
     -- a battleship far off, an extractor on land, two enemy scouts raiding it: does the
     -- extractor's sight let the battleship shell them?
-    game = startFn({ size = 96, water = 0.6, seed = 11, autotest = true })
+    game = startFn({ size = os.getenv("PA_BBR") and 128 or 96, water = 0.6, seed = 11, autotest = true })
     game.ais = {}
     local w = game.world
     w.noFog = false
     local map = w.map
-    local sx, sy = map:nearestTile(math.floor(map.w / 2), math.floor(map.h / 2), function(x, y) return map:passable("sea", x, y) end, 40)
+    local sx, sy = map:nearestTile(os.getenv("PA_BBR") and 6 or math.floor(map.w / 2), os.getenv("PA_BBR") and 6 or math.floor(map.h / 2), function(x, y) return map:passable("sea", x, y) end, 40)
     local bx, by = map:center(sx, sy)
     local bb = w:spawn("battleship", 1, bx, by); bb.built = 1
     local lx, ly
-    for r = 20, 40 do
+    local r0 = tonumber(os.getenv("PA_BBR") or "20")
+    for r = r0, r0 + 20 do
       for a = 0, 15 do
         local tx, ty = math.floor(sx + math.cos(a / 16 * 6.28) * r), math.floor(sy + math.sin(a / 16 * 6.28) * r)
         if not lx and map:inBounds(tx, ty) and map:passable("land", tx, ty) then lx, ly = tx, ty end

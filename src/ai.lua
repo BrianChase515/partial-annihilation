@@ -988,7 +988,7 @@ function AI:pickUnit(f)
     local tm = world.teams[self.team]
     local harbor = self.profile.harbor
     local maxBB = harbor and math.min(4, 1 + math.floor(math.max(0, t - 360) / 240)) or (self.profile.navalFirst and 3 or 1)
-    local canBB = t > (harbor and 360 or 420) and tm.mIncome > (harbor and 18 or 24) and bships < maxBB
+    local canBB = t > (self.bbFrom or (harbor and 360 or 420)) and tm.mIncome > (self.bbIncome or (harbor and 18 or 24)) and bships < maxBB
       and self.diff.level and self.diff.level >= 3
     -- Turtles turn their home water into a fortress: battleships first, a few escorts against subs
     if harbor and canBB then return "battleship" end
