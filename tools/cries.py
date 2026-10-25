@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Render War is Hell battlefield cries into assets/voice/cry_*.ogg: death screams and wounded
+"""SUPERSEDED: the game now ships recorded voices (see assets/voice/CREDITS.md). Running this would overwrite
+them with the old synthetic cries.
+
+Render War is Hell battlefield cries into assets/voice/cry_*.ogg: death screams and wounded
 shouts, over a crackly field-radio filter (rougher than the announcer).
 Needs espeak-ng, ffmpeg, numpy, scipy.  Run from the repo root: python3 tools/cries.py"""
 import os, subprocess, tempfile

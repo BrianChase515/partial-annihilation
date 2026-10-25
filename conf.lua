@@ -10,7 +10,7 @@ function love.conf(t)
   t.window.highdpi = true
   t.window.vsync = 1
   t.window.msaa = 4
-  t.modules.joystick = false
+  t.modules.joystick = true
   t.modules.physics = false
   t.modules.video = false
 end

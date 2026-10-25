@@ -295,6 +295,21 @@ function G.new(opts)
         self:notice(string.format("%s: %s", SQ.byType[sq.type].name, sk.name), 1.4)
       end
     end
+    -- War is Hell: the enemy's last men give up - stop and decide what becomes of them
+    world.onSquadSurrender = function(ally, units)
+      if ally == world.ally[1] then return end
+      local fallen = {}
+      for _, sq in ipairs(SQ.squadsOf(world, 1)) do
+        for _, u in ipairs(sq.roster or {}) do if not u.alive then fallen[#fallen + 1] = u.callsign or u.def.name end end
+      end
+      self.mercy = { ally = ally, units = units, fallen = fallen, t = love.timer.getTime() }
+      -- (a computer-only test game: nobody to ask)
+      if self.opts.autotest and not os.getenv("PA_MERCY") then self:decideMercy("spare"); return end
+      if units[1] then require("src.cries").beg(units[1], nil, 1) end
+    end
+    world.onSquadBeg = function(u)
+      if world:isVisible(u) then require("src.cries").beg(u, self:soundView(), 0.9) end
+    end
     world.onSquadSound = function(name, x, y, v) SFX.at(name, x, y, self:soundView(), v) end
     -- every named crewman who falls gets a word (and, in War is Hell, a scream and some blood)
     world.onSquadDeath = function(sq, u)
@@ -1304,6 +1319,7 @@ function G:update(dt)
     if not flip.applied then return end
   end
   if self.paused or self.menuOpen or self.naming then return end
+  if self.mercy and not self.mercy.choice then return end
 
   -- camera panning: arrows / screen edge (wider zone, speeds up near the very edge)
   local w, h = self:viewSize()
@@ -1629,6 +1645,23 @@ end
 ---------------------------------------------------------------------------
 -- Input
 
+-- War is Hell: spare the ones who surrendered (they're marched off; the battle is won) or not
+function G:decideMercy(choice)
+  local m = self.mercy
+  if not m or m.choice then return end
+  m.choice = choice
+  local world = self.world
+  world.mercyChoice = choice
+  if choice == "spare" then
+    local n = 0
+    for _, u in ipairs(m.units) do if u.alive then n = n + 1; world:remove(u) end end
+    world.captives = n
+    for t = 1, world.np do if world.ally[t] == m.ally then world:eliminate(t) end end
+  else
+    self:notice("No quarter.", 2.5)
+  end
+end
+
 function G:mousepressed(x, y, button)
   self.stats.actions = (self.stats.actions or 0) + 1
   if self.naming then return end
@@ -1638,6 +1671,7 @@ function G:mousepressed(x, y, button)
   local SET = require("src.settings")
   if SET.open then SET.click(x, y, button); return end
   if self.menuOpen then return UI.menuClick(self, x, y, button) end
+  if self.mercy and not self.mercy.choice then return UI.mercyClick(self, x, y, button) end
   if UI.click(self, x, y, button) then return end
   local wx, wy = self:screenToWorld(x, y)
   local shift = love.keyboard.isDown("lshift", "rshift")
@@ -1930,6 +1964,7 @@ function G:keypressed(key)
     return
   end
   if self.menuOpen then return end
+  if self.mercy and not self.mercy.choice then return end
   if key == "f1" then self.showHelp = not self.showHelp; return end
   if key == "pause" or key == "f3" then self.paused = not self.paused; return end
 

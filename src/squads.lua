@@ -668,6 +668,7 @@ function S.update(world, dt)
       st.byDrain = (st.byDrain or 0) + math.abs(d)
     end
   end
+  if world.wih then S.updateWih(world, dt) end
   -- defeat: the HQ is gone, or the tickets ran out
   st.checkT = (st.checkT or 0) - dt
   if st.checkT <= 0 then
@@ -686,6 +687,152 @@ function S.update(world, dt)
       if not tm.dead and out then
         if os.getenv("PA_SQDBG") then print("SQOUT", tt, math.floor(world.time), st.tickets[world.ally[tt]], "drain", math.floor(st.byDrain or 0), "losses", st.byLoss or 0) end
         world:eliminate(tt)
+      end
+    end
+  end
+end
+
+
+---------------------------------------------------------------------------
+-- War is Hell endgame: blood trails to hunt by, and a beaten enemy that begs for mercy
+
+S.TRAIL_HP = 0.75      -- below this much health a man leaves a trail of blood
+S.TRAIL_STEP = 28      -- a drop every this many pixels walked (and now and then standing still)
+S.TRAIL_LIFE = 180     -- drops dry up after this many seconds
+S.MERCY_AT = 2         -- an enemy side down to this many men (and outnumbered) gives up
+S.BEGS = { "Please! Don't shoot!", "I surrender!", "Mercy! Mercy!", "I have a family...", "We give up!",
+  "Don't... please...", "Hold your fire! I'm done!", "I just want to go home" }
+
+local function living(world, ally)
+  local out = {}
+  for _, sq in ipairs(world.squads.list) do
+    if world.ally[sq.team] == ally then
+      for _, u in ipairs(sq.members) do if u.alive then out[#out + 1] = u end end
+    end
+  end
+  return out
+end
+
+function S.updateWih(world, dt)
+  local st = world.squads
+  local t = world.time
+  st.trail = st.trail or {}
+  local trail = st.trail
+  -- the wounded bleed as they go
+  for _, sq in ipairs(st.list) do
+    for _, u in ipairs(sq.members) do
+      if u.alive and not u.def.air and u.hp < u.maxhp * S.TRAIL_HP then
+        local moved = u.trailX and U.dist(u.x, u.y, u.trailX, u.trailY) or 999
+        local still = t - (u.trailT or -99) > 5 and moved < 4
+        if moved >= S.TRAIL_STEP or still then
+          local hurt = 1 - u.hp / u.maxhp
+          local a = love.math.random() * math.pi * 2
+          trail[#trail + 1] = { x = u.x + math.cos(a) * 5, y = u.y + math.sin(a) * 5, t = t,
+            r = 2 + hurt * 3 + love.math.random() * 1.5, ally = world.ally[sq.team], pool = still }
+          u.trailX, u.trailY, u.trailT = u.x, u.y, t
+        end
+      end
+    end
+  end
+  -- drops dry up; the player finds a drop once his men have had eyes on it
+  st.trailT = (st.trailT or 0) - dt
+  if st.trailT <= 0 then
+    st.trailT = 0.4
+    local keep = {}
+    for _, d in ipairs(trail) do
+      if t - d.t < S.TRAIL_LIFE then
+        if not d.found then
+          local tx, ty = math.floor(d.x / world.T), math.floor(d.y / world.T)
+          d.found = world:tileVisible(tx, ty)
+        end
+        keep[#keep + 1] = d
+      end
+    end
+    while #keep > 1500 do table.remove(keep, 1) end
+    st.trail = keep
+    trail = keep
+  end
+  -- mercy: a computer side down to its last men, and outnumbered, throws down its arms
+  local mine = world.ally[world.playerTeam]
+  local us = #living(world, mine)
+  st.surrendered = st.surrendered or {}
+  for tt = 1, world.np do
+    local ally = world.ally[tt]
+    if ally ~= mine and not st.surrendered[ally] then
+      local them = living(world, ally)
+      if #them > 0 and #them <= S.MERCY_AT and us >= #them + 2 then
+        st.surrendered[ally] = true
+        for _, u in ipairs(them) do
+          u.surrendered, u.holdFire, u.flagSeed = true, true, love.math.random() * 6
+          u.begT = t + love.math.random() * 1.5
+          world:issue(u, { type = "move", x = u.x, y = u.y })
+        end
+        for _, sq in ipairs(st.list) do if world.ally[sq.team] == ally then sq.surrendered = true end end
+        if world.onSquadSurrender then world.onSquadSurrender(ally, them) end
+      end
+    end
+  end
+  -- the ones who gave up: hands up, in plain sight, pleading
+  for _, sq in ipairs(st.list) do
+    if sq.surrendered then
+      for _, u in ipairs(sq.members) do
+        if u.alive then
+          u.holdFire = true
+          local o = u.orders[1]
+          if o and not (o.type == "move" and U.dist(o.x, o.y, u.x, u.y) < 10) then world:issue(u, { type = "move", x = u.x, y = u.y }) end
+          world.visionSources[#world.visionSources + 1] = { x = u.x, y = u.y, r = 110, untilT = t + 0.3, ally = mine }
+          world.fogDirty = true
+          if t >= (u.begT or 0) then
+            u.begT = t + 3.5 + love.math.random() * 2.5
+            u.begLine = S.BEGS[love.math.random(#S.BEGS)]
+            u.begShown = t
+            if world.onSquadBeg then world.onSquadBeg(u) end
+          end
+        end
+      end
+    end
+  end
+end
+
+-- blood the player has found, then the white flags and the pleading (drawn over the fog)
+function S.drawWih(world, cam)
+  local lg = love.graphics
+  local st = world.squads
+  local t = world.time
+  for _, d in ipairs(st.trail or {}) do
+    if d.found then
+      local age = (t - d.t) / S.TRAIL_LIFE
+      local a = (1 - age) * 0.85
+      lg.setColor(0.55 - 0.25 * age, 0.03, 0.03, a)
+      lg.circle("fill", d.x, d.y, d.r * (d.pool and 1.6 or 1))
+    end
+  end
+  local R = require("src.render")
+  for _, sq in ipairs(st.list) do
+    if sq.surrendered then
+      for _, u in ipairs(sq.members) do
+        if u.alive then
+          local top = u.y - u.def.radius - 6
+          -- a white flag
+          lg.setColor(0.35, 0.28, 0.2)
+          lg.setLineWidth(2)
+          lg.line(u.x + u.def.radius, top + 6, u.x + u.def.radius, top - 22)
+          local wave = math.sin(t * 6 + (u.flagSeed or 0)) * 2
+          lg.setColor(0.96, 0.96, 0.92)
+          lg.polygon("fill", u.x + u.def.radius, top - 22, u.x + u.def.radius + 16, top - 18 + wave, u.x + u.def.radius, top - 12)
+          -- what he's saying
+          if u.begLine and t - (u.begShown or -99) < 3 then
+            local f = R.font(13)
+            lg.setFont(f)
+            local tw = f:getWidth(u.begLine) + 14
+            local bx, by = u.x - tw / 2, top - 52
+            lg.setColor(0.97, 0.95, 0.9, 0.95)
+            lg.rectangle("fill", bx, by, tw, 22, 6)
+            lg.polygon("fill", u.x - 5, by + 22, u.x + 5, by + 22, u.x, by + 29)
+            lg.setColor(0.15, 0.08, 0.06)
+            lg.print(u.begLine, bx + 7, by + 3)
+          end
+        end
       end
     end
   end
@@ -716,6 +863,7 @@ end
 
 function S.draw(world, cam, game)
   local lg = love.graphics
+  if world.wih then S.drawWih(world, cam) end
   -- the ACTIVE squad (whose skills Q / W fire): a gold beacon on its leader, the reach of his
   -- skills, and a gold ring under every member
   local act = game and game.activeSquad and game:activeSquad()
@@ -959,7 +1107,7 @@ function AI:update(dt)
   for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
   for _, sq in ipairs(mine) do
     local L = sq.leader
-    if L and L.alive and look[sq] then
+    if L and L.alive and look[sq] and not sq.surrendered then
       local frac = squadHp(sq)
       -- nearest enemy to the leader (units first, then their HQ)
       local foe, fd

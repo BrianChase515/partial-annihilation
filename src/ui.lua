@@ -2049,6 +2049,12 @@ function UI.drawOver(game)
   local sub = win and "Every enemy Commander has been annihilated. Partially." or "Your side has been annihilated. Completely."
   if world.arena then sub = win and "The enemy Core is rubble." or "Your Core has fallen." end
   if world.craft then sub = win and "Not one enemy building is left standing." or "Your last building has fallen." end
+  if world.wih then
+    if not win then sub = "Every one of your men is gone."
+    elseif world.mercyChoice == "spare" then sub = string.format("%d prisoner%s taken. The war is over for them.", world.captives or 0, (world.captives or 0) == 1 and "" or "s")
+    elseif world.mercyChoice == "kill" then sub = "No quarter given. Not one of them walked away."
+    else sub = "The last of them is dead." end
+  end
   lg.print(sub, w / 2 - font(14):getWidth(sub) / 2, py + 68)
 
   local f = game.finalScore
@@ -2218,6 +2224,91 @@ function UI.drawOver(game)
     px + 30, py + OVER_H - 150, OVER_W - 60)
   end
   for _, r in ipairs(UI.overRects(game)) do button(r.x, r.y, r.w, r.h, r.label) end
+end
+
+-- War is Hell: the enemy's last men have thrown down their arms. Before you decide, the names
+-- of everyone you lost getting here
+function UI.mercyRects(game)
+  local w, h = lg.getDimensions()
+  local nf = game.mercy and #game.mercy.fallen or 0
+  local cols = math.max(1, math.min(4, math.ceil(nf / 12)))
+  local pw, ph = math.min(w - 40, 760), math.min(h - 40, 250 + math.max(1, math.ceil(nf / cols)) * 18)
+  local px, py = w / 2 - pw / 2, h / 2 - ph / 2
+  return { panel = { x = px, y = py, w = pw, h = ph },
+    spare = { x = w / 2 - 250, y = py + ph - 66, w = 240, h = 46, action = "spare" },
+    kill = { x = w / 2 + 10, y = py + ph - 66, w = 240, h = 46, action = "kill" } }
+end
+
+function UI.drawMercy(game)
+  local m = game.mercy
+  if not m or m.choice then return end
+  local w, h = lg.getDimensions()
+  local k = math.min(1, (love.timer.getTime() - m.t) / 0.6)
+  lg.setColor(0.08, 0, 0, 0.72 * k)
+  lg.rectangle("fill", 0, 0, w, h)
+  local r = UI.mercyRects(game)
+  local p = r.panel
+  panelBox(p.x, p.y, p.w, p.h, 0.97 * k)
+  lg.setColor(0.75, 0.15, 0.12, k)
+  lg.setLineWidth(2)
+  lg.rectangle("line", p.x + 1, p.y + 1, p.w - 2, p.h - 2, 6)
+  local n = 0
+  for _, u in ipairs(m.units) do if u.alive then n = n + 1 end end
+  lg.setFont(font(30))
+  lg.setColor(0.96, 0.94, 0.88, k)
+  local title = "THEY'RE BEGGING FOR MERCY"
+  lg.print(title, w / 2 - font(30):getWidth(title) / 2, p.y + 18)
+  lg.setFont(font(14))
+  lg.setColor(0.8, 0.78, 0.74, k)
+  local sub = string.format("%d enemy soldier%s %s thrown down their arms. You lost %d %s to get here.", n, n == 1 and "" or "s",
+    n == 1 and "has" or "have", #m.fallen, #m.fallen == 1 and "man" or "men")
+  lg.printf(sub, p.x + 20, p.y + 64, p.w - 40, "center")
+  -- the fallen, by name
+  lg.setColor(0.75, 0.2, 0.16, k)
+  lg.setFont(font(12))
+  lg.printf("IN MEMORY OF", p.x + 20, p.y + 96, p.w - 40, "center")
+  local top, bottom = p.y + 118, r.spare.y - 46
+  local rowH = 18
+  local rows = math.max(1, math.floor((bottom - top) / rowH))
+  local cols = math.max(1, math.min(4, math.ceil(#m.fallen / rows)))
+  local colW = (p.w - 60) / cols
+  local cap = rows * cols
+  lg.setFont(font(13))
+  for i, name in ipairs(m.fallen) do
+    if i > cap then break end
+    local c, rr = math.floor((i - 1) / rows), (i - 1) % rows
+    local txt = (i == cap and #m.fallen > cap) and string.format("... and %d more", #m.fallen - cap + 1) or name
+    lg.setColor(0.86, 0.84, 0.8, k)
+    lg.printf(txt, p.x + 30 + c * colW, top + rr * rowH, colW - 10, cols == 1 and "center" or "left")
+  end
+  if #m.fallen == 0 then
+    lg.setColor(0.6, 0.7, 0.6, k)
+    lg.printf("Not one of your men fell.", p.x + 20, top + 10, p.w - 40, "center")
+  end
+  lg.setFont(font(13))
+  lg.setColor(0.7, 0.68, 0.64, k)
+  lg.printf("Take them prisoner and the battle is won. Or give no quarter, and finish it yourself.", p.x + 20, bottom + 8, p.w - 40, "center")
+  local mx, my = love.mouse.getPosition()
+  for _, b in ipairs({ r.spare, r.kill }) do
+    local hov = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
+    if b.action == "spare" then lg.setColor(hov and 0.3 or 0.2, hov and 0.42 or 0.3, hov and 0.3 or 0.22, k)
+    else lg.setColor(hov and 0.6 or 0.42, hov and 0.12 or 0.08, hov and 0.1 or 0.06, k) end
+    lg.rectangle("fill", b.x, b.y, b.w, b.h, 6)
+    lg.setColor(1, 1, 1, 0.5 * k)
+    lg.rectangle("line", b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 6)
+    lg.setFont(font(17))
+    lg.setColor(1, 1, 1, k)
+    local lbl = b.action == "spare" and "Take them prisoner" or "No mercy"
+    lg.print(lbl, b.x + b.w / 2 - font(17):getWidth(lbl) / 2, b.y + 12)
+  end
+end
+
+function UI.mercyClick(game, x, y, b)
+  if b ~= 1 or love.timer.getTime() - game.mercy.t < 0.6 then return end
+  local r = UI.mercyRects(game)
+  for _, q in ipairs({ r.spare, r.kill }) do
+    if x >= q.x and x <= q.x + q.w and y >= q.y and y <= q.y + q.h then game:decideMercy(q.action) end
+  end
 end
 
 function UI.overClick(game, x, y, b)
@@ -2436,6 +2527,7 @@ function UI.draw(game)
   end
 
   if not game.showHelp and not game.menuOpen then UI.drawPendingTip(game) else game.pendingTip = nil end
+  if not game.menuOpen then UI.drawMercy(game) end
   if game.showHelp then UI.drawHelp(game.craft and "craft" or (game.world.squads and "coh") or game.arena) end
   if game.menuOpen then UI.drawMenu(game) end
   if require("src.settings").open then require("src.settings").draw() end

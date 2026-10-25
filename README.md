@@ -91,7 +91,7 @@ A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units
 - **Built for people, not just bots.** Squad units are 60% tougher than in Annihilation, so fights last long enough to read and use skills, and points take 14 s to take. Lower difficulties also limit the bot's attention: it only looks after one or two squads at a time (level 9-10 manage them all).
 - **Terrain matters.** Hills see 30% further but take 15% more damage; bunkers (sandbag rings) cut damage by 40% and sight by 30%. The computer uses them too. Tanks carry a light anti-air machine gun, and Recon's guns hit aircraft hard.
 - **Named crews.** Every unit has a name and rank (Sgt. Price, Pvt. Kowalski...), shown on the squad cards with their health; the fallen stay listed as KIA.
-- **War is Hell** (a second game type, with a camouflage title screen): no HQ, no points, no reinforcements - when they die, they die. Deep fog on a rougher, medium map with more hills and bunkers; find the enemy and destroy every last unit. A fallen leader's best survivor takes command. Brutal: blood on the ground, screams and wounded cries over a field radio (one voice at a time, never over the announcer), heavier, deeper gunfire and explosions, and its own grim score (No Man's Land, Iron Rain, The Long Night). Hover the ground to see what a hill or bunker does; squad cards show who's on high ground (^) or in a bunker (#). The computer only knows what its side can see, sweeps for you, and dives into bunkers when the shooting starts.
+- **War is Hell** (a second game type, with a camouflage title screen): no HQ, no points, no reinforcements - when they die, they die. Deep fog on a rougher, medium map with more hills and bunkers; find the enemy and destroy every last unit. A fallen leader's best survivor takes command. Brutal: blood on the ground, screams and wounded cries over a field radio (one voice at a time, never over the announcer), heavier, deeper gunfire and explosions, and its own grim score (No Man's Land, Iron Rain, The Long Night). Hover the ground to see what a hill or bunker does; squad cards show who's on high ground (^) or in a bunker (#). The computer only knows what its side can see, sweeps for you, and dives into bunkers when the shooting starts. The wounded leave a trail of blood you can follow once your men have laid eyes on it (it dries up after three minutes). When the enemy is down to its last two men and outnumbered, they throw down their arms and beg: the game stops on the names of everyone you lost, and you choose - take them prisoner and the battle is won, or no mercy, and they stand there under a white flag, pleading, until you finish it.
 - 1v1 or 2v2 on a small or medium map, difficulty 1-10. The enemy picks its own squads or mirrors yours (good for learning). Not scored yet (mode version 0.1).
 
 ### Your Commander is a roguelike hero with a nuke
@@ -219,8 +219,32 @@ The game fits itself to your screen: small displays such as the Steam Deck's 128
 ### Steam Deck
 1. In **Desktop Mode**, download the AppImage and mark it executable.
 2. In Steam (still in Desktop Mode), choose **Games, Add a Non-Steam Game to My Library**, browse to the AppImage, and add it.
-3. Back in **Gaming Mode**, open the game's controller settings and pick the **Keyboard and Mouse** (or **Web Browser**) template. The right trackpad moves the mouse, R2 left-clicks, L2 right-clicks, and the touchscreen works as a mouse too.
-4. Map a few buttons to the keys you use most: `F` (flee), `D` (hold fire), `Z` / `X` (pick upgrades), `Q` `W` `E` `R` (Arena skills), `Space` (jump to the action) and `Esc` (menu).
+3. Back in **Gaming Mode**, open the game's controller settings and pick the **Gamepad with Mouse Trackpad** template. The game has its own controller support (below), and the right trackpad stays a mouse.
+4. The back grips (L4 L5 R4 R5) aren't seen by games directly; bind them to keys you like, for example `Alt`, `F` (flee), `D` (hold fire) and `Space`.
+
+## Controller
+
+Any Xbox-style pad, a PlayStation pad or the Steam Deck's own controls. Keyboard and mouse keep working alongside it. A hint bar shows what each button does in the current mode (turn it off, or change the pointer speed, in Settings).
+
+| Button | Everywhere |
+|---|---|
+| Left stick | Pointer (the trackpad / mouse move it too) |
+| Right stick | Pan the camera |
+| LT / RT | Zoom out / in |
+| A | Left-click (hold and move to box-select) |
+| B | Right-click (orders) |
+| LB / RB | Hold for Shift / Ctrl (Arena: skills E / R) |
+| D-pad | 1-4: groups or squads (RB + D-pad saves a group, LB adds) |
+| Start | Menu |
+| Y (hold) | Command wheel: tilt the left stick at an entry, let go of Y |
+
+| | Annihilation | Commander of Heroes | Arena | Craft |
+|---|---|---|---|---|
+| X | Attack-move | Skill 1 (Q) | Skill Q | Skill / slot 1 |
+| Y (tap) | Stop | Skill 2 (W) | Skill W | Skill / slot 2 |
+| View | Idle builder | Next squad (C) | Go home | Idle worker |
+| L3 | Jump to Commander | Squad 5 | Center | Next hero |
+| R3 | Retreat | Flee active squad | Stop | Center |
 
 The Windows and Linux builds can't replace themselves while running, so their update button opens this page instead.
 
@@ -316,6 +340,6 @@ Bump `VERSION` and `D.VERSION` in `src/defs.lua` together, then run `tools/build
 
 ## License
 
-The game's code, music, sound effects and voices are MIT. See [LICENSE](LICENSE).
+The game's code, music, sound effects and voices are MIT. See [LICENSE](LICENSE). The exception is War is Hell's screams and wounded cries: recorded voices from OpenGameArt by VoiceBosch (CC BY-SA 4.0), creativeheroes and thanvannispen (CC BY 3.0) and JohnsonBrandEditing (CC0). `assets/voice/CREDITS.md` has the details.
 
 Unit and building icons are from [game-icons.net](https://game-icons.net) by Lorc, Delapouite, Cathelineau, Skoll, sbed, Caro Asercion and Pierre Leducq, used under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). They were recolored to white silhouettes. `assets/icons/CREDITS.txt` lists which icon is which.

@@ -1,8 +1,9 @@
--- War is Hell: the human cost. Death screams and wounded shouts (assets/voice/cry_*.ogg, see
--- tools/cries.py), placed in the world like combat sounds, and blood: sprays on hits, pools where
+-- War is Hell: the human cost. Death screams and wounded shouts (assets/voice/cry_*.ogg: real
+-- recorded voices, credited in assets/voice/CREDITS.md - VoiceBosch's death and damage packs plus the "aargh"
+-- screams from OpenGameArt), placed in the world like combat sounds, and blood: sprays on hits, pools where
 -- someone fell (they stay on the ground).
 local C = {}
-local NDEATH, NHURT = 8, 8
+local NDEATH, NHURT = 33, 22
 local cache = {}
 local lastAny, lastBy = -99, setmetatable({}, { __mode = "k" })
 local hurtSrc = setmetatable({}, { __mode = "k" })
@@ -67,6 +68,12 @@ function C.hurt(u, view, vol)
   if u.hp > u.maxhp * 0.4 or love.math.random() > 0.35 then return end
   local s = play("cry_hurt_" .. love.math.random(NHURT), u, view, vol)
   if s then lastAny, lastBy[u] = now, now; hurtSrc[s] = true end
+end
+
+-- a man who has given up, pleading (War is Hell's mercy)
+function C.beg(u, view, vol)
+  local s = play("cry_hurt_" .. love.math.random(NHURT), u, view, vol)
+  if s then hurtSrc[s] = true; s:setPitch(1.05 + love.math.random() * 0.1) end
 end
 
 -- blood: a fan of droplets on a hit; a pool and spatter where someone fell (kept, up to a cap)

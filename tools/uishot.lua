@@ -178,6 +178,66 @@ local function script(mode, secs)
       print("SQUADS", t, table.concat(l, ","))
     end
     local nextOrder, nextLog = 0, 0
+    if os.getenv("PA_PAD") then
+      -- controller hints (and the command wheel held open on an entry)
+      for _ = 1, 30 do game:update(1 / 30) end
+      local sq = SQ.squadsOf(w, 1)[1]
+      game:pickSquad(sq)
+      game:centerOn(sq.leader.x, sq.leader.y)
+      PAD.fake({ wheel = tonumber(os.getenv("PA_PAD")) ~= 0 and tonumber(os.getenv("PA_PAD")) or nil })
+      for _ = 1, 4 do frame() end
+      pending = "uishot_pad.png"
+      frame(); frame()
+      print("UISHOT pad")
+      return
+    end
+    if os.getenv("PA_MERCY") then
+      -- War is Hell endgame: some of ours fall, the enemy is cut down to two wounded men who
+      -- run off bleeding; they give up, the mercy screen comes up
+      for _ = 1, 30 do game:update(1 / 30) end
+      local mine = SQ.squadsOf(w, 1)
+      for i = 1, 4 do w:kill(mine[i].members[#mine[i].members]) end
+      w:kill(mine[2].members[1])
+      local foes = {}
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 2 and not e.def.building then foes[#foes + 1] = e end end
+      for i = (os.getenv("PA_MERCY") == "trail" and 4 or 3), #foes do w:kill(foes[i]) end
+      local L = mine[1].leader
+      for k = 1, os.getenv("PA_MERCY") == "trail" and 3 or 2 do
+        local f = foes[k]
+        f.hp = f.maxhp * 0.3
+        f.x, f.y = L.x + 260, L.y + (k - 1.5) * 60
+        w:issue(f, { type = "move", x = f.x + 500, y = f.y + 300 })
+      end
+      local surr
+      for i = 1, 300 do
+        game:update(1 / 30)
+        if game.mercy and not surr then surr = i; print("MERCY at frame", i, "fallen", #game.mercy.fallen, "units", #game.mercy.units) end
+      end
+      local found, total = 0, 0
+      for _, d in ipairs(w.squads.trail or {}) do total = total + 1; if d.found then found = found + 1 end end
+      print("TRAIL drops", total, "found", found)
+      game:centerOn(foes[1].x, foes[1].y)
+      for _ = 1, 50 do frame() end
+      pending = "uishot_mercy.png"
+      frame(); frame()
+      if os.getenv("PA_MERCY") == "kill" then
+        game:decideMercy("kill")
+        print("dist to nearest of ours", (function() local b = 1e9; for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and not e.def.building then b = math.min(b, math.sqrt((e.x - foes[1].x) ^ 2 + (e.y - foes[1].y) ^ 2)) end end; return math.floor(b) end)(),
+          "range", w:rangeOf(L), "look", w:lookOf(L), "canTarget", w:canTarget(L, foes[1]))
+        for _ = 1, 240 do game:update(1 / 30) end
+        print("AFTER kill: holdFire", foes[1].holdFire, "flag", foes[1].surrendered, "alive", foes[1].alive)
+        game:centerOn(foes[1].x, foes[1].y)
+        for _ = 1, 4 do frame() end
+        pending = "uishot_mercy2.png"
+        frame(); frame()
+      else
+        game:decideMercy("spare")
+        for _ = 1, 60 do game:update(1 / 30) end
+        print("AFTER spare: over", w.over and w.over.winnerAlly, "captives", w.captives)
+      end
+      print("UISHOT mercy")
+      return
+    end
     if os.getenv("PA_BARRAGE") then
       -- three enemy tanks parked 500 from our Battery's leader, spotted by a scout of ours; barrage them
       game.ais = {}

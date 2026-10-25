@@ -3,6 +3,8 @@ local Menu = require("src.menu")
 local Game = require("src.game")
 
 local state, menu, game
+PAD = require("src.pad")
+PAD.install({ state = function() return state end, game = function() return game end })
 local lastOpts
 local autotest = nil
 smoke = nil
@@ -341,6 +343,7 @@ function love.update(dt)
     return
   end
   local MUSIC = require("src.music")
+  PAD.update(dt)
   MUSIC.update(dt, state == "menu" and "menu" or nil)
   if state == "menu" then
     love.mouse.setGrabbed(false)
@@ -374,6 +377,7 @@ function love.draw()
     return
   end
   if state == "menu" then menu:draw() else game:draw() end
+  PAD.draw()
   if smoke then smoke.afterDraw() end
   if menuShot then
     menuShot = menuShot + 1
@@ -416,6 +420,11 @@ function love.keypressed(k)
     game:keypressed(k)
   end
 end
+
+function love.gamepadpressed(j, b) if not autotest then PAD.pressed(j, b) end end
+function love.gamepadreleased(j, b) if not autotest then PAD.released(j, b) end end
+function love.joystickadded(j) PAD.added(j) end
+function love.joystickremoved(j) PAD.removed(j) end
 
 function love.textinput(t)
   if state == "game" and game and not autotest then game:textinput(t) end
