@@ -800,6 +800,7 @@ function AI:thinkEconomy()
         if p.navalFirst and hasWater and yards == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "shipyard"
         elseif p.airFirst and airfacs == 0 and factories >= 1 and mFuture > 4 and not lateSpec then task = "airfac"
         elseif landfacs == 0 and factories >= 1 and mFuture > 6 then task = "landfac"
+        elseif self.yardFrom and yards == 0 and hasWater and landfacs >= 1 and mFuture > 7 and t > self.yardFrom then task = "shipyard" -- (v2: land and sea at once)
         elseif airfacs == 0 and mFuture > 6.5 and t > (self.specFrom and self.specFrom - 50 or 150) then task = "airfac"
         elseif yards == 0 and hasWater and mFuture > 7.5 and t > (self.specFrom or 200) then task = "shipyard"
         elseif p.harbor and yards == 0 and hasWater and mFuture > 6 and t > 180 then task = "shipyard"
