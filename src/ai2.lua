@@ -59,7 +59,9 @@ function AI2.new(world, team, level, profileKey)
   -- and it puts its early metal into land, plants and army, not into specialist plants, towers
   -- and storage it doesn't need yet (Fortress / naval / air personalities aside)
   self.specFrom = (prof.navalFirst or prof.airFirst) and 200 or 300
-  self.turretFrom = 300
+  -- towers are what stop a Commander diving into the base: a couple at the core by ~2:30
+  self.turretFrom = 140
+  self.diff.turrets = math.max(2, self.diff.turrets)
   self.storageFrom = 480
   -- personality shapes the opening
   local P = self.p.w

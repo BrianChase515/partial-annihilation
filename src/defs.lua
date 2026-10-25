@@ -6,11 +6,11 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.21.0"
+D.VERSION = "0.21.1"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
-  rts = { "0.9", "Armed bases: structures shoot back, towers punish Commanders. Still being balanced." },
+  rts = { "0.9", "Towers stop Commanders. Still being balanced." },
   arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
   craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
   coh = { "0.4", "Squads, leader skills, capture points and tickets - and War is Hell. Still being balanced." },
@@ -312,8 +312,9 @@ D.units = {
     name = "Gun Tower", short = "T", domain = "building", building = true,
     w = 1, h = 1, place = "land", hp = 1600,
     weapon = { damage = 30, range = 300, reload = 0.5, speed = 650, targets = { land = true, sea = true } },
-    cost = { metal = 85, energy = 650, work = 80 },
-    desc = "Defensive tower against land units and ships.",
+    antiCommander = true, -- (x2.5 against Commanders, see D.TOWER_VS_COMMANDER)
+    cost = { metal = 70, energy = 550, work = 62 },
+    desc = "Defensive tower against land units and ships. Hits Commanders 2.5x as hard: a Commander needs support to take a base with towers.",
   },
   aaturret = {
     name = "AA Tower", short = "A", domain = "building", building = true,
@@ -327,18 +328,10 @@ D.units = {
 -- Commander Craft (Warcraft-style mode): its own units, buildings, research and races
 require("src.craft_defs")(D)
 
--- Armed bases (Annihilation 0.9): every structure shoots back a little - extractors, solars and
--- storage with a light gun, plants with a heavier one - and towers hit Commanders 2.5x as hard.
--- Fights still start in the field just as early; what stops being free is walking a Commander
--- and a few tanks into a base. (Annihilation and its AI only; the hero modes don't use these)
-D.ARMED_BASES = true
+-- Towers stop Commanders (Annihilation 0.9): gun towers hit a Commander 2.5x as hard, so a
+-- Commander has to come with support to crack a defended base - and a hurt Commander, or units
+-- that fled home, are safe under their towers. Other buildings don't shoot; towers are cheap.
 D.TOWER_VS_COMMANDER = 2.5
-do
-  local light = { damage = 7, range = 170, reload = 0.7, speed = 600, targets = { land = true, sea = true } }
-  local plant = { damage = 16, range = 230, reload = 0.6, speed = 600, targets = { land = true, sea = true } }
-  for _, k in ipairs({ "mex", "solar", "storage" }) do if D.units[k] and not D.units[k].weapon then D.units[k].weapon = light end end
-  for _, k in ipairs({ "landfac", "airfac", "shipyard" }) do if D.units[k] and not D.units[k].weapon then D.units[k].weapon = plant end end
-end
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do

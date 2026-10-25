@@ -1149,9 +1149,10 @@ function W:damage(o, amount, attacker)
       self:gainXP(attacker, xp)
     end
   end
-  -- armed bases: towers (and every armed structure) hit a Commander hard - in Annihilation
+  -- towers stop Commanders: a gun tower hits a Commander 2.5x as hard (Annihilation)
   local tvc = D.towerVsCmd or D.TOWER_VS_COMMANDER
-  if tvc and o.key == "commander" and attacker and attacker.def and attacker.def.building and not self.heroes and not self.craft and not self.squads then
+  if tvc and o.key == "commander" and attacker and attacker.def and (attacker.def.antiCommander or (D.towerVsCmd and attacker.def.building))
+    and not self.heroes and not self.craft and not self.squads then
     amount = amount * tvc
   end
   if self.tel then self.tel:damage(o, amount, attacker) end

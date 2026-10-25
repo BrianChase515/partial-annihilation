@@ -111,9 +111,9 @@ In Annihilation it keeps the classic economy and building and adds:
 
 The result screen names the personality you faced; the match log has its map read and every choice with the runners-up.
 
-### Armed bases
+### Towers stop Commanders
 
-Fights start early and in the open, but walking your Commander and a few tanks into a base isn't free: every structure shoots back (extractors, solars and storage with a light gun, plants with a heavier one) and towers hit Commanders 2.5x as hard. Raids need a few units, a base needs a real army, and air and the navy get time to matter.
+Fights start early and in the open, but walking your Commander into a defended base isn't free: gun towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (70 metal) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 
 ### Your Commander is a roguelike hero with a nuke
 Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:
