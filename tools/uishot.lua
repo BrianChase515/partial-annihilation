@@ -134,13 +134,20 @@ local function script(mode, secs)
     local w = game.world
     w.noFog = true
     local map = w.map
-    for _, ship in ipairs({ "destroyer", "battleship", "tank", "turret" }) do
+    for _, ship in ipairs({ "boat", "destroyer", "battleship", "tank", "turret", "battleship+2boats", "battleship+3boats" }) do
       local layer = (ship == "tank" or ship == "turret") and "land" or "sea"
       local tx, ty = map:nearestTile(math.floor(map.w / 2), math.floor(map.h / 2), function(x, y) return map:passable(layer, x, y) end, 40)
       local x, y = map:center(tx, ty)
-      local target = w:spawn(ship, 1, x, y); target.built = 1
+      local nb = tonumber(ship:match("%+(%d)boats") or "0")
+      local target = w:spawn(ship:match("^%a+"), 1, x, y); target.built = 1
+      local screen = {}
+      for k = 1, nb do
+        local bx, by = map:nearestTile(tx + (k == 1 and 2 or (k == 2 and -2 or 0)), ty + (k == 3 and 2 or 1), function(a, b) return map:passable("sea", a, b) end, 8)
+        local sx2, sy2 = map:center(bx, by)
+        screen[k] = w:spawn("boat", 1, sx2, sy2); screen[k].built = 1
+      end
       local gs = {}
-      for k = 1, 3 do gs[k] = w:spawn("gunship", 2, x + 400 + k * 20, y + k * 15); gs[k].built = 1; w:issue(gs[k], { type = "attack", target = target }) end
+      for k = 1, (nb > 0 and 4 or 3) do gs[k] = w:spawn("gunship", 2, x + 400 + k * 20, y + k * 15); gs[k].built = 1; w:issue(gs[k], { type = "attack", target = target }) end
       local t = 0
       while t < 40 and target.alive do
         local any = false
@@ -152,6 +159,7 @@ local function script(mode, secs)
       for _, g in ipairs(gs) do if g.alive then left = left + 1 end end
       print(string.format("AATEST %-10s %s after %.1fs; gunships left %d", ship, target.alive and string.format("survived (%d%%)", math.floor(target.hp / target.maxhp * 100)) or "sunk", t, left))
       for _, g in ipairs(gs) do if g.alive then w:remove(g) end end
+      for _, sb in ipairs(screen) do if sb.alive then w:remove(sb) end end
       if target.alive then w:remove(target) end
     end
     return

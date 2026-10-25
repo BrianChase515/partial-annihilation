@@ -1571,6 +1571,8 @@ function W:updateUnit(e, dt)
   if regen and regen > 0 and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + regen * dt); if e.key == "commander" and e.atBase then e.healing = 0.3 end end
   local o = e.orders[1]
   local focus = nil
+  -- the anti-air mount fires on its own, whatever the main guns or the orders are doing
+  if e.def.aaWeapon then self:updateAA(e, dt) end
 
   if self:updateKite(e, dt, o) then
     -- stepping back: keep shooting what we were fighting (or whatever is in range)
@@ -1730,7 +1732,6 @@ function W:updateUnit(e, dt)
   end
 
   self:updateWeapon(e, dt, focus)
-  if e.def.aaWeapon then self:updateAA(e, dt) end
 end
 
 ---------------------------------------------------------------------------

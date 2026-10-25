@@ -85,31 +85,34 @@ D.units = {
     cost = { metal = 200, energy = 2600, work = 160 },
     desc = "Hovering attacker. Steady damage to ground and ships.",
   },
+  -- The navy mirrors the army: the patrol boat scouts and screens (long sight, flak), the
+  -- destroyer is the line ship (hits hard at good range, needs eyes for the full reach), and the
+  -- battleship is the siege gun (shells almost anywhere it can see, but sees little itself,
+  -- can't fight off what gets close and can't touch aircraft - it needs boats around it)
   boat = {
     name = "Patrol Boat", short = "1", domain = "sea", shape = "circle",
-    radius = 11, hp = 420, speed = 115, sight = 360,
-    weapon = { damage = 18, range = 210, reload = 0.55, speed = 700, targets = { land = true, sea = true, air = true } },
-    cost = { metal = 100, energy = 700, work = 80 },
-    desc = "Fast boat. Hits land, sea and air (lightly).",
+    radius = 11, hp = 520, speed = 135, sight = 560,
+    weapon = { damage = 14, range = 240, reload = 0.5, speed = 700, targets = { land = true, sea = true } },
+    aaWeapon = { damage = 28, range = 380, reload = 0.55, speed = 900, splash = 34, targets = { air = true } },
+    cost = { metal = 110, energy = 800, work = 85 },
+    desc = "The navy's scout and screen: fast, sees 560 (eyes for your destroyers and battleships) and carries long-range flak (380). Light guns against land and ships. Keep a few with every battleship.",
   },
   destroyer = {
     name = "Destroyer", short = "2", domain = "sea", shape = "circle",
-    radius = 16, hp = 3200, speed = 70, sight = 360,
-    -- the sea's brawler: shorter guns than before (260, still past a tank's 190), but it hits
-    -- hard, splashes, and takes a beating. Where water reaches the middle, it holds the centre
-    weapon = { damage = 80, range = 260, reload = 1.0, speed = 600, splash = 30, targets = { land = true, sea = true, sub = true } },
-    cost = { metal = 300, energy = 2000, work = 220 },
-    desc = "Heavy warship and the navy's brawler: very tough, heavy guns with splash, depth charges for subs - but shorter range (260). Where water reaches the middle of the map it can hold the centre against a land army. Can't hit aircraft.",
+    radius = 16, hp = 2200, speed = 72, sight = 300, needsSpotter = true,
+    weapon = { damage = 80, range = 420, reload = 1.2, speed = 620, splash = 30, targets = { land = true, sea = true, sub = true } },
+    cost = { metal = 280, energy = 1800, work = 200 },
+    desc = "The navy's line ship: heavy guns with splash out to 420 and depth charges for subs. It only sees 300 itself - patrol boats, units or buildings have to spot for the full reach. Can't hit aircraft.",
   },
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
-    radius = 22, hp = 4200, speed = 40, sight = 460, needsSpotter = true,
+    radius = 22, hp = 6500, speed = 36, sight = 300, needsSpotter = true,
     -- (nearly the whole map: parked off your coast it shells anything your units or buildings
-    -- can see. Aircraft are the answer to it - it can't shoot back at them)
+    -- can see. Up close it's helpless, and it can't shoot at aircraft)
     weapon = { damage = 115, range = 4000, minRange = 200, reload = 4.2, speed = 650, splash = 60, ballistic = true,
       targets = { land = true, sea = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
-    desc = "Siege ship. Shells almost anywhere on the map that you can see - your units' and buildings' eyes are its eyes (it only sees 460 itself) - but slowly. Can't hit aircraft or subs: bombers are its bane. Everyone will hunt it.",
+    desc = "Siege ship. Shells almost anywhere on the map that you can see - but it only sees 300 itself, fires slowly, can't hit anything within 200 and can't shoot aircraft or subs. Very tough, very slow: a big army or an air raid will overwhelm it unless patrol boats screen it. Everyone will hunt it.",
   },
   seabuilder = {
     name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",
