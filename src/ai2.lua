@@ -189,7 +189,6 @@ function AI2:applyMapPlan()
   -- with real water on the map, the shipyard is the second plant (land and sea at once):
   -- offshore metal is navy-only, and battleships cover the centre from the coast
   if m.naval > 0.4 and P.navy >= 0.6 then self.yardFrom = self.navyPlan and 120 or 150 end
-  self.navyOpen = true
   -- raiding: how often, and how small a party it will send at unguarded metal
   local rp = m.raid * P.raid
   if rp > 0.35 then
@@ -322,6 +321,64 @@ end
 -- losing the Commander loses the game. When it's in trouble: nearby units turn to cover it, and
 -- if our army is closer and strong enough, it falls back behind the army (guns still up)
 -- instead of powering down for the long run home
+-- A functional navy, not a pile of ships. Every ship type gets a job or isn't built:
+--  - destroyers in numbers only when they can reach something (water at the centre, a sea route
+--    to the enemy); otherwise a couple to guard home water, plus enough to answer enemy ships
+--  - battleships only when one can park in range of the centre and the economy carries it, and
+--    never without patrol boats to screen it (two each) - boats come first
+--  - patrol boats: eyes for the destroyers and screens for the battleships, no more
+--  - submarines only to hunt enemy ships (battleships above all)
+-- Nothing left to do: the shipyard idles and the metal goes to the land war.
+function AI2:fleetPlan(t, canBB)
+  local w = self.world
+  local function have(k) return self:countPlanned(k) + self:queued(k) end
+  local boats, dds, subs, bbs = have("boat"), have("destroyer"), have("sub"), have("battleship")
+  local enemyShips, enemyBB = 0, 0
+  for _, e in ipairs(self:enemyUnits()) do
+    if e.def.domain == "sea" or e.def.domain == "sub" then
+      if e.def.weapon then enemyShips = enemyShips + 1 end
+      if e.key == "battleship" then enemyBB = enemyBB + 1 end
+    end
+  end
+  if self.centreWater == nil then self:centreFleet() end
+  local centre = self.centreWater and true or false
+  local reach = self.navalReach and true or false
+  -- battleship: worth it only with a firing position on the centre
+  local bbUseful = false
+  if canBB then
+    local b = { x = 0, y = 0 }
+    local px = self:bbParkSpot(b)
+    bbUseful = px ~= nil
+  end
+  local caps = {
+    destroyer = (centre and 5 or (reach and 3 or 2)) + math.ceil(enemyShips * 0.6),
+    battleship = bbUseful and math.min(2, 1 + math.floor(math.max(0, t - 540) / 300)) or 0,
+    sub = enemyBB * 2 + (enemyShips >= 4 and 2 or 0),
+  }
+  caps.boat = 1 + (centre and 1 or 0) + 2 * math.max(bbs, caps.battleship > bbs and bbs + 1 or bbs)
+  caps.destroyer = math.min(8, caps.destroyer)
+  caps.boat = math.min(7, caps.boat)
+  -- the opening: eyes first, then a fighting ship
+  if boats < 1 then return "boat" end
+  if dds < 1 then return "destroyer" end
+  -- a battleship is wanted: its screen comes first
+  if caps.battleship > bbs and boats < 2 * (bbs + 1) and boats < caps.boat then return "boat" end
+  local wts = {}
+  if dds < caps.destroyer then wts.destroyer = 35 end
+  if bbs < caps.battleship then wts.battleship = 30 end
+  if boats < caps.boat then wts.boat = 20 end
+  if subs < caps.sub then wts.sub = 25 + enemyBB * 20 end
+  if not next(wts) then
+    if not self.fleetFullNoted then
+      self.fleetFullNoted = true
+      Tel.note(w, "navy", self.team, string.format("fleet has what it needs (%d boats, %d destroyers, %d battleships, %d subs): shipyard idles",
+        boats, dds, bbs, subs))
+    end
+    return nil
+  end
+  return self:pick(wts)
+end
+
 -- Battleships guard the middle: the gun reaches 4000, so the best spot is our own water
 -- nearest the centre - everything our units (and a Power Core) can see there is in range, and
 -- the ship stays on our side, under our cover, instead of sailing into theirs
