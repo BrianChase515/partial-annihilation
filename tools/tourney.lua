@@ -263,6 +263,8 @@ local function run()
       a.air = (a.air or 0) + air
       a.rd = (a.rd or 0) + ((r.f.decisions or {}).raid or 0)
       a.n6 = (a.n6 or 0) + (r.f.navy6 or 0)
+      a.fc = (a.fc or 0) + (r.f.firstContact or 0)
+      a.len = (a.len or 0) + (r.f.length or 0)
       a.nm = (a.nm or 0) + (r.f.navyMax or 0)
       if r.f.yardAt then a.ny, a.yt = (a.ny or 0) + 1, (a.yt or 0) + r.f.yardAt end
       if r.over == 1 then a.d, a.w = a.d + 1, a.w + r.won end
@@ -271,6 +273,8 @@ local function run()
     for k, a in pairs(agg) do
       print(string.format("    %-8s %5d / %5d   centre %2d%%  air %2d%%  navy %2d%%  raids %.1f  cmd L%.1f   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n),
         math.floor(100 * a.c / a.n), math.floor(100 * (a.air or 0) / a.n), math.floor(100 * a.nv / a.n), a.rd / a.n, a.cl / a.n, a.w, a.d))
+      print(string.format("             first contact %d:%02d, game length %d:%02d", math.floor(a.fc / a.n / 60), math.floor(a.fc / a.n % 60),
+        math.floor(a.len / a.n / 60), math.floor(a.len / a.n % 60)))
       print(string.format("             shipyard in %d of %d sides (avg at %ds), fleet value at 6:00 %d, biggest fleet %d", a.ny or 0, a.n,
         math.floor((a.yt or 0) / math.max(1, a.ny or 0)), math.floor((a.n6 or 0) / a.n), math.floor((a.nm or 0) / a.n)))
     end

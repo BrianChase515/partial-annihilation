@@ -350,6 +350,10 @@ require("src.craft_defs")(D)
 -- that fled home, are safe under their towers. Other buildings don't shoot; towers are cheap.
 D.TOWER_VS_COMMANDER = 2.5
 
+-- Annihilation only: health multipliers for units, buildings and the Commander (Commander of
+-- Heroes uses the same units at their plain numbers). Tuned for ~12-minute games on a medium map
+D.RTS_TUNE = { unithp = 1, bldhp = 1, cmdhp = 1 }
+
 -- Fill in derived fields
 for key, d in pairs(D.units) do
   d.key = key

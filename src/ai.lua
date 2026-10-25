@@ -1015,6 +1015,14 @@ function AI:pickUnit(f)
       and self.diff.level and self.diff.level >= 3
     -- Turtles turn their home water into a fortress: battleships first, a few escorts against subs
     if harbor and canBB then return "battleship" end
+    -- (v2) a fleet straight away: a patrol boat for eyes and flak, then a destroyer, then the mix
+    if self.navyOpen then
+      local boats = self:countPlanned("boat") + self:queued("boat")
+      local dds = self:countPlanned("destroyer") + self:queued("destroyer")
+      if boats < 1 then return "boat" end
+      if dds < 1 then return "destroyer" end
+      if boats < 2 then return "boat" end
+    end
     if not self.navalReach and ships >= 5 + enemyShips then
       if canBB and bships == 0 then return "battleship" end -- a harbor guard
       return nil

@@ -12,7 +12,7 @@ C.NUKE_SPEED = 420         -- missile speed (it's a long, visible flight)
 -- Each upgrade sets fields in cmd.mods (read by the world) or does something once.
 C.upgrades = {
   { key = "hull",      name = "Reinforced Hull",    desc = "+40% max health.",
-    apply = function(w, e) e.mods.hp = (e.mods.hp or 1) * 1.4; local old = e.maxhp; e.maxhp = math.floor(e.def.hp * e.mods.hp); e.hp = e.hp + (e.maxhp - old) end },
+    apply = function(w, e) e.mods.hp = (e.mods.hp or 1) * 1.4; local old = e.maxhp; e.maxhp = math.floor(e.def.hp * e.mods.hp * (e.hpMul or 1)); e.hp = e.hp + (e.maxhp - old) end },
   { key = "regen",     name = "Nano Regeneration",  desc = "Repairs himself 25 HP per second, even in combat.",
     apply = function(w, e) e.mods.regen = 25 end },
   { key = "cannon",    name = "Heavy Cannon",       desc = "+60% weapon damage.",

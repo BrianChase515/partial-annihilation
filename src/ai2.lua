@@ -189,6 +189,7 @@ function AI2:applyMapPlan()
   -- with real water on the map, the shipyard is the second plant (land and sea at once):
   -- offshore metal is navy-only, and battleships cover the centre from the coast
   if m.naval > 0.4 and P.navy >= 0.6 then self.yardFrom = self.navyPlan and 120 or 150 end
+  self.navyOpen = true
   -- raiding: how often, and how small a party it will send at unguarded metal
   local rp = m.raid * P.raid
   if rp > 0.35 then

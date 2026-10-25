@@ -26,7 +26,14 @@ function W.new(opts)
   else
     self.map = Map.generate(opts)
     -- Annihilation: a Power Core node in the middle that everyone will fight over
-    if not opts.coh and not (opts.mods and opts.mods.squads) then self.map:placeCoreNode() end
+    if not opts.coh and not (opts.mods and opts.mods.squads) then
+      self.map:placeCoreNode()
+      -- Annihilation's own toughness (D.RTS_TUNE; Commander of Heroes keeps the plain numbers).
+      -- PA_TUNE="unithp=1.3,bldhp=1.5,cmdhp=1.2" overrides it for balance experiments
+      self.rtsTune = {}
+      for k, v in pairs(D.RTS_TUNE or {}) do self.rtsTune[k] = v end
+      for k, v in (os.getenv("PA_TUNE") or ""):gmatch("(%w+)=([%d%.]+)") do self.rtsTune[k] = tonumber(v) end
+    end
   end
   self.T = self.map.T
   self.entities = {}
@@ -194,6 +201,14 @@ function W:spawn(key, team, x, y, built)
   }
   e.homeX, e.homeY = x, y
   self.nextId = self.nextId + 1
+  if self.rtsTune then
+    local tn = self.rtsTune
+    local mul = d.building and (tn.bldhp or 1) or (key == "commander" and (tn.cmdhp or 1) or (tn.unithp or 1))
+    if mul ~= 1 then
+      e.hpMul = mul
+      e.hp = math.floor(d.hp * mul); e.maxhp = e.hp
+    end
+  end
   if d.building then
     e.tx = math.floor(x / self.T - d.w / 2 + 0.5)
     e.ty = math.floor(y / self.T - d.h / 2 + 0.5)
