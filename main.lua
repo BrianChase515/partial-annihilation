@@ -10,6 +10,8 @@ local autotest = nil
 smoke = nil
 
 local function startGame(opts)
+  -- Commander of Heroes: the experimental AI, if switched on in Settings (never in test runs)
+  if opts.coh and not opts.autotest and require("src.settings").v.cohAI == "v2" then opts.aiV2 = true end
   lastOpts = opts
   opts.seed = opts.seed or os.time()
   game = Game.new(opts)

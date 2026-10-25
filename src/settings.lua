@@ -3,7 +3,7 @@
 local Set = {}
 
 Set.FILE = "settings.lua"
-Set.v = { res = "Auto", pan = 1, zoom = 1, scroll = 1, edge = true, music = 0.55, sfx = 0.5, padCursor = 1, padHints = true }
+Set.v = { res = "Auto", pan = 1, zoom = 1, scroll = 1, edge = true, music = 0.55, sfx = 0.5, padCursor = 1, padHints = true, cohAI = "classic" }
 
 Set.RES = { "Auto", "1280x720", "1280x800", "1440x900", "1600x900", "1920x1080", "2560x1440", "Fullscreen" }
 
@@ -73,6 +73,7 @@ local ROWS = {
   { key = "sfx", label = "Effects volume", min = 0, max = 1, step = 0.1, show = pct },
   { key = "padCursor", label = "Controller cursor speed (left stick)", min = 0.5, max = 2.5, step = 0.25, show = pct },
   { key = "padHints", label = "Controller button hints", show = function(v) return v and "On" or "Off" end },
+  { key = "cohAI", label = "Commander of Heroes AI", show = function(v) return v == "v2" and "v2 (testing)" or "Classic" end },
 }
 
 function Set.rects()
@@ -152,6 +153,8 @@ function Set.click(x, y, b)
         if Set.v.res ~= "Fullscreen" and love.window.getFullscreen() and Set.v.res ~= "Auto" then love.window.setFullscreen(false) end
         Set.applyWindow()
         if Set.onWindow then Set.onWindow() end
+      elseif k == "cohAI" then
+        Set.v.cohAI = Set.v.cohAI == "v2" and "classic" or "v2"
       elseif k == "padHints" then
         Set.v.padHints = not Set.v.padHints
       elseif k == "edge" then

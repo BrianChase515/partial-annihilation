@@ -2225,6 +2225,15 @@ function UI.drawOver(game)
     px + 30, py + OVER_H - 150, OVER_W - 60)
   end
   for _, r in ipairs(UI.overRects(game)) do button(r.x, r.y, r.w, r.h, r.label) end
+  -- AI v2: who you were up against (its personality is drawn per game)
+  local who = {}
+  for _, ai in ipairs(game.ais or {}) do if ai.version == 2 and ai.p then who[#who + 1] = ai.p.name end end
+  if #who > 0 then
+    lg.setFont(font(12))
+    lg.setColor(0.85, 0.78, 0.55)
+    local t = "Opponent: AI v2, " .. table.concat(who, " + ") .. " personality"
+    lg.print(t, w / 2 - font(12):getWidth(t) / 2, h / 2 + OVER_H / 2 - 92)
+  end
   -- a ten-second rating, saved in the match log (how we check the AI's variety and difficulty)
   local rr = UI.rateRects(game)
   if #rr > 0 then

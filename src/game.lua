@@ -36,7 +36,7 @@ function G.new(opts)
     }
   end
   if opts.autotest then
-    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", class = players[1].class, race = players[1].race, bench = players[1].bench, legacy = players[1].legacy }
+    players[1] = { ally = players[1].ally or 1, level = opts.level1 or players[1].level or 5, profile = opts.profile1 or "Balanced", aiV2 = players[1].aiV2, class = players[1].class, race = players[1].race, bench = players[1].bench, legacy = players[1].legacy }
   end
   self.arena = opts.mode == "arena"
   self.craft = opts.mode == "craft"
@@ -47,7 +47,7 @@ function G.new(opts)
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,
     playerTeam = 1, noFog = opts.autotest, players = players, aiIncome = income, arena = self.arena, craft = self.craft, template = opts.template,
     experimental = opts.experimental, sandbox = opts.sandbox, squadSetup = opts.squadSetup, coh = opts.coh, enemySquads = opts.enemySquads, cohLength = opts.cohLength,
-    cohMode = opts.cohMode, hillFrac = opts.hillFrac, rockFrac = opts.rockFrac,
+    cohMode = opts.cohMode, hillFrac = opts.hillFrac, rockFrac = opts.rockFrac, aiV2 = opts.aiV2,
   })
   local world = self.world
   world.humanTeams = {}

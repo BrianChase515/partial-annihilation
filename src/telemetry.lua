@@ -15,11 +15,12 @@ local SAMPLE = 5          -- seconds between presence / grouping samples
 
 function Tel.new(world)
   local self = setmetatable({ world = world, notes = {}, kills = {}, dmg = {}, heat = {}, groups = {},
-    firstContact = nil, nextSample = 0, decisions = {} }, Tel)
+    firstContact = nil, nextSample = 0, decisions = {}, phase = {} }, Tel)
   for t = 1, world.np do
     self.heat[t] = {}
     for i = 1, GRID * GRID do self.heat[t][i] = 0 end
     self.dmg[t], self.groups[t], self.decisions[t] = {}, {}, {}
+    self.phase[t] = { early = { 0, 0, 0 }, mid = { 0, 0, 0 } }
   end
   return self
 end
@@ -66,6 +67,12 @@ function Tel:update()
       local gy = math.min(GRID - 1, math.floor(e.y / H * GRID))
       local i = gy * GRID + gx + 1
       self.heat[e.team][i] = self.heat[e.team][i] + 1
+      -- where it was, by phase (first two minutes; two to five)
+      local ph = w.time < 120 and "early" or (w.time < 300 and "mid" or nil)
+      if ph then
+        local a = self.phase[e.team][ph]
+        a[1], a[2], a[3] = a[1] + e.x, a[2] + e.y, a[3] + 1
+      end
       byTeam[e.team] = byTeam[e.team] or {}
       local l = byTeam[e.team]
       l[#l + 1] = e
@@ -145,6 +152,27 @@ function Tel.fingerprint(world, team)
   f.kills, f.losses = k, l
   -- decisions it logged, by kind
   f.decisions = self.decisions[team] or {}
+  local nd = 0
+  for _, v in pairs(f.decisions) do nd = nd + v end
+  f.decisionRate = nd / math.max(60, world.time) * 60
+  -- where it went early and mid-game: forward (toward the enemy's start) and sideways, as
+  -- fractions of the map diagonal
+  local tm = world.teams[team]
+  local ex, ey
+  for t = 1, world.np do if world:hostile(t, team) then ex, ey = world.teams[t].startX, world.teams[t].startY end end
+  local W, H = world.map.w * world.T, world.map.h * world.T
+  local diag = math.sqrt(W * W + H * H)
+  for _, ph in ipairs({ "early", "mid" }) do
+    local a = self.phase[team] and self.phase[team][ph]
+    if a and a[3] > 0 and ex and tm.startX then
+      local px, py = a[1] / a[3] - tm.startX, a[2] / a[3] - tm.startY
+      local fx, fy = U.norm(ex - tm.startX, ey - tm.startY)
+      f[ph .. "Fwd"] = (px * fx + py * fy) / diag
+      f[ph .. "Side"] = (-px * fy + py * fx) / diag
+    else
+      f[ph .. "Fwd"], f[ph .. "Side"] = 0, 0
+    end
+  end
   return f
 end
 

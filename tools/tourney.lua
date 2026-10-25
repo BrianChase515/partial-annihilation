@@ -33,12 +33,13 @@ local function newGame(mode, seed, l1, l2, rng)
     mods = { squads = true }, autotest = true, cohMode = mode == "wih" and "wih" or "conquest",
     hillFrac = mode == "wih" and 0.22 or nil, rockFrac = mode == "wih" and 0.06 or nil,
     squadSetup = SQ.randomSquads(rng, nSq), enemySquads = "own",
-    players = { { ally = 1, level = l1 }, { ally = 2, level = l2 } } })
+    players = { { ally = 1, level = l1, aiV2 = S.v2both }, { ally = 2, level = l2, aiV2 = S.v2 or S.v2both } } })
   return game
 end
 
 -- the scalar features we compare games on (per side)
-local BASE = { "firstContact", "length", "groups", "groupsVar", "coverage", "spread", "fromHome", "killRange" }
+local BASE = { "firstContact", "length", "groups", "groupsVar", "coverage", "spread", "fromHome", "killRange",
+  "earlyFwd", "earlySide", "midFwd", "midSide", "decisionRate" }
 
 local function features(w, t)
   local f = Tel.fingerprint(w, t)
@@ -53,6 +54,12 @@ local function run()
   local mode = args[1] or "coh"
   local n = tonumber(args[2]) or 20
   local rng = love.math.newRandomGenerator(os.time())
+  -- "v2": side 2 plays AI v2 against v1 on side 1; "v2both": both sides v2
+  local v2, v2both = false, false
+  for k = #args, 1, -1 do
+    if args[k] == "v2" then v2 = true; table.remove(args, k) elseif args[k] == "v2both" then v2both = true; table.remove(args, k) end
+  end
+  S.v2, S.v2both = v2, v2both
   local fixed = args[5] == "fixed" or args[3] == "fixed"
   if args[3] == "fixed" then args[3] = nil end
   local rows = {}
@@ -74,6 +81,9 @@ local function run()
       if steps % 1500 == 0 then frame() end
     end
     local winner = w.over and w.over.winnerAlly or 0
+    if os.getenv("PA_NOTES") then
+      for _, nt in ipairs(w.tel.notes) do print(string.format("  [%4ds] T%s %-11s %s", math.floor(nt.t), tostring(nt.team), nt.kind, nt.text or "")) end
+    end
     for t = 1, math.min(2, w.np) do
       local f = features(w, t)
       local who = game.players[t] and (game.players[t].profileName or "?") or "?"
@@ -85,7 +95,8 @@ local function run()
       rows[#rows + 1] = { game = g, team = t, level = t == 1 and l1 or l2, profile = who, comp = table.concat(comp, "+"),
         won = (winner == w.ally[t]) and 1 or 0, over = w.over and 1 or 0, f = f }
     end
-    log(string.format("game %d/%d  L%d vs L%d  %s  %ds  (%.0fs real)", g, n, l1, l2,
+    log(string.format("game %d/%d  L%d vs L%d  [%s | %s]  %s  %ds  (%.0fs real)", g, n, l1, l2,
+      game.players[1].profileName or "?", game.players[2] and game.players[2].profileName or "?",
       w.over and ("winner side " .. winner) or "no winner", math.floor(w.time), love.timer.getTime() - t0))
   end
   -- every damage type that turned up becomes a feature too (its share of the side's damage)
@@ -115,7 +126,7 @@ local function run()
   -- variety: every feature divided by a fixed "meaningful difference" (so runs can be compared
   -- with each other: 1.0 = typically one meaningful step apart on each feature)
   local SCALE = { firstContact = 60, length = 300, groups = 1, groupsVar = 0.5, coverage = 0.25, spread = 0.2,
-    fromHome = 0.15, killRange = 100 }
+    fromHome = 0.15, killRange = 100, earlyFwd = 0.06, earlySide = 0.06, midFwd = 0.06, midSide = 0.06, decisionRate = 2 }
   local V = {}
   for i, r in ipairs(rows) do V[i] = vec(r) end
   local dims = #names
@@ -179,7 +190,8 @@ local function run()
     for _, k in ipairs(ks) do print(string.format("    %-28s %3d%%  (%d)", k, math.floor(100 * agg[k].w / agg[k].n + 0.5), agg[k].n)) end
   end
   table_by("level")
-  if mode == "rts" then table_by("profile") else table_by("comp") end
+  if mode == "rts" or S.v2 then table_by("profile") end
+  if mode ~= "rts" then table_by("comp") end
   print("CSV", love.filesystem.getSaveDirectory() .. "/tourney_" .. mode .. ".csv")
 end
 

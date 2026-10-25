@@ -254,6 +254,9 @@ function S.setup(world, opts)
   world.squads = { list = {}, tickets = {}, pending = {} }
   world.visionSources = world.visionSources or {}
   world.wih = opts.cohMode == "wih" or os.getenv("PA_WIH") ~= nil
+  -- which computer sides use AI v2 (the experimental one; Settings > Commander of Heroes AI)
+  world.aiV2Teams = {}
+  for i, pl in ipairs(opts.players or {}) do if not pl.human and (pl.aiV2 or opts.aiV2) then world.aiV2Teams[i] = true end end
   if world.wih then world.sightMul = S.WIH_SIGHT end
   local rng = love.math.newRandomGenerator((map.seed or 1) + 911)
   for t = 1, world.np do
@@ -290,6 +293,15 @@ function S.setup(world, opts)
         for _, ds in ipairs(opts.squadSetup) do if ds.on then designs[#designs + 1] = { type = ds.type } end end
       else
         designs = S.randomSquads(rng, math.max(2, nOn > 0 and nOn or 4))
+        -- AI v2 picks its army against yours: a few candidate armies, scored by how well they
+        -- answer what you brought, chosen as sharply as its level allows
+        local pl = opts.players and opts.players[t]
+        if pl and (pl.aiV2 or opts.aiV2) then
+          local opp = {}
+          for _, ds in ipairs(opts.squadSetup or {}) do if ds.on then opp[#opp + 1] = ds.type end end
+          if #opp == 0 then for _, sq2 in ipairs(world.squads.list) do if sq2.team ~= t then opp[#opp + 1] = sq2.type end end end
+          if #opp > 0 then designs = require("src.squads_ai2").pickArmy(world, rng, #designs, opp, pl.level or 5) end
+        end
       end
       -- facing air (the human's setup is known): make sure something here shoots it down
       local enemyAir = false
@@ -1085,8 +1097,14 @@ end
 
 local AI = {}
 AI.__index = AI
+S.AI = AI -- (AI v2, src/squads_ai2.lua, builds on this one's tactics)
 
 function S.newAI(world, team, level)
+  if world.aiV2Teams and world.aiV2Teams[team] then return require("src.squads_ai2").new(world, team, level) end
+  return S.newAIv1(world, team, level)
+end
+
+function S.newAIv1(world, team, level)
   local self = setmetatable({}, AI)
   self.world, self.team = world, team
   self.level = math.max(1, math.min(10, level or 5))
@@ -1429,6 +1447,11 @@ function AI:roleGoal(sq, plan, foe, fd, fighting)
   return at(obj.x, obj.y)
 end
 
+function AI:makePlan(mine)
+  local w = self.world
+  return w.wih and self:armyPlan(mine) or (w.capPoints and self:conquestPlan(mine))
+end
+
 function AI:update(dt)
   local w = self.world
   if w.over or w.teams[self.team].dead then return end
@@ -1447,7 +1470,7 @@ function AI:update(dt)
   end
   -- points the others are already heading for stay claimed
   for i, sq in ipairs(mine) do if not look[sq] and sq.goal then taken[sq.goal] = true end end
-  local plan = w.wih and self:armyPlan(mine) or (w.capPoints and self:conquestPlan(mine))
+  local plan = self:makePlan(mine)
   for _, sq in ipairs(mine) do
     local L = sq.leader
     if L and L.alive and look[sq] and not sq.broken then
