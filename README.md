@@ -99,7 +99,17 @@ A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units
 
 ### AI v2 (beta)
 
-Settings has an Annihilation AI and a Commander of Heroes AI switch: Classic (the default) or v2. v2 lists what it could do, scores each option by the situation and a personality drawn for that game, and - like AI War - takes the very best only some of the time: about 63% at level 5, 95% at level 10, otherwise one of the nearly-best. Level 8+ knows everything you have. In Annihilation it keeps the classic economy and building and decides its posture (strike now, mass up, harass, dig in), where each wave goes (your base, an outlying expansion, the softest spot, your army, an exposed Commander) and how its production answers yours (no AA? more air). The result screen names the personality you faced; the match log has every choice with the runners-up.
+Settings has an Annihilation AI and a Commander of Heroes AI switch: Classic (the default) or v2 (applies from the next match). v2 lists what it could do, scores each option by the situation and a personality drawn for that game, and - like AI War - takes the very best only some of the time: about 63% at level 5, 95% at level 10, otherwise one of the nearly-best. Level 8+ knows everything you have. **v2 is about two classic levels stronger**: v2 level 5 plays like classic level 7 (it has level 7's economy; its judgement follows the level you pick).
+
+In Annihilation it keeps the classic economy and building and adds:
+- **It reads the map at the start**: how much of the metal sits in the middle, how much is out on the flanks to raid, whether water gives a navy a way in. That makes some personalities likelier than others (Raider on open maps, Admiral where the water reaches in) and sets how far forward the army waits - right up to the centre on centre maps.
+- **Tempo**: thinks faster, gets its second and third factories up early, puts its early metal into land and army.
+- **Posture** (strike now, mass up, harass, dig in), **where each wave goes** (your base, an outlying expansion, the softest spot, your army, the centre, an exposed Commander) and **production that answers yours** (no AA? more air).
+- **Raids**: one or two fast units at metal nobody is guarding.
+- **The Commander** rides behind the army and levels up there; when it's in trouble nearby units cover it, it falls back behind the army rather than powering down on the long run home, pulls out early when shelled from the fog, and won't sit powered down at a spawn under attack. When its base is hit, the army comes home.
+- **Go for the kill**: your Commander, hurt or running, within reach - it sends everything nearby.
+
+The result screen names the personality you faced; the match log has its map read and every choice with the runners-up.
 
 ### Your Commander is a roguelike hero with a nuke
 Lose him and you lose the game, but he only grows by fighting. He levels up **only from his own kills**. At levels 1 to 4 you pick **1 of 2 random upgrades from a pool of 20**, and whatever you take never comes up again, so no two Commanders are built the same way. The pool includes:

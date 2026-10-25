@@ -24,7 +24,8 @@ end
 
 local function newGame(mode, seed, l1, l2, rng)
   if mode == "rts" then
-    return startFn({ size = 112, water = 0.3, seed = seed, autotest = true, level = l2, level1 = l1,
+    return startFn({ size = tonumber(os.getenv("PA_SIZE") or "112"), water = tonumber(os.getenv("PA_WATER") or "0.3"),
+      seed = tonumber(os.getenv("PA_MAPSEED") or "") or seed, autotest = true, level = l2, level1 = l1,
       profile = "Random", profile1 = "Random", aiV2Teams = { [1] = S.v2both, [2] = S.v2 or S.v2both } })
   end
   local SQ = require("src.squads")
@@ -78,9 +79,29 @@ local function run()
       w:update(1 / 30)
       for _, ai in ipairs(game.ais) do ai:update(1 / 30) end
       steps = steps + 1
+      if os.getenv("PA_CMDDBG") and steps % 90 == 0 then
+        local parts = {}
+        for i, ai in ipairs(game.ais) do
+          local c = w.teams[ai.team].commander
+          local tm = w.teams[ai.team]
+          parts[#parts + 1] = string.format("T%d %s L%d hp%d%% home%d dng%d sup%d", ai.team, tostring(ai.cmdMode), c and c.clevel or -1,
+            c and math.floor(c.hp / c.maxhp * 100) or 0, c and math.floor(U.dist(c.x, c.y, tm.startX, tm.startY)) or 0,
+            c and math.floor(ai:strengthNear(c.x, c.y, 450, true)) or 0, c and math.floor(ai:strengthNear(c.x, c.y, 450, false)) or 0)
+        end
+        print(string.format("CMD %4ds  %s", math.floor(w.time), table.concat(parts, " | ")))
+      end
       if steps % 1500 == 0 then frame() end
     end
     local winner = w.over and w.over.winnerAlly or 0
+    -- how it ended: who killed each Commander, and what the dead one was doing
+    local ends = {}
+    for _, r in ipairs(w.tel.kills) do
+      if r.vk == "commander" then
+        local ai
+        for _, a in ipairs(game.ais) do if a.team == r.vt then ai = a end end
+        ends[#ends + 1] = string.format("T%d cmd killed by %s at %ds (mode %s)", r.vt, tostring(r.ak), math.floor(r.t), ai and tostring(ai.cmdMode) or "?")
+      end
+    end
     if os.getenv("PA_NOTES") then
       for _, nt in ipairs(w.tel.notes) do print(string.format("  [%4ds] T%s %-11s %s", math.floor(nt.t), tostring(nt.team), nt.kind, nt.text or "")) end
     end
@@ -95,6 +116,7 @@ local function run()
       rows[#rows + 1] = { game = g, team = t, level = t == 1 and l1 or l2, profile = who, comp = table.concat(comp, "+"),
         won = (winner == w.ally[t]) and 1 or 0, over = w.over and 1 or 0, f = f }
     end
+    if #ends > 0 then log("   " .. table.concat(ends, "; ")) end
     log(string.format("game %d/%d  L%d vs L%d  [%s | %s]  %s  %ds  (%.0fs real)", g, n, l1, l2,
       game.players[1].profileName or "?", game.players[2] and game.players[2].profileName or "?",
       w.over and ("winner side " .. winner) or "no winner", math.floor(w.time), love.timer.getTime() - t0))
@@ -199,10 +221,18 @@ local function run()
       agg[k] = agg[k] or { a3 = 0, a6 = 0, n = 0, w = 0, d = 0 }
       local a = agg[k]
       a.a3, a.a6, a.n = a.a3 + (r.f.army3 or 0), a.a6 + (r.f.army6 or 0), a.n + 1
+      a.c = (a.c or 0) + (r.f.centre or 0); a.cl = (a.cl or 0) + (r.f.cmdLevel or 0)
+      local navy = 0
+      for k2, v in pairs(r.f.dmgShare or {}) do if k2 == "boat" or k2 == "destroyer" or k2 == "sub" or k2 == "battleship" then navy = navy + v end end
+      a.nv = (a.nv or 0) + navy
+      a.rd = (a.rd or 0) + ((r.f.decisions or {}).raid or 0)
       if r.over == 1 then a.d, a.w = a.d + 1, a.w + r.won end
     end
-    print("  army value at 3:00 / 6:00, and wins:")
-    for k, a in pairs(agg) do print(string.format("    %-8s %5d / %5d   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n), a.w, a.d)) end
+    print("  army at 3:00 / 6:00, time in the centre, navy's share of damage, raids, Commander level, wins:")
+    for k, a in pairs(agg) do
+      print(string.format("    %-8s %5d / %5d   centre %2d%%  navy %2d%%  raids %.1f  cmd L%.1f   won %d of %d", k, math.floor(a.a3 / a.n), math.floor(a.a6 / a.n),
+        math.floor(100 * a.c / a.n), math.floor(100 * a.nv / a.n), a.rd / a.n, a.cl / a.n, a.w, a.d))
+    end
   end
   if mode ~= "rts" then table_by("comp") end
   print("CSV", love.filesystem.getSaveDirectory() .. "/tourney_" .. mode .. ".csv")

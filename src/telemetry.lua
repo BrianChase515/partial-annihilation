@@ -145,6 +145,15 @@ function Tel.fingerprint(world, team)
     sx, sy, sn = sx + (gx + 0.5) / GRID * v, sy + (gy + 0.5) / GRID * v, sn + v
   end
   f.cx, f.cy = sn > 0 and sx / sn or 0.5, sn > 0 and sy / sn or 0.5
+  -- share of its presence in the middle of the map (the centre 2x2 cells of the grid)
+  local mid = 0
+  for i, v in ipairs(cells) do
+    local gx, gy = (i - 1) % GRID, math.floor((i - 1) / GRID)
+    if gx >= GRID / 2 - 1 and gx <= GRID / 2 and gy >= GRID / 2 - 1 and gy <= GRID / 2 then mid = mid + v end
+  end
+  f.centre = sn > 0 and mid / sn or 0
+  local cm = world.teams[team] and world.teams[team].commander
+  f.cmdLevel = cm and cm.clevel or 0
   -- groups it fought in (average, and how much that varied)
   local g = self.groups[team] or {}
   local gs, gq = 0, 0

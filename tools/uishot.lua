@@ -27,6 +27,22 @@ local function script(mode, secs)
     print("UISHOT menu")
     return
   end
+  if os.getenv("PA_MAPVIEW") then
+    -- the whole map from above (fog off), with deposits and starts: PA_MAPSEED, PA_SIZE, PA_WATER
+    game = startFn({ size = tonumber(os.getenv("PA_SIZE") or "128"), water = tonumber(os.getenv("PA_WATER") or "0.3"),
+      seed = tonumber(os.getenv("PA_MAPSEED")), autotest = true })
+    game.world.noFog = true
+    game.ais = {}
+    local w = game.world
+    local W, H = w.map.w * w.T, w.map.h * w.T
+    game.cam.zoom = math.min(love.graphics.getWidth() / W, (love.graphics.getHeight() - 240) / H) * 0.98
+    game:centerOn(W / 2, H / 2)
+    for _ = 1, 4 do frame() end
+    pending = "uishot_map.png"
+    frame(); frame()
+    print("UISHOT map")
+    return
+  end
   local opts = { size = mode == "arena" and 80 or 112, water = 0.3, seed = 31, autotest = true,
     players = { { ally = 1, level = 5 }, { ally = 2, level = 5 }, { ally = 1, level = 5 }, { ally = 2, level = 5 } } }
   if os.getenv("PA_MODS") then

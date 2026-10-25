@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.19.2"
+D.VERSION = "0.20.0"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
