@@ -279,6 +279,22 @@ local function run()
         math.floor((a.yt or 0) / math.max(1, a.ny or 0)), math.floor((a.n6 or 0) / a.n), math.floor((a.nm or 0) / a.n)))
     end
   end
+  if mode == "rts" then
+    -- progression: Commanders reaching level 5 (the nuke) and units promoted to General, per game
+    local games, c5, gen, lv, c5t, c5n = {}, 0, 0, 0, 0, 0
+    for _, r in ipairs(rows) do
+      local g = games[r.game] or { c5 = false, gen = false }
+      games[r.game] = g
+      if (r.f.cmdLevel or 0) >= 5 then g.c5 = true end
+      if (r.f.generals or 0) > 0 then g.gen = true end
+      lv = lv + (r.f.maxUnitLevel or 0)
+      if r.f.cmd5At then c5t, c5n = c5t + r.f.cmd5At, c5n + 1 end
+    end
+    local ng = 0
+    for _, g in pairs(games) do ng = ng + 1; if g.c5 then c5 = c5 + 1 end; if g.gen then gen = gen + 1 end end
+    print(string.format("  progression: a level-5 Commander (nuke) in %d of %d games%s; a General in %d of %d; best unit level %.1f on average",
+      c5, ng, c5n > 0 and string.format(" (at %d:%02d)", math.floor(c5t / c5n / 60), math.floor(c5t / c5n % 60)) or "", gen, ng, lv / math.max(1, #rows)))
+  end
   if mode ~= "rts" then table_by("comp") end
   print("CSV", love.filesystem.getSaveDirectory() .. "/tourney_" .. mode .. ".csv")
 end

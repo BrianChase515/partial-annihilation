@@ -352,7 +352,9 @@ D.TOWER_VS_COMMANDER = 2.5
 
 -- Annihilation only: health multipliers for units, buildings and the Commander (Commander of
 -- Heroes uses the same units at their plain numbers). Tuned for ~12-minute games on a medium map
-D.RTS_TUNE = { unithp = 1, bldhp = 1, cmdhp = 1 }
+-- xpf: unit veterancy speed (xp per level = hp x xpf x ...); lead: share of what his army kills
+-- within leadR that the Commander earns as XP; cthr: scales his level thresholds
+D.RTS_TUNE = { unithp = 1, bldhp = 1, cmdhp = 1, xpf = 0.7, lead = 0, leadR = 600, cthr = 1 }
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do

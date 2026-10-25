@@ -646,10 +646,13 @@ end
 function W:commanderXP(e, amount)
   if self.heroes then return ARENA.commanderXP(self, e, amount) end
   e.cxp = (e.cxp or 0) + amount
-  while (e.clevel or 0) < CMD.MAX_LEVEL and e.cxp >= CMD.THRESHOLDS[(e.clevel or 0) + 1] do
+  while (e.clevel or 0) < CMD.MAX_LEVEL and e.cxp >= CMD.THRESHOLDS[(e.clevel or 0) + 1] * ((self.rtsTune and self.rtsTune.cthr) or 1) do
     e.clevel = (e.clevel or 0) + 1
     self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 1.2, size = 46 }
     MODS.onCommanderLevel(self, e)
+    self.cmdLvlAt = self.cmdLvlAt or {}
+    self.cmdLvlAt[e.team] = self.cmdLvlAt[e.team] or {}
+    self.cmdLvlAt[e.team][e.clevel] = self.time
     if e.clevel >= CMD.MAX_LEVEL then
       e.nukeReady = self.time   -- unlocked
       if self.onCommanderLevel then self.onCommanderLevel(e, nil) end
@@ -796,7 +799,7 @@ W.MAX_LEVEL = 5
 
 function W:xpForLevel(e, L)
   -- cumulative xp needed to reach level L
-  return e.def.hp * 0.7 * L * (L + 1) / 2
+  return e.def.hp * ((self.rtsTune and self.rtsTune.xpf) or 0.7) * L * (L + 1) / 2
 end
 
 local NOMODS = {}
@@ -896,6 +899,8 @@ function W:gainXP(e, amount)
       e.hp = math.min(e.maxhp, e.hp + (e.maxhp - oldMax) + e.maxhp * 0.25) -- level-up heals a bit
     end
     e.level = L
+    self.maxLvl = self.maxLvl or {}
+    if e.team then self.maxLvl[e.team] = math.max(self.maxLvl[e.team] or 0, L) end
     self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 0.9, size = e.def.radius + 10 }
     if self.onLevel then self.onLevel(e) end
   end
@@ -921,6 +926,8 @@ function W:promoteGeneral(e)
   for i = #list, 1, -1 do if list[i].alive then n = n + 1 else table.remove(list, i) end end
   if n >= W.MAX_GENERALS then return end
   local rng = self.rngCmd
+  self.genCount = self.genCount or {}
+  self.genCount[e.team] = (self.genCount[e.team] or 0) + 1
   e.general = true
   e.genName = "Gen. " .. G_FIRST[rng:random(#G_FIRST)] .. (rng:random() < 0.6 and (' "' .. G_NICK[rng:random(#G_NICK)] .. '"') or "")
   -- his own copy of the modifiers (unit mods tables can be shared)
@@ -1275,11 +1282,22 @@ function W:kill(o, attacker)
     end
   end
   -- Commander XP: metal value of anything he damaged in the last 6 seconds before it died
+  local credited = {}
   if o.cmdHit and not self.arena then
     for c, t in pairs(o.cmdHit) do
       if c.alive and self.time - t <= 6 then
+        credited[c] = true
         self:commanderXP(c, (o.def.cost and o.def.cost.metal) or 400)
       end
+    end
+  end
+  -- (Annihilation) leadership: a Commander also learns from what his army kills near him
+  local tn = self.rtsTune
+  if tn and (tn.lead or 0) > 0 and attacker and attacker.team and o.team and self:hostile(attacker.team, o.team) then
+    local c = self.teams[attacker.team] and self.teams[attacker.team].commander
+    if c and c.alive and c.key == "commander" and not credited[c] and c ~= attacker
+      and U.dist2(c.x, c.y, o.x, o.y) < (tn.leadR or 600) ^ 2 then
+      self:commanderXP(c, ((o.def.cost and o.def.cost.metal) or 100) * tn.lead)
     end
   end
   if self.debugDeaths and attacker and attacker.key == "scout" and os.getenv("PA_DEBUG_AI") then
