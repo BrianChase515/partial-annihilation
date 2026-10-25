@@ -119,6 +119,13 @@ local function run()
       if steps % 1500 == 0 then frame() end
     end
     local winner = w.over and w.over.winnerAlly or 0
+    if os.getenv("PA_CORELOG") then
+      local who = "nobody"
+      for _, e in ipairs(w.entities) do if e.alive and e.key == "powercore" then who = "team " .. e.team .. (e.built >= 1 and "" or " (unfinished)") end end
+      local ships = 0
+      for _, e in ipairs(w.entities) do if e.alive and (e.def.domain == "sea" or e.def.domain == "sub") then ships = ships + 1 end end
+      log(string.format("   power core: %s; ships afloat at the end: %d", who, ships))
+    end
     -- how it ended: who killed each Commander, and what the dead one was doing
     local ends = {}
     for _, r in ipairs(w.tel.kills) do

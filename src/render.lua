@@ -541,6 +541,18 @@ function R.drawWorld(cam, game)
 
   -- Commander of Heroes: bunkers, and War is Hell's blood on the ground (under the units)
   if world.squads then require("src.squads").drawGround(world) end
+  -- the Power Core node (a pad in the middle of the map, until someone builds on it)
+  local cn = map.coreNode
+  if cn and not map.blocked[cn.y * map.w + cn.x] then
+    local px, py = (cn.x + 1) * T, (cn.y + 1) * T
+    local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 2)
+    lg.setColor(0.1, 0.12, 0.16, 0.85)
+    lg.rectangle("fill", cn.x * T + 2, cn.y * T + 2, 2 * T - 4, 2 * T - 4, 6)
+    lg.setColor(0.4, 0.85, 1, 0.5 + 0.4 * pulse)
+    lg.setLineWidth(3)
+    lg.rectangle("line", cn.x * T + 2, cn.y * T + 2, 2 * T - 4, 2 * T - 4, 6)
+    lg.circle("fill", px, py, 6 + 3 * pulse)
+  end
   -- metal deposits
   for _, dpos in ipairs(map.deposits) do
     local cx, cy = (dpos.x + 0.5) * T, (dpos.y + 0.5) * T

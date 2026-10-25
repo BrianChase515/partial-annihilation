@@ -1150,4 +1150,28 @@ function M:buildImages()
   self.minimap:setFilter("linear", "linear")
 end
 
+-- the Power Core node: a 2x2 patch of open land as near the middle as possible (clear of deposits)
+function M:placeCoreNode()
+  local cx, cy = math.floor(self.w / 2) - 1, math.floor(self.h / 2) - 1
+  for r = 0, 14 do
+    for dy = -r, r do
+      for dx = -r, r do
+        if math.max(math.abs(dx), math.abs(dy)) == r then
+          local x, y = cx + dx, cy + dy
+          local ok = true
+          for yy = y, y + 1 do for xx = x, x + 1 do
+            if not self:inBounds(xx, yy) or self.terrain[yy * self.w + xx] ~= M.LAND or self.deposit[yy * self.w + xx] then ok = false end
+          end end
+          if ok then
+            self.coreNode = { x = x, y = y }
+            self.coreTiles = {}
+            for yy = y, y + 1 do for xx = x, x + 1 do self.coreTiles[yy * self.w + xx] = true end end
+            return
+          end
+        end
+      end
+    end
+  end
+end
+
 return M

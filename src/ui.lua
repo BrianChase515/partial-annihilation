@@ -907,6 +907,12 @@ function UI.drawMinimap(game, L)
   for _, dp in ipairs(map.deposits) do
     lg.rectangle("fill", mm.x + dp.x * s, mm.y + dp.y * s, math.max(1.5, s), math.max(1.5, s))
   end
+  -- the Power Core node
+  if map.coreNode then
+    lg.setColor(0.4, 0.85, 1, 0.95)
+    local cx, cy = mm.x + (map.coreNode.x + 1) * s, mm.y + (map.coreNode.y + 1) * s
+    lg.polygon("fill", cx, cy - 4, cx + 4, cy, cx, cy + 4, cx - 4, cy)
+  end
   -- fog
   if not world.noFog then
     lg.setColor(1, 1, 1)
@@ -1784,7 +1790,7 @@ Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out 
 Goal: destroy the enemy Commanders. Lose yours and you're out.
 Veterancy: units level up (gold chevrons, max 5) from damage and kills: more damage, HP, fire rate, range.
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.
-Rich deposits (+2.6 metal): gold rings near the map center, teal rings offshore. Land metal near home is scarce.
+Rich deposits (+2.6 metal): gold rings near the map center, teal rings offshore (offshore metal needs a Sea Constructor). The Power Core node in the middle (blue pad) gives +4 metal and +60 energy to whoever builds on it.
 The sea: Shipyards build Sea Constructors for them and
   for Tidal Generators (+24 energy). Battleships (shipyard 4) shell anything within 40 tiles - hunt them down.
 ]]

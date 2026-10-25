@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.22.1"
+D.VERSION = "0.23.0"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
@@ -22,7 +22,7 @@ D.units = {
     name = "Commander", short = "CMD", domain = "land", shape = "commander",
     radius = 15, hp = 3000, speed = 58, sight = 340, turn = 6,
     buildPower = 12, buildRange = 130, regen = 4,
-    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "refinery" },
+    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "powercore", "refinery" },
     weapon = { damage = 45, range = 210, reload = 0.6, speed = 560, targets = { land = true, sea = true } },
     income = { metal = 1.0, energy = 15 },
     storage = { metal = 600, energy = 2500 },
@@ -32,7 +32,7 @@ D.units = {
     name = "Constructor", short = "B", domain = "land", shape = "square",
     radius = 10, hp = 260, speed = 74, sight = 260,
     buildPower = 7, buildRange = 105,
-    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "refinery" },
+    builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "aaturret", "storage", "powercore", "refinery" },
     cost = { metal = 60, energy = 500, work = 60 },
     desc = "Builds structures. Right-click your own unfinished or damaged things to help or repair.",
   },
@@ -104,7 +104,7 @@ D.units = {
     radius = 22, hp = 4200, speed = 40, sight = 460, needsSpotter = true,
     -- (nearly the whole map: parked off your coast it shells anything your units or buildings
     -- can see. Aircraft are the answer to it - it can't shoot back at them)
-    weapon = { damage = 55, range = 4000, minRange = 200, reload = 3.6, speed = 700, splash = 48, ballistic = true,
+    weapon = { damage = 115, range = 4000, minRange = 200, reload = 4.2, speed = 650, splash = 60, ballistic = true,
       targets = { land = true, sea = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
     desc = "Siege ship. Shells almost anywhere on the map that you can see - your units' and buildings' eyes are its eyes (it only sees 460 itself) - but slowly. Can't hit aircraft or subs: bombers are its bane. Everyone will hunt it.",
@@ -114,7 +114,7 @@ D.units = {
     radius = 12, hp = 500, speed = 80, sight = 300,
     buildPower = 8, buildRange = 110,
     builds = { "mex", "tidal", "seabattery", "shipyard" },
-    cost = { metal = 90, energy = 700, work = 75 },
+    cost = { metal = 65, energy = 520, work = 62 },
     desc = "Builds offshore extractors, tidal generators, Sea Batteries and shipyards.",
   },
   sub = {
@@ -268,6 +268,13 @@ D.units = {
     cost = { metal = 0, energy = 0, work = 1 },
     desc = "Hauls metal from its extractor to your Refinery by itself. Lose it and the extractor needs a minute to roll out a new one.",
   },
+  powercore = {
+    name = "Power Core", short = "PC", domain = "building", building = true, coreOnly = true,
+    w = 2, h = 2, place = "core", hp = 2200,
+    income = { metal = 4, energy = 60 },
+    cost = { metal = 150, energy = 600, work = 130 },
+    desc = "Only on the Power Core node in the middle of the map: +4 metal and +60 energy a second. Everyone will want it.",
+  },
   refinery = {
     name = "Refinery", short = "RF", domain = "building", building = true, convoyOnly = true,
     w = 3, h = 3, place = "land", hp = 2400,
@@ -307,7 +314,7 @@ D.units = {
     name = "Shipyard", short = "SY", domain = "building", building = true,
     w = 3, h = 3, place = "water", hp = 2400, factory = true, buildPower = 10,
     builds = { "seabuilder", "boat", "destroyer", "sub", "battleship" },
-    cost = { metal = 300, energy = 1000, work = 210 },
+    cost = { metal = 280, energy = 900, work = 190 },
     desc = "Builds ships. Must be placed on water.",
   },
   turret = {

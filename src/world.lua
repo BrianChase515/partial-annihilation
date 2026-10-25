@@ -25,6 +25,8 @@ function W.new(opts)
     self.map = Map.generateArena(opts)
   else
     self.map = Map.generate(opts)
+    -- Annihilation: a Power Core node in the middle that everyone will fight over
+    if not opts.coh and not (opts.mods and opts.mods.squads) then self.map:placeCoreNode() end
   end
   self.T = self.map.T
   self.entities = {}
@@ -374,7 +376,8 @@ end
 ---------------------------------------------------------------------------
 -- Placement
 
-function W:canPlace(key, tx, ty, team)
+-- builderDomain: "sea" for a Sea Constructor, else "land" - offshore metal is the navy's
+function W:canPlace(key, tx, ty, team, builderDomain)
   local d = D.units[key]
   local map = self.map
   for yy = ty, ty + d.h - 1 do
@@ -383,11 +386,15 @@ function W:canPlace(key, tx, ty, team)
       local i = map:idx(xx, yy)
       if map.blocked[i] then return false end
       local t = map.terrain[i]
-      if d.place == "water" then
+      if d.place == "core" then
+        if not (map.coreTiles and map.coreTiles[i]) then return false end
+      elseif d.place == "water" then
         if t ~= Map.WATER then return false end
       elseif d.place == "deposit" then
         local dp = map.deposit[i]
         if not dp or (t ~= Map.LAND and not (dp.sea and t == Map.WATER)) then return false end
+        -- offshore metal: only a Sea Constructor can claim it (Annihilation)
+        if dp.sea and t == Map.WATER and builderDomain and builderDomain ~= "sea" and not self.craft then return false end
       else
         if t ~= Map.LAND then return false end
       end
@@ -410,6 +417,8 @@ end
 -- tile origin for a building centered at world point
 function W:footprintAt(key, wx, wy)
   local d = D.units[key]
+  -- the Power Core only goes on its node: snap to it
+  if d.place == "core" and self.map.coreNode then return self.map.coreNode.x, self.map.coreNode.y end
   return math.floor(wx / self.T - d.w / 2 + 0.5), math.floor(wy / self.T - d.h / 2 + 0.5)
 end
 
@@ -1754,7 +1763,7 @@ function W:updateBuildOrder(e, o, dt)
     o.checkT = 1
     local ex = self.map.blocked[self.map:idx(o.tx, o.ty)]
     local mineFrame = ex and ex.alive and ex.team == e.team and ex.key == o.key and ex.built < 1
-    if not mineFrame and not self:canPlace(o.key, o.tx, o.ty, e.team) then self:popOrder(e); return end
+    if not mineFrame and not self:canPlace(o.key, o.tx, o.ty, e.team, e.def.domain == "sea" and "sea" or "land") then self:popOrder(e); return end
   end
   if U.dist2(e.x, e.y, cx, cy) > reach * reach then
     if not e.path or e.destX ~= cx then self:setDest(e, cx, cy) end

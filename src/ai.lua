@@ -683,7 +683,8 @@ function AI:nearestFreeDeposit(fromX, fromY, maxDist, layer)
       -- stay on our half-ish of the map, avoid enemy base
       local de = U.dist(self.enemyX, self.enemyY, x, y)
       local db = U.dist(self.baseX, self.baseY, x, y)
-      local okLayer = (layer == "sea") == (dp.sea == true) or (layer == "land" and dp.sea and (dp.shore or 9) <= 2)
+      -- (offshore metal is for Sea Constructors only)
+      local okLayer = (layer == "sea") == (dp.sea == true)
       if okLayer and d <= maxDist and de > 500 and db < de * 1.25 and map:canReach(layer, fromX, fromY, x, y, 90)
         and self:threatAt(x, y, 350) == 0 then
         if not bd or d < bd then best, bd = dp, d end
@@ -730,6 +731,15 @@ function AI:thinkEconomy()
   local mFuture = mInc + plannedMex * 1.6 * tm.incomeMul
   local enemyAir = self:enemyAirCount()
 
+  -- (a claimed Power Core nobody is building any more - the builder died or gave up - is free again)
+  if self.coreClaimed then
+    local building = false
+    for _, b in ipairs(builders) do
+      for _, o in ipairs(b.orders or {}) do if o.type == "build" and o.key == "powercore" then building = true end end
+    end
+    local cn = world.map.coreNode
+    if not building and cn and not world.map.blocked[cn.y * world.map.w + cn.x] then self.coreClaimed = false end
+  end
   for _, b in ipairs(builders) do
     if b.def.domain == "sea" then
       if #b.orders == 0 then self:seaBuilderTask(b) end
@@ -751,9 +761,16 @@ function AI:thinkEconomy()
       self.fortToggle = not self.fortToggle
       local fortifyNow = p.fortify and t > (p.fortifyFrom or 90) and factories >= 1 and turrets + aas < fortCap
         and (isCmd or self.fortToggle) and (tm.metal > 40 or mInc > 7) and not needEnergy
+      local cn = world.map.coreNode
+      local coreFree = cn and not world.map.blocked[cn.y * world.map.w + cn.x] and not self.coreClaimed
       if factories == 0 and mexes >= 2 and solars >= 1 then
         -- everyone opens with a vehicle plant: it's the only source of constructors
         task = "landfac"
+      elseif coreFree and t > 45 and not isCmd and (tm.metal > 60 or mInc > 6)
+        and self:threatAt((cn.x + 1) * world.T, (cn.y + 1) * world.T, 450) == 0 then
+        -- the Power Core in the middle: worth a constructor's trip
+        self.coreClaimed = true
+        task = { key = "powercore", tx = cn.x, ty = cn.y }
       elseif fortifyNow then
         self.fortN = (self.fortN or 0) + 1
         task = (self.fortN % 4 == 0) and "aaturret" or "turret"

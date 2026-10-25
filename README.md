@@ -115,6 +115,10 @@ The result screen names the personality you faced; the match log has its map rea
 
 Fights start early and in the open, but walking your Commander into a defended base isn't free: gun towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (70 metal) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 
+### The Power Core, and metal that belongs to the navy
+
+Every Annihilation map has a Power Core node in the middle (the blue pad): any constructor can build on it for +4 metal and +60 energy a second, so the centre is always worth fighting over. Offshore metal - the teal rings - can only be claimed by a Sea Constructor, so a shipyard opens up a whole economy instead of just costing you one; a shipyard and sea constructors cost the same as their land versions.
+
 ### Battleships reach across the map
 
 A battleship shells almost anywhere on the map - as long as something of yours can see the target. Your units' and buildings' eyes are its eyes, so one parked off your coast guards every extractor you own: raiders that hit your metal get shelled. It's slow-firing, it can't hit aircraft or subs, and everyone will want it dead - bombers above all. A navy is a mobile alternative to a tower line; air is the answer to a navy.

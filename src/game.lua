@@ -615,7 +615,7 @@ function G:commandContext()
     -- the Refinery only exists with the Metal Alert modifier
     local list = {}
     for _, k in ipairs(b[1].def.builds) do
-      if not D.units[k].convoyOnly or self.world.mods.convoy then list[#list + 1] = k end
+      if (not D.units[k].convoyOnly or self.world.mods.convoy) and (not D.units[k].coreOnly or self.world.map.coreNode) then list[#list + 1] = k end
     end
     return "builder", list, b
   end
@@ -1022,11 +1022,22 @@ function G:stop()
 end
 
 
+-- "sea" if any selected builder is a Sea Constructor (they can claim offshore metal), else "land"
+function G:builderDomain()
+  for _, b in ipairs(self:selectedBuilders()) do if b.def.domain == "sea" then return "sea" end end
+  return "land"
+end
+
 function G:placeBuilding(wx, wy, queue)
   local key = self.buildKey
   local tx, ty = self.world:footprintAt(key, wx, wy)
-  if not self.world:canPlace(key, tx, ty, 1) then
-    self:notice("Can't build there", 1.2)
+  if not self.world:canPlace(key, tx, ty, 1, self:builderDomain()) then
+    local dp = self.world.map:inBounds(tx, ty) and self.world.map.deposit[self.world.map:idx(tx, ty)]
+    if dp and dp.sea and self.world.map:terrainAt(tx, ty) == 0 and self:builderDomain() ~= "sea" then
+      self:notice("Offshore metal needs a Sea Constructor", 1.8)
+    else
+      self:notice("Can't build there", 1.2)
+    end
     return false
   end
   local builders = self:selectedBuilders()
@@ -1103,7 +1114,7 @@ function G:areaSites(key, ax, ay, bx, by)
     for yy = ty, ty + d.h - 1 do for xx = tx, tx + d.w - 1 do
       if planned[yy * map.w + xx] then return false end
     end end
-    return world:canPlace(key, tx, ty, 1)
+    return world:canPlace(key, tx, ty, 1, self:builderDomain())
   end
   local sites = {}
   if key == "mex" then
@@ -1656,7 +1667,7 @@ function G:drawOverlays()
       local wx, wy = self:screenToWorld(mx, my)
       local d = D.units[self.buildKey]
       local tx, ty = world:footprintAt(self.buildKey, wx, wy)
-      local ok = world:canPlace(self.buildKey, tx, ty, 1)
+      local ok = world:canPlace(self.buildKey, tx, ty, 1, self:builderDomain())
       if ok then lg.setColor(0.3, 1, 0.4, 0.35) else lg.setColor(1, 0.25, 0.2, 0.35) end
       lg.rectangle("fill", tx * T, ty * T, d.w * T, d.h * T, 4)
       if ok then lg.setColor(0.3, 1, 0.4, 0.9) else lg.setColor(1, 0.25, 0.2, 0.9) end
