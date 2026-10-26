@@ -267,6 +267,7 @@ local function script(mode, secs)
     w.noFog = true
     A.v.flee, A.v.fleePct, A.v.rejoin, A.v.builders, A.v.builderMin, A.v.repair = true, 30, true, true, 3, true
     A.v.flee_scout = 60
+    A.v.expand, A.v.power, A.v.idleOrder = true, true, "repair,expand,power"
     local c = w.teams[1].commander
     local fac = w:spawn("landfac", 1, c.x + 200, c.y + 200); fac.built = 1
     local map = w.map
@@ -285,6 +286,8 @@ local function script(mode, secs)
     local scout2 = w:spawn("scout", 1, fx, fy + 120); scout2.bornFrom = fac
     scout2.hp = scout2.maxhp * 0.7
     local b = w:spawn("builder", 1, c.x + 100, c.y)
+    local b2 = w:spawn("builder", 1, fx + 300, fy - 300)
+    w.teams[1].energy = 100
     local sol = w:spawn("solar", 1, c.x + 160, c.y - 80); sol.built = 1; sol.hp = sol.maxhp * 0.5
     game.opts.autotest = false
     for i = 1, 40 do
@@ -298,8 +301,42 @@ local function script(mode, secs)
     local function ord(u) local o = u.orders[1]; return o and o.type or "idle" end
     local nb = 0
     for _, k in ipairs(fac.queue) do if k == "builder" then nb = nb + 1 end end
-    print(string.format("AUTOTEST tank(25%%)=%s scout(50%%, own 60%%)=%s scout(70%%)=%s builder=%s plant queue builders=%d",
-      ord(tank), ord(scout), ord(scout2), ord(b), nb))
+    local o2 = b2.orders[1]
+    print(string.format("AUTOTEST tank(25%%)=%s scout(50%%, own 60%%)=%s scout(70%%)=%s builder=%s plant queue builders=%d builder2=%s %s",
+      ord(tank), ord(scout), ord(scout2), ord(b), nb, ord(b2), o2 and o2.key or ""))
+    -- power first: with energy at 100 of 3750, an idle constructor should build a solar
+    b2.orders = {}
+    A.v.idleOrder = "power,expand,repair"
+    w.teams[1].energy = 100
+    A.timer = 0
+    game.opts.autotest = false
+    game:update(1 / 30)
+    game.opts.autotest = true
+    local o3 = b2.orders[1]
+    print("AUTOTEST power first: builder2=" .. ord(b2) .. " " .. (o3 and o3.key or ""))
+    b2.orders = {}
+    A.v.idleOrder = "expand,power,repair"
+    A.timer = 0
+    game.opts.autotest = false
+    game:update(1 / 30)
+    game.opts.autotest = true
+    local o4 = b2.orders[1]
+    print("AUTOTEST expand first: builder2=" .. ord(b2) .. " " .. (o4 and o4.key or "") .. (o4 and o4.tx and string.format(" at %d,%d (it stands at %d,%d)", o4.tx, o4.ty, w.map:tileAt(b2.x, b2.y)) or ""))
+    -- drag the third row (Power) onto the first
+    A.v.idleOrder = "repair,expand,power"
+    do
+      local rects = A.rects()
+      local hp, h1
+      for _, r in ipairs(rects) do
+        if r.kind == "handle" and r.idx == 3 then hp = r end
+        if r.kind == "handle" and r.idx == 1 then h1 = r end
+      end
+      A.click(hp.x + 5, hp.y + 5)
+      A.release(h1.x + 5, h1.y + 5)
+      print("AUTOTEST drag Power to the top: " .. A.v.idleOrder)
+      A.v.idleOrder = "repair,expand,power"
+    end
+    A.v.idleOrder = "repair,expand,power"
     game.autoOpen = true
     for _ = 1, 4 do frame() end
     pending = "uishot_auto.png"

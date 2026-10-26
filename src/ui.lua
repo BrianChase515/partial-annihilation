@@ -1788,7 +1788,7 @@ Camera
 
 Game  (icons: game-icons.net, CC BY 3.0)
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
-  K or the Auto button = standing orders (flee when hurt, keep constructors, idle constructors repair)
+  K or the Auto button = standing orders (flee when hurt, keep constructors, idle constructors repair / expand / power)
   F11 or Ctrl+Cmd+F = fullscreen / windowed (also in the Esc menu),  F1 = this help
 
 Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20

@@ -1840,6 +1840,7 @@ function G:placeRepairZone(x, y, r, queue)
 end
 
 function G:mousereleased(x, y, button)
+  if self.autoOpen then require("src.automation").release(x, y); return end
   if button == 1 and self.zoneStart then
     local cx, cy, d = self:zoneDraft()
     self.zoneStart = nil

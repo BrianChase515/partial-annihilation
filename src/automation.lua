@@ -9,8 +9,13 @@
 --             was when it fled)
 --   builders  keep at least N constructors: if you're short, the next slot of a vehicle plant's
 --             queue gets one (what's being built now isn't interrupted, and Repeat won't copy it)
---   repair    idle constructors repair damaged units and buildings near them (repairs cost
---             resources: 30% of the price for a full repair)
+--
+-- Idle constructors (never overrides an order you gave - only constructors with nothing to do,
+-- never the Commander). One list, in the order you choose (drag to reorder): an idle constructor
+-- does the first job that's switched on and has something to do.
+--   repair    fix damaged units and buildings near it (repairs cost resources)
+--   expand    claim the nearest free metal deposit (land; none with enemies next to it)
+--   power     energy running low: a solar collector at home
 local U = require("src.util")
 local A = {}
 
@@ -21,9 +26,20 @@ A.RULES = {
   { key = "rejoin", label = "Repaired units rejoin", desc = "Units that fled return to your flag (or where they were) once fully repaired." },
   { key = "builders", label = "Keep constructors", desc = "If you have fewer than this, a vehicle plant builds one next (it doesn't interrupt the current build).",
     value = "builderMin", min = 1, max = 8, step = 1, unit = " minimum" },
-  { key = "repair", label = "Idle constructors repair", desc = "Constructors with nothing to do fix damaged things near them (repairs cost resources)." },
 }
-A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin = 2, repair = false }
+A.JOBS = {
+  repair = { label = "Repair", desc = "Fix damaged units and buildings near it (costs resources)." },
+  expand = { label = "Expand", desc = "Claim the nearest free metal deposit (skips ones with enemies near)." },
+  power = { label = "Power", desc = "Energy running low: build a solar collector at home." },
+}
+A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin = 2, repair = false, expand = false, power = false,
+  idleOrder = "repair,expand,power" }
+function A.jobOrder()
+  local out, seen = {}, {}
+  for k in A.v.idleOrder:gmatch("[^,]+") do if A.JOBS[k] and not seen[k] then out[#out + 1] = k; seen[k] = true end end
+  for _, k in ipairs({ "repair", "expand", "power" }) do if not seen[k] then out[#out + 1] = k end end
+  return out
+end
 -- per-unit flee thresholds ("Per unit..." on the flee row): 0 = use the general one
 A.UNITS = { "scout", "tank", "artillery", "flak", "fighter", "bomber", "gunship", "boat", "destroyer", "sub", "battleship" }
 for _, k in ipairs(A.UNITS) do A.v["flee_" .. k] = 0 end
@@ -58,7 +74,7 @@ function A.applies(game)
 end
 
 function A.anyOn()
-  return A.v.flee or A.v.rejoin or A.v.builders or A.v.repair
+  return A.v.flee or A.v.rejoin or A.v.builders or A.v.repair or A.v.expand or A.v.power
 end
 
 local function countBuilders(w, team)
@@ -90,6 +106,75 @@ local function homeFor(w, u)
   return x, y
 end
 
+-- the idle jobs: each returns true if it gave the constructor something to do
+A.doJob = {}
+function A.doJob.repair(game, w, team, u)
+  local best, bd
+  w:query(u.x, u.y, 520, function(e)
+    if e.alive and e.team == team and e ~= u and e.built >= 1 and e.hp < e.maxhp * 0.95 and e.key ~= "commander" then
+      local d = U.dist2(u.x, u.y, e.x, e.y)
+      if d < 500 * 500 and (not bd or d < bd) then best, bd = e, d end
+    end
+  end)
+  if best then w:issue(u, { type = "assist", target = best }); return true end
+end
+
+-- deposits our constructors are already on their way to
+local function claimed(w, team)
+  local c = {}
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == team and e.orders then
+      for _, o in ipairs(e.orders) do if o.type == "build" and o.key == "mex" then c[o.ty * w.map.w + o.tx] = true end end
+    end
+  end
+  return c
+end
+
+function A.doJob.expand(game, w, team, u)
+  local map = w.map
+  local taken = claimed(w, team)
+  local best, bd
+  for _, dp in ipairs(map.deposits) do
+    if not dp.sea and not taken[dp.y * map.w + dp.x] and w:canPlace("mex", dp.x, dp.y, team, "land") then
+      local x, y = map:center(dp.x, dp.y)
+      local d = U.dist2(u.x, u.y, x, y)
+      if d < 2400 * 2400 and (not bd or d < bd) then
+        -- nobody hostile and armed standing next to it
+        local danger = false
+        w:query(x, y, 450, function(e)
+          if not danger and e.alive and e.team and e.team > 0 and w:hostile(e.team, team) and e.def.weapon then danger = true end
+        end)
+        if not danger then best, bd = dp, d end
+      end
+    end
+  end
+  if best then w:issue(u, { type = "build", key = "mex", tx = best.x, ty = best.y }); return true end
+end
+
+function A.doJob.power(game, w, team, u)
+  local tm = w.teams[team]
+  if not (tm.energy < tm.eStore * 0.3 or (tm.stalled and (tm.eRatio or 1) < 0.95)) then return end
+  -- one solar at a time
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == team then
+      if e.key == "solar" and (e.built or 1) < 1 then return end
+      for _, o in ipairs(e.orders or {}) do if o.type == "build" and o.key == "solar" then return end end
+    end
+  end
+  local map = w.map
+  local sx, sy = map:tileAt(tm.startX, tm.startY)
+  for r = 3, 16 do
+    for dy = -r, r do
+      for dx = -r, r do
+        if (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace("solar", sx + dx, sy + dy, team, "land") then
+          w:issue(u, { type = "build", key = "solar", tx = sx + dx, ty = sy + dy })
+          return true
+        end
+      end
+    end
+  end
+end
+
 function A.update(game, dt)
   if not A.anyOn() or not A.applies(game) then return end
   local w = game.world
@@ -118,16 +203,11 @@ function A.update(game, dt)
         u.autoFled = nil
         w:issue(u, { type = "amove", x = tx + math.random(-60, 60), y = ty + math.random(-60, 60) })
       end
-      -- 4. idle constructors repair what's near them
-      if v.repair and u.key == "builder" and #u.orders == 0 then
-        local best, bd
-        w:query(u.x, u.y, 520, function(e)
-          if e.alive and e.team == team and e ~= u and e.built >= 1 and e.hp < e.maxhp * 0.95 and e.key ~= "commander" then
-            local d = U.dist2(u.x, u.y, e.x, e.y)
-            if d < 500 * 500 and (not bd or d < bd) then best, bd = e, d end
-          end
-        end)
-        if best then w:issue(u, { type = "assist", target = best }) end
+      -- 4. idle constructors: the first job (in the player's order) that has something to do
+      if u.key == "builder" and #u.orders == 0 and (v.repair or v.expand or v.power) then
+        for _, job in ipairs(A.jobOrder()) do
+          if v[job] and A.doJob[job](game, w, team, u) then break end
+        end
       end
     end
   end
@@ -171,14 +251,24 @@ function A.unitRects()
   return out, px, py, pw, rowH, per
 end
 
+local JOB_H = 50
+local function idleTop(py, rowH) return py + 70 + #A.RULES * rowH + 54 end
+
 function A.rects()
   if A.view == "units" then return A.unitRects() end
   local lg = love.graphics
   local w, h = lg.getDimensions()
-  local pw, rowH = 640, 86
+  local pw, rowH = 640, 80
   local px = (w - pw) / 2
-  local py = h / 2 - (#A.RULES * rowH) / 2 - 40
+  local total = 70 + #A.RULES * rowH + 54 + 3 * JOB_H + 60
+  local py = math.max(40, h / 2 - total / 2)
   local out = {}
+  local iy = idleTop(py, rowH)
+  for i, job in ipairs(A.jobOrder()) do
+    local y = iy + (i - 1) * JOB_H
+    out[#out + 1] = { x = px + 18, y = y + 6, w = 30, h = 34, kind = "handle", job = job, idx = i }
+    out[#out + 1] = { x = px + pw - 120, y = y + 6, w = 96, h = 34, kind = "jobtoggle", job = job }
+  end
   for i, r in ipairs(A.RULES) do
     local y = py + 70 + (i - 1) * rowH
     out[#out + 1] = { x = px + pw - 120, y = y, w = 96, h = 34, kind = "toggle", rule = r }
@@ -188,7 +278,7 @@ function A.rects()
     end
     if r.key == "flee" then out[#out + 1] = { x = px + pw - 300, y = y + 40, w = 174, h = 28, kind = "perunit" } end
   end
-  out[#out + 1] = { x = px + pw / 2 - 70, y = py + 70 + #A.RULES * rowH, w = 140, h = 36, kind = "close" }
+  out[#out + 1] = { x = px + pw / 2 - 70, y = iy + 3 * JOB_H + 14, w = 140, h = 36, kind = "close" }
   return out, px, py, pw, rowH
 end
 
@@ -242,7 +332,8 @@ function A.draw(game, fontFn)
   local rects, px, py, pw, rowH = A.rects()
   lg.setColor(0, 0, 0, 0.55)
   lg.rectangle("fill", 0, 0, w, h)
-  local ph = 70 + #A.RULES * rowH + 56
+  local iy = idleTop(py, rowH)
+  local ph = iy - py + 3 * JOB_H + 64
   lg.setColor(0.07, 0.09, 0.12, 0.97)
   lg.rectangle("fill", px, py, pw, ph, 10)
   lg.setColor(0.4, 0.55, 0.7)
@@ -269,19 +360,74 @@ function A.draw(game, fontFn)
       lg.printf(txt, px + pw - 266, y + 8, 106, "center")
     end
   end
+  -- idle constructors: the priority list
+  lg.setColor(0.3, 0.38, 0.48)
+  lg.line(px + 18, iy - 50, px + pw - 18, iy - 50)
+  lg.setFont(fontFn(16))
+  lg.setColor(1, 1, 1)
+  lg.print("When a constructor is idle", px + 24, iy - 44)
+  lg.setFont(fontFn(12))
+  lg.setColor(0.6, 0.66, 0.72)
+  lg.print("Never overrides your orders: it does the first job that's on and has work. Drag to reorder.",
+    px + 24, iy - 22)
+  local order = A.jobOrder()
+  for i, job in ipairs(order) do
+    local y = iy + (i - 1) * JOB_H
+    local J = A.JOBS[job]
+    local dragging = A.drag and A.drag.job == job
+    if dragging then
+      lg.setColor(0.2, 0.26, 0.34, 0.9)
+      lg.rectangle("fill", px + 12, my - JOB_H / 2, pw - 24, JOB_H - 4, 6)
+    elseif i % 2 == 1 then
+      lg.setColor(1, 1, 1, 0.03)
+      lg.rectangle("fill", px + 12, y + 2, pw - 24, JOB_H - 4, 6)
+    end
+    local ry = dragging and (my - JOB_H / 2) or y
+    lg.setFont(fontFn(16))
+    lg.setColor(1, 0.85, 0.4)
+    lg.print(tostring(i), px + 58, ry + 13)
+    lg.setColor(A.v[job] and 1 or 0.7, A.v[job] and 1 or 0.72, A.v[job] and 1 or 0.75)
+    lg.print(J.label, px + 80, ry + 4)
+    lg.setFont(fontFn(12))
+    lg.setColor(0.6, 0.66, 0.72)
+    lg.print(J.desc, px + 80, ry + 26)
+  end
   for _, b in ipairs(rects) do
     local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
-    local on = b.kind == "toggle" and A.v[b.rule.key]
+    local on = (b.kind == "toggle" and A.v[b.rule.key]) or (b.kind == "jobtoggle" and A.v[b.job])
+    if b.kind == "handle" then
+      -- three grip lines
+      lg.setColor(hover and 0.85 or 0.55, hover and 0.9 or 0.6, hover and 0.95 or 0.66)
+      local hy = (A.drag and A.drag.job == b.job) and (my - JOB_H / 2 + 6) or b.y
+      for k = 0, 2 do lg.rectangle("fill", b.x + 6, hy + 10 + k * 7, 18, 3, 1) end
+      goto continue
+    end
     if on then lg.setColor(0.2, 0.5, 0.3) elseif hover then lg.setColor(0.25, 0.3, 0.38) else lg.setColor(0.15, 0.18, 0.23) end
     lg.rectangle("fill", b.x, b.y, b.w, b.h, 6)
     lg.setColor(0.45, 0.55, 0.65)
     lg.rectangle("line", b.x, b.y, b.w, b.h, 6)
     lg.setColor(1, 1, 1)
     lg.setFont(fontFn(15))
-    local label = b.kind == "toggle" and (on and "On" or "Off") or (b.kind == "minus" and "-" or (b.kind == "plus" and "+"
+    local label = (b.kind == "toggle" or b.kind == "jobtoggle") and (on and "On" or "Off") or (b.kind == "minus" and "-" or (b.kind == "plus" and "+"
       or (b.kind == "perunit" and "Per unit..." or "Done")))
     lg.printf(label, b.x, b.y + b.h / 2 - 9, b.w, "center")
+    ::continue::
   end
+end
+
+-- dropping a dragged job: it takes the slot under the mouse
+function A.release(x, y)
+  if not A.drag then return end
+  local _, px, py, pw, rowH = A.rects()
+  local iy = idleTop(py, rowH)
+  local order = A.jobOrder()
+  local to = math.max(1, math.min(#order, math.floor((y - iy) / JOB_H) + 1))
+  local job = A.drag.job
+  for i = #order, 1, -1 do if order[i] == job then table.remove(order, i) end end
+  table.insert(order, to, job)
+  A.v.idleOrder = table.concat(order, ",")
+  A.drag = nil
+  A.save()
 end
 
 -- returns true while the panel should stay open
@@ -289,7 +435,9 @@ function A.click(x, y)
   for _, b in ipairs(A.rects()) do
     if x >= b.x and x <= b.x + b.w and y >= b.y and y <= b.y + b.h then
       local r = b.rule
-      if b.kind == "perunit" then A.view = "units"
+      if b.kind == "handle" then A.drag = { job = b.job, from = b.idx }; return true
+      elseif b.kind == "jobtoggle" then A.v[b.job] = not A.v[b.job]
+      elseif b.kind == "perunit" then A.view = "units"
       elseif b.kind == "back" then A.view = "main"
       elseif b.kind == "uminus" or b.kind == "uplus" then
         local k = "flee_" .. b.unitKey

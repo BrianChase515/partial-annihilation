@@ -122,7 +122,10 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
 - **Units flee when hurt** at a health you pick (30% by default), back to the plant that built them - and **Per unit...** sets each kind on its own (scouts at 60%, say).
 - **Repaired units rejoin** your flag (or where they were) once they're whole again.
 - **Keep constructors**: below the minimum, a vehicle plant builds one next, without interrupting what it's making (and Repeat won't copy it).
-- **Idle constructors repair** damaged things near them. Repairs cost resources: 30% of the price for a full repair.
+- **When a constructor is idle** - never overriding an order you gave, and never the Commander - it does the first of these jobs that's switched on and has work, in the order you drag them into:
+  - **Repair** damaged units and buildings near it (repairs cost resources: 30% of the price for a full repair)
+  - **Expand**: claim the nearest free metal deposit, skipping any with enemies next to it
+  - **Power**: when energy runs low, build a solar collector at home (one at a time)
 
 The button turns green while any of them is on. Annihilation only.
 
