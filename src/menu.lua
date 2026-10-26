@@ -171,21 +171,44 @@ function Menu:layout()
   return x0, y, w, h
 end
 
+-- the four modes, as cards: name, a one-line pitch, and how far along it is
+local MODE_CARDS = {
+  { "ANNIHILATION", "rts", "Classic RTS: base, economy and an army on land, sea and air." },
+  { "COMMANDER ARENA", "arena", "No base, no army: your Commander, lanes and endless creeps." },
+  { "COMMANDER CRAFT", "craft", "Gold, lumber, heroes and three tiers: Warcraft rules." },
+  { "COMMANDER OF HEROES", "coh", "Lead 2-5 squads, take the points, bleed their tickets." },
+}
+
+function Menu:cardsY()
+  local x0, y = self:layout()
+  return math.max(84, y - 140)
+end
+
 function Menu:tabRects(r)
   local x0, y, w, h = self:layout()
-  r[#r + 1] = { x = w - 132, y = h - 40, w = 118, h = 30, label = "Settings", action = "settings", small = true }
+  -- footer: the things that aren't about this match (quiet, bottom right)
+  local fx = w - 14
+  local function foot(b)
+    fx = fx - b.w
+    b.x, b.y, b.h, b.small = fx, h - 40, 30, true
+    r[#r + 1] = b
+    fx = fx - 8
+  end
+  foot({ w = 80, label = "Quit", action = "quit" })
+  foot({ w = 104, label = "Settings", action = "settings" })
   if self.mode == "rts" or self.mode == "coh" then
     -- the old computer opponent, kept for reference (v2 is the default)
     local legacy = require("src.settings").v.legacyAI
-    r[#r + 1] = { x = w - 242, y = h - 78, w = 228, h = 30, label = legacy and "Classic AI (legacy): ON" or "Classic AI (legacy): off",
-      action = "legacyai", small = true, active = legacy }
+    foot({ w = 210, label = legacy and "Classic AI (legacy): ON" or "Classic AI (legacy): off", action = "legacyai", active = legacy })
   end
-  local ty = math.max(14, y - 240)
-  local tabs = { { "ANNIHILATION", "rts" }, { "COMMANDER ARENA", "arena" }, { "COMMANDER CRAFT", "craft" }, { "COMMANDER OF HEROES", "coh" } }
+  -- mode cards
+  local ty = self:cardsY()
   local tw, gap = 238, 8
-  local tx = w / 2 - (#tabs * tw + (#tabs - 1) * gap) / 2
-  for i, tb in ipairs(tabs) do
-    r[#r + 1] = { x = tx + (i - 1) * (tw + gap), y = ty, w = tw, h = 50, label = tb[1], tab = tb[2], big = true, active = self.mode == tb[2] }
+  local tx = w / 2 - (#MODE_CARDS * tw + (#MODE_CARDS - 1) * gap) / 2
+  for i, c in ipairs(MODE_CARDS) do
+    local mv = D.MODE_VERSIONS[c[2]]
+    r[#r + 1] = { x = tx + (i - 1) * (tw + gap), y = ty, w = tw, h = 74, label = c[1], tab = c[2], card = true, tagline = c[3],
+      tag = mv and ("v" .. mv[1]) or nil, active = self.mode == c[2] }
   end
 end
 
@@ -288,8 +311,7 @@ function Menu:arenaRects()
   local by = ty + math.max(4 * 46, (compact and row or nAct) * rowH) + 54
   self.arenaStartY = by
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
-  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
-  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  r[#r + 1] = { x = x0, y = by + 62, w = 520, h = 30, label = "How to play  (F1)", action = "help", small = true, link = true }
   -- class roster (hover for details)
   for i, c in ipairs(ARENA.CLASSES) do
     local half = math.ceil(#ARENA.CLASSES / 2)
@@ -352,8 +374,7 @@ function Menu:craftRects()
   local by = y + 348
   self.craftStartY = by
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
-  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
-  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  r[#r + 1] = { x = x0, y = by + 62, w = 520, h = 30, label = "How to play  (F1)", action = "help", small = true, link = true }
   self:updateRect(r, w)
   return r
 end
@@ -496,8 +517,7 @@ function Menu:rects()
   end
   local by = ty + 4 * 46 + 54
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
-  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
-  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  r[#r + 1] = { x = x0, y = by + 62, w = 520, h = 30, label = "How to play  (F1)", action = "help", small = true, link = true }
   local px = x0 + 580
   if RTS_SETUP.game == "sandbox" then
     -- the two armies: a count per unit type (click +/-, Shift for 10, right-click lowers)
@@ -549,7 +569,7 @@ function Menu:cohRects()
       active = (C.game or "conquest") == o[2], small = true }
   end
   if (C.game or "conquest") == "conquest" then
-    for i, o in ipairs({ { "Quick  5-7 min", "quick" }, { "Standard  10-12", "standard" }, { "Long  ~18", "long" } }) do
+    for i, o in ipairs({ { "Quick  5-7 min", "quick" }, { "Standard  10-12 min", "standard" }, { "Long  ~18 min", "long" } }) do
       r[#r + 1] = { x = x0 + (i - 1) * 132, y = y + 176, w = 128, h = 34, label = o[1], kind = "cohlen", value = o[2],
         active = (C.length or "standard") == o[2], rowLabel = i == 1 and "Length" or nil, small = true }
     end
@@ -559,8 +579,7 @@ function Menu:cohRects()
   r[#r + 1] = { x = x0 + 172, y = y + 132, w = 32, h = 34, label = "+", kind = "cohlv", d = 1 }
   local by = y + 4 * 46 + 54 + 160
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
-  r[#r + 1] = { x = x0, y = by + 64, w = 256, h = 36, label = "Controls", action = "help" }
-  r[#r + 1] = { x = x0 + 264, y = by + 64, w = 256, h = 36, label = "Quit", action = "quit" }
+  r[#r + 1] = { x = x0, y = by + 62, w = 520, h = 30, label = "How to play  (F1)", action = "help", small = true, link = true }
   -- the squads: five slots, each one kind of unit
   local SQ = require("src.squads")
   local px = x0 + 580
@@ -709,26 +728,19 @@ function Menu:draw()
     end
   end
   local title = "PARTIAL ANNIHILATION"
-  local f = R.font(56)
+  local f = R.font(40)
+  local tyT = self:cardsY() - 62
   lg.setFont(f)
   lg.setColor(0, 0, 0, 0.5)
-  lg.print(title, w / 2 - f:getWidth(title) / 2 + 4, y - 150 + 4)
+  lg.print(title, w / 2 - f:getWidth(title) / 2 + 3, tyT + 3)
   lg.setColor(th.title[1], th.title[2], th.title[3])
-  lg.print(title, w / 2 - f:getWidth(title) / 2, y - 150)
-  lg.setFont(R.font(18))
-  lg.setColor(th.sub[1], th.sub[2], th.sub[3])
-  local sub = self.mode == "arena" and "Commander Arena: no base, no army. Your Commander, three lanes and endless creeps."
-    or (self.mode == "craft" and "Commander Craft: gold, lumber, heroes and three tiers. Warcraft rules, our heroes.")
-    or (self.mode == "coh" and (COH_SETUP.game == "wih" and "War is Hell: find them, kill them, and bring your men home."
-      or "Commander of Heroes: lead squads, not armies. Take the map, bleed their tickets.")
-    or "A small real-time strategy game of land, sea and air. Shapes included.")
-  lg.print(sub, w / 2 - R.font(18):getWidth(sub) / 2, y - 78)
-  do
-    local mv = D.MODE_VERSIONS[self.mode] or D.MODE_VERSIONS.rts
-    local vt = string.format("%s v%s  -  %s", D.MODE_NAMES[self.mode] or "Annihilation", mv[1], mv[2])
-    lg.setFont(R.font(13))
-    lg.setColor(th.sub[1], th.sub[2], th.sub[3], 0.7)
-    lg.print(vt, w / 2 - R.font(13):getWidth(vt) / 2, y - 52)
+  lg.print(title, w / 2 - f:getWidth(title) / 2, tyT)
+  -- War is Hell is a game type inside Commander of Heroes: say so where it's picked
+  if self.mode == "coh" and COH_SETUP.game == "wih" then
+    lg.setFont(R.font(14))
+    lg.setColor(th.sub[1], th.sub[2], th.sub[3])
+    local sub = "War is Hell: find them, kill them, and bring your men home."
+    lg.print(sub, w / 2 - R.font(14):getWidth(sub) / 2, self:cardsY() + 80)
   end
 
   -- column headers for player slots
@@ -779,6 +791,36 @@ function Menu:draw()
   local hoverProf, hoverMod, hoverClass, hoverTmpl
   self.hoverLevel, self.hoverRace, self.hoverHero, self.hoverMap = nil, nil, nil, nil
   for _, r in ipairs(self:rects()) do
+    if r.card then
+      local hov = mx >= r.x and mx <= r.x + r.w and my >= r.y and my <= r.y + r.h
+      local cth = THEMES[r.tab] or THEMES.rts
+      if r.active then lg.setColor(cth.active[1], cth.active[2], cth.active[3])
+      else local c = hov and th.hover or th.btn; lg.setColor(c[1], c[2], c[3], 0.92) end
+      lg.rectangle("fill", r.x, r.y, r.w, r.h, 8)
+      if r.active then
+        lg.setColor(0.95, 0.75, 0.3)
+        lg.setLineWidth(2)
+        lg.rectangle("line", r.x - 2, r.y - 2, r.w + 4, r.h + 4, 9)
+        lg.setLineWidth(1)
+      else
+        lg.setColor(th.line[1], th.line[2], th.line[3], 0.7)
+        lg.rectangle("line", r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 8)
+      end
+      local nf = 17
+      local tagW = r.tag and (R.font(11):getWidth(r.tag) + 10) or 0
+      while nf > 11 and R.font(nf):getWidth(r.label) > r.w - 24 - tagW do nf = nf - 1 end
+      lg.setFont(R.font(nf))
+      lg.setColor(1, 1, 1, r.active and 1 or 0.85)
+      lg.print(r.label, r.x + 12, r.y + 9)
+      lg.setFont(R.font(11))
+      lg.setColor(1, 1, 1, r.active and 0.85 or 0.55)
+      lg.printf(r.tagline, r.x + 12, r.y + 34, r.w - 22, "left")
+      if r.tag then
+        lg.setColor(1, 1, 1, 0.45)
+        lg.print(r.tag, r.x + r.w - 10 - R.font(11):getWidth(r.tag), r.y + 12)
+      end
+      goto nextRect
+    end
     if r.rowLabel then
       lg.setFont(R.font(16))
       lg.setColor(0.75, 0.8, 0.88)
@@ -826,8 +868,8 @@ function Menu:draw()
         else
           lg.setColor(0.25, 0.25, 0.27)
         end
-      elseif r.kind == "lvlabel" then
-        lg.setColor(th.field[1], th.field[2], th.field[3])
+      elseif r.kind == "lvlabel" or r.link then
+        lg.setColor(th.field[1], th.field[2], th.field[3], r.link and (hover and 0.9 or 0.5) or 1)
       elseif active then
         lg.setColor(th.active[1], th.active[2], th.active[3])
       else
@@ -857,22 +899,37 @@ function Menu:draw()
         require("src.icons").draw("cls_" .. ck, r.x + 18, r.y + r.h / 2, r.h - 6)
       end
     end
+    ::nextRect::
   end
   if self.mode == "craft" then
     self:drawCraftInfo(x0, y, w, h, self.hoverRace, self.hoverHero)
   elseif self.mode == "arena" then
     -- captions under the two map groups
+    lg.setFont(R.font(12))
+    lg.setColor(0.75, 0.8, 0.88)
+    lg.print("LANES ONLY", x0 + 2, y - 30)
     lg.setFont(R.font(11))
-    lg.setColor(0.62, 0.66, 0.74)
-    lg.print("simple: lanes, towers, creeps", x0 + 4, y - 16)
-    lg.setColor(0.78, 0.6, 1)
-    lg.print("jungle: camps, shrines, Colossus", x0 + 4 * 92 + 18 + 4, y - 16)
+    lg.setColor(0.6, 0.64, 0.72)
+    lg.print("towers and creeps", x0 + 2 + R.font(12):getWidth("LANES ONLY") + 8, y - 29)
+    lg.setColor(0.62, 0.66, 0.74, 0.6)
+    lg.rectangle("fill", x0 + 2, y - 12, 4 * 92 - 8, 2)
+    lg.setFont(R.font(12))
+    lg.setColor(0.85, 0.68, 1)
+    lg.print("LANES + JUNGLE", x0 + 4 * 92 + 18 + 2, y - 30)
+    lg.setFont(R.font(11))
+    lg.setColor(0.72, 0.6, 0.85)
+    lg.print("camps, shrines, Colossus", x0 + 4 * 92 + 18 + 2, y - 16 - 0)
+    lg.setColor(0.78, 0.6, 1, 0.6)
     lg.setColor(0.72, 0.42, 1, 0.5)
     lg.setLineWidth(1)
     lg.line(x0 + 4 * 92 + 7, y - 14, x0 + 4 * 92 + 7, y + 34)
     self:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   elseif self.mode == "coh" then
-    -- (drawn with the column headers)
+    -- captions over the two halves of the first row
+    lg.setFont(R.font(11))
+    lg.setColor(0.6, 0.66, 0.74)
+    lg.print("MAP SIZE", x0 + 2, y - 15)
+    lg.print("GAME", x0 + 222, y - 15)
   else
   -- personality description
   lg.setFont(R.font(14))
@@ -956,8 +1013,8 @@ function Menu:draw()
       or string.format("Finish %d more Annihilation games (win or lose, no gameplay modifiers) to unlock two opponents that learn from you.",
         math.max(0, require("src.ghost").NEEDED - require("src.ghost").completed())))
   -- (skipped when the buttons reach the bottom of a small screen)
-  if not (self.mode == "arena" and self.arenaStartY and self.arenaStartY + 104 > h - 44) then
-    lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 40)
+  if not (self.mode == "arena" and self.arenaStartY and self.arenaStartY + 104 > h - 60) then
+    lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 57)
   end
   if (self.mode == "rts" or self.mode == "coh") and require("src.settings").v.legacyAI then
     -- a plain warning while the old opponent is switched on
@@ -965,7 +1022,7 @@ function Menu:draw()
     local msg1 = "Classic AI is on: the old computer opponent, kept as a reference while the new AI is developed."
     local msg2 = "It isn't well tested or balanced. Switch it off for the real game."
     local tw = math.max(f:getWidth(msg1), f:getWidth(msg2)) + 24
-    local bx, by = w - 14 - tw, h - 78 - 58
+    local bx, by = w - 14 - tw, h - 40 - 62
     lg.setColor(0.25, 0.12, 0.04, 0.92)
     lg.rectangle("fill", bx, by, tw, 50, 6)
     lg.setColor(1, 0.65, 0.25)
@@ -1000,7 +1057,8 @@ function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
   elseif hoverClass == -1 then
     desc = "Random: a class picked for you when the match starts."
   else
-    desc = "Destroy the enemy Core. Towers guard each lane: outer first, then inner, then the Core. Hover a class to read about it."
+    local tm = ATEMPLATES[self.arena.template or 1]
+    desc = (tm and tm[3] and (tm[3] .. "  ") or "") .. "Destroy the enemy Core. Hover a class to read about it."
   end
   lg.printf(desc, x0, (self.arenaStartY and self.arenaStartY - 48) or (ty + 4 * 46 + 4), 520)
   -- arena high scores and online board
