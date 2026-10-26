@@ -99,7 +99,7 @@ A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units
 
 ### AI v2 (beta)
 
-Settings has an Annihilation AI and a Commander of Heroes AI switch: Classic (the default) or v2 (applies from the next match). v2 lists what it could do, scores each option by the situation and a personality drawn for that game, and - like AI War - takes the very best only some of the time: about 63% at level 5, 95% at level 10, otherwise one of the nearly-best. Level 8+ knows everything you have. **v2 is about two classic levels stronger**: v2 level 5 plays like classic level 7 (it has level 7's economy; its judgement follows the level you pick).
+The computer opponent in Annihilation and Commander of Heroes is v2. It lists what it could do, scores each option by the situation and a personality drawn for that game, and - like AI War - takes the very best only some of the time: about 63% at level 5, 95% at level 10, otherwise one of the nearly-best. Level 8+ knows everything you have. v2 level 5 plays with level 7's economy; its judgement follows the level you pick. The old opponent is still there as **Classic AI (legacy)**, a toggle at the bottom of the title screen: it's kept as a reference while v2 is developed, and it isn't well tested or balanced.
 
 In Annihilation it keeps the classic economy and building and adds:
 - **It reads the map at the start**: how much of the metal sits in the middle, how much is out on the flanks to raid, whether water gives a navy a way in. That makes some personalities likelier than others (Raider on open maps, Admiral where the water reaches in) and sets how far forward the army waits - right up to the centre on centre maps.

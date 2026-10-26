@@ -10,11 +10,14 @@ local autotest = nil
 smoke = nil
 
 local function startGame(opts)
-  -- Commander of Heroes: the experimental AI, if switched on in Settings (never in test runs)
-  if opts.coh and not opts.autotest and require("src.settings").v.cohAI == "v2" then opts.aiV2 = true end
-  -- Annihilation: likewise (not the Arena or Craft, whose AIs are their own)
-  if not opts.coh and not opts.autotest and (opts.mode == nil or opts.mode == "rts") and not (opts.mods and opts.mods.squads)
-    and require("src.settings").v.annAI == "v2" then opts.aiV2 = true end
+  -- v2 is the computer opponent in Annihilation and Commander of Heroes; the classic AI stays
+  -- available from the title screen as a reference (the Arena and Craft have their own AIs).
+  -- Test runs pick their AI themselves
+  local legacy = require("src.settings").v.legacyAI
+  if not opts.autotest and not legacy then
+    if opts.coh then opts.aiV2 = true
+    elseif (opts.mode == nil or opts.mode == "rts") and not (opts.mods and opts.mods.squads) then opts.aiV2 = true end
+  end
   lastOpts = opts
   opts.seed = opts.seed or os.time()
   game = Game.new(opts)

@@ -174,6 +174,12 @@ end
 function Menu:tabRects(r)
   local x0, y, w, h = self:layout()
   r[#r + 1] = { x = w - 132, y = h - 40, w = 118, h = 30, label = "Settings", action = "settings", small = true }
+  if self.mode == "rts" or self.mode == "coh" then
+    -- the old computer opponent, kept for reference (v2 is the default)
+    local legacy = require("src.settings").v.legacyAI
+    r[#r + 1] = { x = w - 242, y = h - 78, w = 228, h = 30, label = legacy and "Classic AI (legacy): ON" or "Classic AI (legacy): off",
+      action = "legacyai", small = true, active = legacy }
+  end
   local ty = math.max(14, y - 240)
   local tabs = { { "ANNIHILATION", "rts" }, { "COMMANDER ARENA", "arena" }, { "COMMANDER CRAFT", "craft" }, { "COMMANDER OF HEROES", "coh" } }
   local tw, gap = 238, 8
@@ -953,6 +959,20 @@ function Menu:draw()
   if not (self.mode == "arena" and self.arenaStartY and self.arenaStartY + 104 > h - 44) then
     lg.print(tip, w / 2 - R.font(13):getWidth(tip) / 2, h - 40)
   end
+  if (self.mode == "rts" or self.mode == "coh") and require("src.settings").v.legacyAI then
+    -- a plain warning while the old opponent is switched on
+    local f = lg.getFont()
+    local msg1 = "Classic AI is on: the old computer opponent, kept as a reference while the new AI is developed."
+    local msg2 = "It isn't well tested or balanced. Switch it off for the real game."
+    local tw = math.max(f:getWidth(msg1), f:getWidth(msg2)) + 24
+    local bx, by = w - 14 - tw, h - 78 - 58
+    lg.setColor(0.25, 0.12, 0.04, 0.92)
+    lg.rectangle("fill", bx, by, tw, 50, 6)
+    lg.setColor(1, 0.65, 0.25)
+    lg.rectangle("line", bx, by, tw, 50, 6)
+    lg.print(msg1, bx + 12, by + 7)
+    lg.print(msg2, bx + 12, by + 27)
+  end
   self:drawDropdown()
   if self.showHelp then UI.drawHelp(self.mode == "craft" and "craft" or (self.mode == "coh" and "coh") or self.mode == "arena") end
   if require("src.settings").open then require("src.settings").draw() end
@@ -1183,6 +1203,9 @@ function Menu:mousepressed(x, y, b)
         if self:validTeams() then return "start" end
       elseif r.action == "help" then self.showHelp = true
       elseif r.action == "settings" then SET.open = true
+      elseif r.action == "legacyai" then
+        SET.v.legacyAI = not SET.v.legacyAI
+        SET.save()
       elseif r.action == "update" then
         local ON = require("src.online")
         if ON.state == "updated" then love.event.quit("restart")

@@ -2425,6 +2425,30 @@ function G:retreat(where)
   if where == "flag" and self.flag then x, y = self.flag.x, self.flag.y
   elseif hq and hq.alive then x, y = hq.x, hq.y + 90 -- Commander of Heroes: flee to the HQ (it heals)
   elseif self.world.squads then x, y = self.world.teams[1].startX, self.world.teams[1].startY -- War is Hell: back where we came in
+  elseif where ~= "commander" then
+    -- no flag: every unit goes back to the plant that built it (the Commander is often at the
+    -- front - that's no safety). Units grouped by plant, each group in formation there
+    local tm = self.world.teams[1]
+    local groups, order = {}, {}
+    for _, u in ipairs(list) do
+      local f = u.bornFrom
+      local gx, gy
+      if f and f.alive then gx, gy = f.x, f.y + (f.def.h * self.world.T) / 2 + 40
+      elseif u.bornX then gx, gy = u.bornX, u.bornY
+      else gx, gy = tm.startX, tm.startY end
+      local k = math.floor(gx / 64) .. ":" .. math.floor(gy / 64)
+      if not groups[k] then groups[k] = { x = gx, y = gy, units = {} }; order[#order + 1] = k end
+      local g = groups[k]
+      g.units[#g.units + 1] = u
+    end
+    for _, k in ipairs(order) do
+      local g = groups[k]
+      local slots = self:formation(g.units, g.x, g.y)
+      for _, u in ipairs(g.units) do self.world:issue(u, { type = "retreat", x = slots[u][1], y = slots[u][2] }) end
+      self.world.effects[#self.world.effects + 1] = { kind = "ping", x = g.x, y = g.y, t = 0, life = 0.6, r = 1, g = 0.85, b = 0.3 }
+    end
+    self:notice("Retreating " .. #list .. " units to " .. (#order > 1 and "the plants that built them" or "the plant that built them"), 1.2)
+    return
   elseif c and c.alive then
     -- just behind the Commander (toward home), not on top of him: a unit sent to his exact spot
     -- would only shove against him

@@ -395,6 +395,31 @@ function W:spend(team, cost, power, dt)
   return f * ratio
 end
 
+-- (Annihilation) repairs cost a share of what the thing cost to build (rtsTune.repairCost:
+-- a full repair from nothing costs that fraction). Returns how much of `frac` it could pay for:
+-- short of resources, repairs slow down with everything else
+function W:payRepair(e, frac)
+  local rc = self.rtsTune and self.rtsTune.repairCost
+  local c = e.def.cost
+  if not rc or rc <= 0 or not c or frac <= 0 then return 1 end
+  local tm = self.teams[e.team]
+  if not tm then return 1 end
+  local m, en = c.metal * rc * frac, c.energy * rc * frac
+  tm.mDemand = tm.mDemand + m
+  tm.eDemand = tm.eDemand + en
+  local ratio = 1
+  if m > 0 then ratio = math.min(ratio, tm.mRatio) end
+  if en > 0 then ratio = math.min(ratio, tm.eRatio) end
+  if m > 0 and tm.metal < m * ratio then ratio = tm.metal / m end
+  if en > 0 and tm.energy < en * ratio then ratio = math.min(ratio, tm.energy / en) end
+  ratio = math.max(0, ratio)
+  tm.metal = tm.metal - m * ratio
+  tm.energy = tm.energy - en * ratio
+  tm.mSpendAcc = tm.mSpendAcc + m * ratio
+  tm.eSpendAcc = tm.eSpendAcc + en * ratio
+  return ratio
+end
+
 ---------------------------------------------------------------------------
 -- Placement
 
@@ -902,7 +927,9 @@ function W:repairZones()
       if u.general then u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.012); u.healing = 0.6 end
       for _, h in ipairs(healers) do
         if h.team == u.team and U.dist2(u.x, u.y, h.x, h.y) < 380 * 380 then
-          u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.04 * 0.5)
+          local add = math.min(u.maxhp - u.hp, u.maxhp * 0.04 * 0.5)
+          add = add * self:payRepair(u, add / u.maxhp)
+          u.hp = math.min(u.maxhp, u.hp + add)
           u.healing = 0.6
           break
         end
@@ -1239,6 +1266,9 @@ function W:damage(o, amount, attacker)
       -- Arena towers learn from fighting Commanders; shooting creeps barely counts, so an
       -- undefended tower doesn't rank up in the middle of your push
       if attacker.arenaTower and o.key ~= "commander" then xp = xp * 0.12 end
+      -- (Annihilation) splash hits many at once: it would make Generals of a battery in a minute
+      local aw = attacker.def and attacker.def.weapon
+      if self.rtsTune and aw and (aw.splash or 0) > 0 then xp = xp * (self.rtsTune.splashXp or 1) end
       self:gainXP(attacker, xp)
     end
   end
@@ -1908,7 +1938,9 @@ function W:updateAssist(e, o, dt)
   if needsBuild then
     self:applyBuild(e, b, self:buildPowerOf(e), dt)
   elseif needsRepair then
-    b.hp = math.min(b.maxhp, b.hp + b.maxhp * self:buildPowerOf(e) * dt / ((b.def.cost and b.def.cost.work or 200) * 1.5))
+    local add = math.min(b.maxhp - b.hp, b.maxhp * self:buildPowerOf(e) * dt / ((b.def.cost and b.def.cost.work or 200) * 1.5))
+    add = add * self:payRepair(b, add / b.maxhp)
+    b.hp = math.min(b.maxhp, b.hp + add)
     e.nanoTarget = b; e.nanoTimer = 0.1
   elseif factoryHelp then
     b.assistPower = (b.assistPower or 0) + self:buildPowerOf(e)
@@ -1991,6 +2023,8 @@ function W:produce(f, key)
   end
   local u = self:spawn(key, f.team, x, y)
   u.homeX, u.homeY = x, y
+  -- where it was built: fleeing units with no flag set go back here (their plant, at home)
+  u.bornX, u.bornY, u.bornFrom = x, y, f
   if self.craft then CRAFT.onSpawn(self, u) end
   if self.onProduced then self.onProduced(u) end
   local rt = f.rally and f.rally.type == "guard" and f.rally.target

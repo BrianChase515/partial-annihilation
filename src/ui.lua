@@ -1478,7 +1478,7 @@ local ORDERS = {
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
   { "hold", "Hold", "D", "Hold fire: selected units stop shooting while you hold D (or until you click again), so you can time the killing shot." },
   { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet. Constructors: drag a circle to make a repair zone - they stay and fix everything of yours inside it." },
-  { "flee", "Flee", "F", "Retreat to your flag at +25% speed. Weapons stay OFF until fully repaired." },
+  { "flee", "Flee", "F", "Retreat to your flag at +25% speed - or, with no flag set, back to the plant that built each unit. Weapons stay OFF until fully repaired." },
   { "fleecmd", "To Cmdr", "Shift+F", "Retreat to the Commander (+25% speed, weapons off until repaired)." },
   { "flag", "Flag", "Ctrl+F", "Plant the retreat flag: click where fleeing units should go." },
   { "destroy", "Destroy", "Del", "Self-destruct the selection. Unfinished buildings refund. Commander needs 2 presses." },
