@@ -299,6 +299,22 @@ local function run()
     print(string.format("  progression: a level-5 Commander (nuke) in %d of %d games%s; a General in %d of %d; best unit level %.1f on average",
       c5, ng, c5n > 0 and string.format(" (at %d:%02d)", math.floor(c5t / c5n / 60), math.floor(c5t / c5n % 60)) or "", gen, ng, lv / math.max(1, #rows)))
   end
+  if mode == "rts" then
+    local agg = {}
+    for _, r in ipairs(rows) do
+      for dom, L in pairs(r.f.lvl or {}) do
+        local a = agg[dom] or { n = 0, s = 0, max = 0, sides = 0 }
+        agg[dom] = a
+        a.n, a.s, a.max, a.sides = a.n + L.n, a.s + L.s, a.max + L.max, a.sides + 1
+      end
+    end
+    local parts = {}
+    for _, dom in ipairs({ "land", "air", "sea" }) do
+      local a = agg[dom]
+      if a and a.n > 0 then parts[#parts + 1] = string.format("%s avg L%.1f (best L%.1f, %d units)", dom, a.s / a.n, a.max / a.sides, a.n) end
+    end
+    print("  veterancy at the end: " .. table.concat(parts, ";  "))
+  end
   if mode ~= "rts" then table_by("comp") end
   print("CSV", love.filesystem.getSaveDirectory() .. "/tourney_" .. mode .. ".csv")
 end

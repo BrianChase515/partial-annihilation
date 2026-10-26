@@ -945,6 +945,7 @@ function W:gainXP(e, amount)
   -- Squad Tactics: small maps and nonstop fighting - veterancy comes slower (artillery slowest:
   -- its splash would otherwise make Generals of a whole battery in a minute)
   if self.mods and self.mods.squads then amount = amount * (e.key == "artillery" and 0.2 or 0.35) end
+  if self.rtsTune and (e.def.domain == "sea" or e.def.domain == "sub") then amount = amount * (self.rtsTune.shipXp or 1) end
   e.xp = (e.xp or 0) + amount
   local L = e.level or 0
   while L < W.MAX_LEVEL and e.xp >= self:xpForLevel(e, L + 1) do
@@ -2028,6 +2029,13 @@ function W:produce(f, key)
   u.homeX, u.homeY = x, y
   -- where it was built: fleeing units with no flag set go back here (their plant, at home)
   u.bornX, u.bornY, u.bornFrom = x, y, f
+  -- (Annihilation) ships come later than the land war, against veterans they never got to
+  -- fight: they leave the yard with trained crews (a level or more) and learn faster
+  local tn = self.rtsTune
+  if tn and (d.domain == "sea" or d.domain == "sub") and d.weapon and (tn.shipStartLevel or 0) > 0 then
+    self:gainXP(u, self:xpForLevel(u, tn.shipStartLevel) / (tn.shipXp or 1))
+    u.hp = u.maxhp
+  end
   if self.craft then CRAFT.onSpawn(self, u) end
   if self.onProduced then self.onProduced(u) end
   local rt = f.rally and f.rally.type == "guard" and f.rally.target

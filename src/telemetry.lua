@@ -228,6 +228,16 @@ function Tel.fingerprint(world, team)
   for L = 5, 1, -1 do if la[L] then f.cmdLevel = math.max(f.cmdLevel, L); break end end
   f.cmd5At = la[5]
   f.generals = world.genCount and world.genCount[team] or 0
+  -- veterancy by domain: average level of its combat units still alive, and the best
+  f.lvl = {}
+  for _, e in ipairs(world.entities) do
+    if e.alive and e.team == team and not e.def.building and e.def.weapon and e.key ~= "commander" then
+      local dom = (e.def.domain == "sub") and "sea" or e.def.domain
+      local L = f.lvl[dom] or { n = 0, s = 0, max = 0 }
+      f.lvl[dom] = L
+      L.n, L.s, L.max = L.n + 1, L.s + (e.level or 0), math.max(L.max, e.level or 0)
+    end
+  end
   f.maxUnitLevel = world.maxLvl and world.maxLvl[team] or 0
   -- groups it fought in (average, and how much that varied)
   local g = self.groups[team] or {}
