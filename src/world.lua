@@ -167,6 +167,9 @@ function W.new(opts)
     c.cxp, c.clevel = 0, 0
     self.teams[t].commander = c
     self.teams[t].startX, self.teams[t].startY = x, y
+    -- (Annihilation) two Defense Towers at the drop point: somewhere for a Commander to fall back
+    -- to. A base that's lost them (or a player who led the enemy home) is still fair game
+    if self.rtsTune and (self.rtsTune.dropTowers or 0) > 0 then self.pendingDrops = self.pendingDrops or {}; self.pendingDrops[#self.pendingDrops + 1] = { t = t, x = x, y = y } end
     end
     ::continue::
   end
@@ -180,6 +183,8 @@ function W.new(opts)
   self:recomputeEconomy()
   self.grid = {}
   self:rebuildGrid()
+  for _, dp in ipairs(self.pendingDrops or {}) do self:placeDropTowers(dp.t, dp.x, dp.y, self.rtsTune.dropTowers) end
+  if self.pendingDrops then self.pendingDrops = nil; self:rebuildGrid() end
   -- Sandbox armies, Squad Tactics HQs and squads (need the grid to place buildings)
   if MODS.afterSpawn(self, opts) then self:rebuildGrid() end
   self:recomputeEconomy()
@@ -394,6 +399,32 @@ end
 -- Placement
 
 -- builderDomain: "sea" for a Sea Constructor, else "land" - offshore metal is the navy's
+function W:placeDropTowers(t, x, y, n)
+  local map, T = self.map, self.T
+  local cx, cy = map.w * T / 2, map.h * T / 2
+  local fx, fy = U.norm(cx - x, cy - y)
+  local placed = 0
+  for k = 1, n do
+    local side = (k % 2 == 1) and 1 or -1
+    local px, py = x + fx * 3.5 * T - fy * 3 * T * side, y + fy * 3.5 * T + fx * 3 * T * side
+    local tx0, ty0 = math.floor(px / T), math.floor(py / T)
+    local done = false
+    for r = 0, 4 do
+      for dy = -r, r do
+        for dx = -r, r do
+          if not done and (math.abs(dx) == r or math.abs(dy) == r) and self:canPlace("turret", tx0 + dx, ty0 + dy, t, "land")
+            and not map.deposit[map:idx(tx0 + dx, ty0 + dy)] then
+            self:spawn("turret", t, (tx0 + dx + 0.5) * T, (ty0 + dy + 0.5) * T, 1)
+            done = true
+          end
+        end
+      end
+    end
+    if done then placed = placed + 1 end
+  end
+  return placed
+end
+
 function W:canPlace(key, tx, ty, team, builderDomain)
   local d = D.units[key]
   local map = self.map

@@ -356,7 +356,7 @@ D.TOWER_VS_COMMANDER = 2.5
 -- within leadR that the Commander earns as XP; cthr: scales his level thresholds
 -- (tested AI vs AI on a medium map with some water: ~11.5-minute games, first fighting ~2:05, a
 -- level-5 Commander in about two games of three, a General in nearly every game)
-D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0 }
+D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2 }
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do
