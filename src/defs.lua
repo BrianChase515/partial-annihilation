@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.26.2"
+D.VERSION = "0.26.3"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")

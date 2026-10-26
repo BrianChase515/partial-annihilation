@@ -253,7 +253,9 @@ function UI.drawTop(game)
     local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
     local active = (b.action == "pause" and game.paused)
     if b.action == "auto" and require("src.automation").anyOn() then
-      lg.setColor(hover and 0.25 or 0.16, hover and 0.55 or 0.42, hover and 0.32 or 0.24) -- green: standing orders are on
+      -- green: standing orders are on (pulsing for the first 20 seconds of a match, so it's noticed)
+      local k = game.world.time < 20 and (0.5 + 0.5 * math.sin(love.timer.getTime() * 5)) or 0
+      lg.setColor((hover and 0.25 or 0.16) + 0.2 * k, (hover and 0.55 or 0.42) + 0.35 * k, (hover and 0.32 or 0.24) + 0.2 * k)
     else
       lg.setColor(active and 0.45 or (hover and 0.22 or 0.13), hover and 0.3 or 0.17, hover and 0.38 or 0.22)
     end

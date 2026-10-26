@@ -175,8 +175,27 @@ function A.doJob.power(game, w, team, u)
   end
 end
 
+-- one line saying which standing orders are on (shown when a match starts)
+function A.summary()
+  local parts = {}
+  if A.v.flee then parts[#parts + 1] = "flee at " .. A.v.fleePct .. "%" end
+  if A.v.rejoin then parts[#parts + 1] = "rejoin" end
+  if A.v.builders then parts[#parts + 1] = A.v.builderMin .. " constructors" end
+  local jobs = {}
+  for _, j in ipairs(A.jobOrder()) do if A.v[j] then jobs[#jobs + 1] = A.JOBS[j].label:lower() end end
+  if #jobs > 0 then parts[#parts + 1] = "idle: " .. table.concat(jobs, " > ") end
+  return table.concat(parts, ", ")
+end
+
 function A.update(game, dt)
   if not A.anyOn() or not A.applies(game) then return end
+  if not game.autoAnnounced then
+    game.autoAnnounced = true
+    if game.notice then
+      game:notice("Auto is on from last time - the Auto button (or K) changes it", 8)
+      game:notice("Auto: " .. A.summary(), 8)
+    end
+  end
   local w = game.world
   if w.over then return end
   A.timer = (A.timer or 0) - dt
