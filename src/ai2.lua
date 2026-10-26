@@ -67,6 +67,10 @@ function AI2.new(world, team, level, profileKey)
   -- air defence it keeps whether or not it has seen aircraft: about one flak per eight land
   -- fighters, and flak riding with the Commander (its Defense Towers cover the base)
   self.flakShare = 0.12
+  -- pulling hurt units out of a fight: a skill that grows with level (the Commander's own
+  -- escape doesn't depend on this - he always knows to run)
+  self.fleeSkill = math.min(1, 0.25 + 0.075 * self.level)
+  self.fleeAt = 0.5 + 0.065 * self.level
   self.facPerIncome = tonumber(os.getenv("PA_FPI") or "") or 13
   self.facCap = 10
   self.reserved = {}

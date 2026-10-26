@@ -6,8 +6,10 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.25.0"
-D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
+D.VERSION = "0.26.0"
+-- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
+-- between them, so scores are only compared like for like
+D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
   rts = { "0.10", "Rich economy, Power Core tower, Defense Towers, a real navy; tuned for ~12-minute games." },

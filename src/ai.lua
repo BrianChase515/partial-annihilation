@@ -1584,7 +1584,11 @@ function AI:thinkArmy()
   if self.diff.retreat then
     for _, u in ipairs(army) do
       local o = u.orders[1]
-      if u.hp < u.maxhp * (u.general and 0.5 or 0.3) and (not o or o.type ~= "retreat") and u.key ~= "scout"
+      -- (v2: how well it pulls hurt units out follows its level - fleeAt scales the threshold,
+      -- fleeSkill is the chance a given unit gets noticed at all, rolled once per unit)
+      local at = (u.general and 0.5 or 0.3) * (self.fleeAt or 1)
+      if u.fleeRoll == nil and self.fleeSkill then u.fleeRoll = self.rng:random() < self.fleeSkill end
+      if u.hp < u.maxhp * at and (not o or o.type ~= "retreat") and u.key ~= "scout" and u.fleeRoll ~= false
         and U.dist(u.x, u.y, self.baseX, self.baseY) > 600 and self:threatAt(u.x, u.y, 350) > 0 then
         world:issue(u, { type = "retreat", x = self.baseX + self.rng:random(-150, 150), y = self.baseY + self.rng:random(-150, 150) })
         self.wave[u] = nil
