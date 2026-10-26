@@ -855,7 +855,9 @@ W.MAX_LEVEL = 5
 
 function W:xpForLevel(e, L)
   -- cumulative xp needed to reach level L
-  return e.def.hp * ((self.rtsTune and self.rtsTune.xpf) or 0.7) * L * (L + 1) / 2
+  -- (Annihilation: at least 300, so cheap units like scouts can't rank up off a kill or two)
+  local base = self.rtsTune and math.max(e.def.hp, self.rtsTune.xpMinHp or 0) or e.def.hp
+  return base * ((self.rtsTune and self.rtsTune.xpf) or 0.7) * L * (L + 1) / 2
 end
 
 local NOMODS = {}
@@ -1262,8 +1264,10 @@ function W:damage(o, amount, attacker)
       -- Arena creeps level as a side (see ARENA.onKill), not one by one
     else
       local dealt = math.min(amount, math.max(0, o.hp))
-      local xp = dealt * (o.def.building and 0.5 or 1)
-      if o.hp - amount <= 0 then xp = xp + o.maxhp * 0.3 end -- kill bonus
+      -- buildings teach less than units (and their doubled health in Annihilation doesn't count double)
+      local bf = o.def.building and (0.5 / ((self.rtsTune and self.rtsTune.bldhp) or 1)) or 1
+      local xp = dealt * bf
+      if o.hp - amount <= 0 then xp = xp + o.maxhp * 0.3 * (o.def.building and bf * 2 or 1) end -- kill bonus
       -- Arena towers learn from fighting Commanders; shooting creeps barely counts, so an
       -- undefended tower doesn't rank up in the middle of your push
       if attacker.arenaTower and o.key ~= "commander" then xp = xp * 0.12 end
