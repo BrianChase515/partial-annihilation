@@ -573,6 +573,12 @@ function AI2:goForTheKill()
   for _, e in ipairs(units) do
     if e.key == "commander" and e.alive then
       local weak = e.hp / e.maxhp < 0.55 or w:isFleeing(e) or e.disarmed
+      -- early on, a Commander who made it home is left alone: the game is decided by the fights
+      -- in the field first, not by one chase into his base at minute four
+      local tmE = w.teams[e.team]
+      local safeUntil = tonumber(os.getenv("PA_KILLSAFE") or "") or 360
+      local atHome = tmE and tmE.startX and U.dist2(e.x, e.y, tmE.startX, tmE.startY) < 750 * 750
+      if atHome and w.time < safeUntil then weak = false end
       if weak and self.rng:random() < B.sharpness(self.level) then
         local hunters = {}
         for _, u in ipairs(w.entities) do

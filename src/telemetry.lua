@@ -78,6 +78,32 @@ function Tel:update()
       l[#l + 1] = e
     end
   end
+  if os.getenv("PA_ARMYLOG") and w.time >= (self.nextArmyLog or 0) then
+    self.nextArmyLog = w.time + 20
+    local parts = {}
+    for t2 = 1, w.np do
+      local v, home, n, fwd = 0, 0, 0, 0
+      local tm = w.teams[t2]
+      local ex, ey
+      for t3 = 1, w.np do if w:hostile(t2, t3) then ex, ey = w.teams[t3].startX, w.teams[t3].startY end end
+      local span = U.dist(tm.startX, tm.startY, ex, ey)
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.team == t2 and not e.def.building and e.def.weapon and e.key ~= "commander" then
+          local c = e.def.cost
+          local val = c and (c.metal + c.energy / 10) or 50
+          v, n = v + val, n + 1
+          local dh = U.dist(e.x, e.y, tm.startX, tm.startY)
+          if dh < 900 then home = home + val end
+          fwd = fwd + val * dh / span
+        end
+      end
+      local cm = tm.commander
+      parts[#parts + 1] = string.format("T%d army %5d (%2d units, home %4d, avg %3d%% across) cmd %s %d%% at %d%% across", t2, v, n, home,
+        v > 0 and math.floor(100 * fwd / v) or 0, cm and cm.alive and "up" or "dead", cm and cm.alive and math.floor(100 * cm.hp / cm.maxhp) or 0,
+        cm and cm.alive and math.floor(100 * U.dist(cm.x, cm.y, tm.startX, tm.startY) / span) or 0)
+    end
+    print(string.format("ARMYLOG %3ds  %s", w.time, table.concat(parts, "  |  ")))
+  end
   -- army size (metal value of fighting units) at 3 and 6 minutes: how fast a side gets going
   for _, mark in ipairs({ 180, 360 }) do
     if w.time >= mark and not self["army" .. mark] then

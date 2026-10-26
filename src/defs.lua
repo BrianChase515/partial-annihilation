@@ -6,11 +6,11 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.23.0"
+D.VERSION = "0.24.0"
 D.SEASON = "0.13" -- high-score season: changed on purpose, not with every version
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
-  rts = { "0.9", "Towers stop Commanders. Still being balanced." },
+  rts = { "0.10", "Rich economy, Power Core tower, Defense Towers, a real navy; tuned for ~12-minute games." },
   arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
   craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
   coh = { "0.4", "Squads, leader skills, capture points and tickets - and War is Hell. Still being balanced." },
