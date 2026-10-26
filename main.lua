@@ -83,6 +83,7 @@ function love.load(args)
   fitWindow(args)
   -- the player's settings (window size, camera speeds, volumes); tests run with the defaults
   local SET = require("src.settings")
+  require("src.automation").load()
   local testing = false
   for _, a in ipairs(args or {}) do if a:sub(1, 2) == "--" then testing = true end end
   if not testing then

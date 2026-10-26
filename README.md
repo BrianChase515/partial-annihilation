@@ -115,6 +115,17 @@ The result screen names the personality you faced; the match log has its map rea
 
 Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up quickly and a level-5 unit becomes a named General. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
 
+### Auto: standing orders
+
+The **Auto** button in the top bar (or K) opens standing orders for the routine jobs, in the spirit of AI War's controls. Each is a switch, most with a number, and they're remembered between matches:
+
+- **Units flee when hurt** at a health you pick (30% by default), back to the plant that built them - and **Per unit...** sets each kind on its own (scouts at 60%, say).
+- **Repaired units rejoin** your flag (or where they were) once they're whole again.
+- **Keep constructors**: below the minimum, a vehicle plant builds one next, without interrupting what it's making (and Repeat won't copy it).
+- **Idle constructors repair** damaged things near them. Repairs cost resources: 30% of the price for a full repair.
+
+The button turns green while any of them is on. Annihilation only.
+
 ### Towers stop Commanders
 
 Every side starts with two Defense Towers at its drop point, so a Commander who has to flee has somewhere to fall back to. A base that loses them - or a player who leads the enemy home - is still fair game.

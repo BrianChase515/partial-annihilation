@@ -1369,7 +1369,7 @@ function G:update(dt)
     end
     if not flip.applied then return end
   end
-  if self.paused or self.menuOpen or self.naming then return end
+  if self.paused or self.menuOpen or self.naming or self.autoOpen then return end
   if self.mercy and not self.mercy.choice then return end
 
   -- camera panning: arrows / screen edge (wider zone, speeds up near the very edge)
@@ -1407,6 +1407,7 @@ function G:update(dt)
   for i = 1, n do
     self.world:update(step / n)
     for _, ai in ipairs(self.ais) do ai:update(step / n) end
+    if not self.opts.autotest then require("src.automation").update(self, step / n) end
     if i < n and self.speed > 3 and love.timer.getTime() - t0 > 0.1 then break end
   end
 
@@ -1748,6 +1749,7 @@ function G:mousepressed(x, y, button)
   local SET = require("src.settings")
   if SET.open then SET.click(x, y, button); return end
   if self.menuOpen then return UI.menuClick(self, x, y, button) end
+  if self.autoOpen then self.autoOpen = require("src.automation").click(x, y); return end
   if self.mercy and not self.mercy.choice then return UI.mercyClick(self, x, y, button) end
   if UI.click(self, x, y, button) then return end
   local wx, wy = self:screenToWorld(x, y)
@@ -2034,6 +2036,13 @@ function G:keypressed(key)
 
   if key == "escape" and require("src.settings").open then require("src.settings").open = false; require("src.settings").save(); return end
   if require("src.settings").open then return end
+  if self.autoOpen and (key == "escape" or key == "k") then
+    local A = require("src.automation")
+    A.save(); A.view = "main"; self.autoOpen = false
+    return
+  end
+  if self.autoOpen then return end
+  if key == "k" and not self.menuOpen and require("src.automation").applies(self) then self.autoOpen = true; return end
   if key == "escape" then
     if self.showHelp then self.showHelp = false
     elseif self.mode then self.mode = nil

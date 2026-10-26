@@ -258,6 +258,59 @@ local function script(mode, secs)
       mex.alive and "standing" or "lost", t, left))
     return
   end
+  if os.getenv("PA_AUTOSHOT") then
+    -- Automation: the panel (main and per-unit views) and each rule doing its job
+    local A = require("src.automation")
+    game = startFn({ size = 96, water = 0.2, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    A.v.flee, A.v.fleePct, A.v.rejoin, A.v.builders, A.v.builderMin, A.v.repair = true, 30, true, true, 3, true
+    A.v.flee_scout = 60
+    local c = w.teams[1].commander
+    local fac = w:spawn("landfac", 1, c.x + 200, c.y + 200); fac.built = 1
+    local map = w.map
+    local function landNear(x, y)
+      local tx, ty = map:tileAt(x, y)
+      tx, ty = math.max(1, math.min(map.w - 2, tx)), math.max(1, math.min(map.h - 2, ty))
+      local nx, ny = map:nearestTile(tx, ty, function(a, b2) return map:passable("land", a, b2) end, 40)
+      return map:center(nx, ny)
+    end
+    local cx2, cy2 = map.w * w.T / 2, map.h * w.T / 2
+    local fx, fy = landNear(c.x + (cx2 - c.x) * 0.6, c.y + (cy2 - c.y) * 0.6)
+    local tank = w:spawn("tank", 1, fx, fy); tank.bornFrom, tank.bornX, tank.bornY = fac, fac.x, fac.y + 80
+    tank.hp = tank.maxhp * 0.25
+    local scout = w:spawn("scout", 1, fx, fy + 60); scout.bornFrom = fac
+    scout.hp = scout.maxhp * 0.5
+    local scout2 = w:spawn("scout", 1, fx, fy + 120); scout2.bornFrom = fac
+    scout2.hp = scout2.maxhp * 0.7
+    local b = w:spawn("builder", 1, c.x + 100, c.y)
+    local sol = w:spawn("solar", 1, c.x + 160, c.y - 80); sol.built = 1; sol.hp = sol.maxhp * 0.5
+    game.opts.autotest = false
+    for i = 1, 40 do
+      game:update(1 / 30)
+      if os.getenv("PA_AUTODBG") and i % 5 == 0 then
+        local o = tank.orders[1]
+        print("AUTODBG", i, tank.alive, math.floor(tank.hp), o and o.type or "idle", o and math.floor(o.x or 0), o and math.floor(o.y or 0), math.floor(tank.x), math.floor(tank.y), tank.disarmed, require("src.automation").timer)
+      end
+    end
+    game.opts.autotest = true
+    local function ord(u) local o = u.orders[1]; return o and o.type or "idle" end
+    local nb = 0
+    for _, k in ipairs(fac.queue) do if k == "builder" then nb = nb + 1 end end
+    print(string.format("AUTOTEST tank(25%%)=%s scout(50%%, own 60%%)=%s scout(70%%)=%s builder=%s plant queue builders=%d",
+      ord(tank), ord(scout), ord(scout2), ord(b), nb))
+    game.autoOpen = true
+    for _ = 1, 4 do frame() end
+    pending = "uishot_auto.png"
+    frame(); frame()
+    A.view = "units"
+    frame()
+    pending = "uishot_auto_units.png"
+    frame(); frame()
+    print("UISHOT auto")
+    return
+  end
   if os.getenv("PA_CORESHOT") then
     -- the Power Core tower built on its node, a Defense Tower beside it, zoomed in
     game = startFn({ size = 112, water = 0.3, seed = 31, autotest = true })

@@ -1999,7 +1999,10 @@ function W:updateFactory(e, dt)
   if e.progress >= 1 then
     e.progress = 0
     local done = table.remove(e.queue, 1)
-    if e.repeatMode and not self.craft then e.queue[#e.queue + 1] = done end
+    -- (a constructor queued by Automation is a one-off: Repeat doesn't copy it)
+    local once = e.noRepeat and (e.noRepeat[done] or 0) > 0
+    if once then e.noRepeat[done] = e.noRepeat[done] - 1 end
+    if e.repeatMode and not self.craft and not once then e.queue[#e.queue + 1] = done end
     self:produce(e, done)
     -- Commander Craft: repeat re-orders (and pays again) if it can
     if e.repeatMode and self.craft and not D.units[done].research and not D.units[done].heroRecruit then CRAFT.enqueue(self, e, done) end

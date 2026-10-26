@@ -243,6 +243,8 @@ function UI.drawTop(game)
   end
   addBtn("Menu", "menu")
   addBtn("Help", "help")
+  -- Auto: standing orders (flee when hurt, keep constructors...) - green while any is on
+  if require("src.automation").applies(game) then addBtn("Auto", "auto", 52) end
   addBtn(game.paused and "Resume" or "Pause", "pause", 70)
   addBtn("+", "faster", 26)
   addBtn(game.speed >= 5 and string.format("%dx", game.speed) or string.format("%.1fx", game.speed), "speed1", 46)
@@ -250,7 +252,11 @@ function UI.drawTop(game)
   for _, b in ipairs(btns) do
     local hover = mx >= b.x and mx <= b.x + b.w and my >= b.y and my <= b.y + b.h
     local active = (b.action == "pause" and game.paused)
-    lg.setColor(active and 0.45 or (hover and 0.22 or 0.13), hover and 0.3 or 0.17, hover and 0.38 or 0.22)
+    if b.action == "auto" and require("src.automation").anyOn() then
+      lg.setColor(hover and 0.25 or 0.16, hover and 0.55 or 0.42, hover and 0.32 or 0.24) -- green: standing orders are on
+    else
+      lg.setColor(active and 0.45 or (hover and 0.22 or 0.13), hover and 0.3 or 0.17, hover and 0.38 or 0.22)
+    end
     lg.rectangle("fill", b.x, b.y, b.w, b.h, 4)
     lg.setColor(0.85, 0.9, 0.95)
     lg.setFont(font(13))
@@ -1782,6 +1788,7 @@ Camera
 
 Game  (icons: game-icons.net, CC BY 3.0)
   Esc = menu / cancel,  F3 = pause,  + / - = game speed,  M = sound effects,  Shift+M = music,  V = announcer
+  K or the Auto button = standing orders (flee when hurt, keep constructors, idle constructors repair)
   F11 or Ctrl+Cmd+F = fullscreen / windowed (also in the Esc menu),  F1 = this help
 
 Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20
@@ -1946,6 +1953,7 @@ function UI.menuRects(game)
     { label = "Resume", action = "resume" },
     { label = "Restart (same map)", action = "restart" },
     { label = "Controls (F1)", action = "help" },
+    require("src.automation").applies(game) and { label = "Auto (K)", action = "automation" } or false,
     { label = "Settings", action = "settings" },
     { label = fs and "Windowed (Ctrl+Cmd+F)" or "Fullscreen (Ctrl+Cmd+F)", action = "fullscreen" },
     canSaveMap(game) and { label = "Save this map...", action = "savemap" } or false,
@@ -1978,6 +1986,7 @@ function UI.menuClick(game, x, y, button_)
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "resume" then game.menuOpen = false
       elseif r.action == "help" then game.menuOpen = false; game.showHelp = true
+      elseif r.action == "automation" then game.menuOpen = false; game.autoOpen = true
       elseif r.action == "restart" then game.playAgain, game.restartSame = true, true
       elseif r.action == "settings" then require("src.settings").open = true
       elseif r.action == "fullscreen" then
@@ -2594,6 +2603,7 @@ function UI.draw(game)
   if not game.menuOpen then UI.drawMercy(game) end
   if game.showHelp then UI.drawHelp(game.craft and "craft" or (game.world.squads and "coh") or game.arena) end
   if game.menuOpen then UI.drawMenu(game) end
+  if game.autoOpen then require("src.automation").draw(game, font) end
   if require("src.settings").open then require("src.settings").draw() end
   if game.world.over and game.overShown then UI.drawOver(game) end
   if game.naming then
@@ -2632,6 +2642,7 @@ function UI.click(game, x, y, b)
       if x >= tb.x and x <= tb.x + tb.w and y >= tb.y and y <= tb.y + tb.h then
         if tb.action == "menu" then game.menuOpen = true
         elseif tb.action == "help" then game.showHelp = true
+        elseif tb.action == "auto" then game.autoOpen = true
         elseif tb.action == "pause" then game.paused = not game.paused
         elseif tb.action == "faster" then game:stepSpeed(1)
         elseif tb.action == "slower" then game:stepSpeed(-1)
