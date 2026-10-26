@@ -117,6 +117,8 @@ Annihilation is tuned for about 12 minutes on a medium map with some water (less
 
 ### Towers stop Commanders
 
+Every side starts with two Defense Towers at its drop point, so a Commander who has to flee has somewhere to fall back to. A base that loses them - or a player who leads the enemy home - is still fair game.
+
 Fights start early and in the open, but walking your Commander into a defended base isn't free: Defense Towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (95 metal), carry a flak mount as well (one tower covers a base from tanks and aircraft alike) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 
 ### The Power Core, and metal that belongs to the navy
