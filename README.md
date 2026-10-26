@@ -129,6 +129,10 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
 
 The button turns green while any of them is on. Annihilation only.
 
+### Drop pods and home
+
+Each Commander arrives in a drop pod. The wreck stays where he landed, and that's his home: near it he repairs quickly once out of the fight, and a little (35 health a second) even under fire - it glows green while he recharges. The computer weighs that: if it can't kill your Commander at home in about 12 seconds with what it has (towers count against it), it goes after your economy instead.
+
 ### Towers stop Commanders
 
 Every side starts with two Defense Towers at its drop point, so a Commander who has to flee has somewhere to fall back to. A base that loses them - or a player who leads the enemy home - is still fair game.
@@ -184,7 +188,7 @@ Most maps are ringed by ocean, and every body of water connects. Much of the ric
 
 Wetter maps carry long inlets deep into the land on every side, so a navy can reach almost anywhere. Sea Constructors also build **Sea Batteries**: floating gun platforms, tougher than land towers, that hit land, sea and air.
 
-The navy mirrors the army. The **Patrol Boat** is its scout and screen: fast, sees far (560) and carries long-range flak. The **Destroyer** is the line ship: heavy splash guns out to 420, but it only sees 300, so boats, units or buildings spot for its full reach. The **Battleship** brings the sea to the land: it shells anything your side can see across most of the map, far enough to reach the middle from the coast. It's very tough and very slow, but it sees only 300, can't hit anything within 200 and can't shoot aircraft or submarines - a big army or an air raid overwhelms it unless patrol boats screen it. Ships come into the war later than the army, against veterans they never got to fight, so they leave the shipyard with trained crews (level 1) and rank up 1.75x as fast. The computer players send bombers and subs after any battleship near their base, screen their own with patrol boats, and park them in the water nearest the centre.
+The navy mirrors the army. The **Patrol Boat** is the fleet's fast escort: quick, sees far across the water, and its short-range flak shreds aircraft that come close; light guns against ships and the shore. The **Destroyer** is the line ship and your coast's guard: heavy splash guns out to 850 - parked off your start it covers your whole base - but it only sees 300, so your buildings, units or boats spot for it. The **Battleship** shells anything your side can see, anywhere on the map. It's very tough and very slow, but it sees only 300, can't hit anything within 200 and can't shoot aircraft or submarines - a big army or an air raid overwhelms it unless patrol boats screen it. Ships come into the war later than the army, against veterans they never got to fight, so they leave the shipyard with trained crews (level 1) and rank up 1.25x as fast. The computer players send bombers and subs after any battleship near their base, screen their own with patrol boats, and park them in the water nearest the centre.
 
 ### Retreat has a price, and your Commander needs a home
 `F` pulls units back at +25% speed, but their weapons stay offline until they're fully repaired. Fleeing saves units, and it also leaves them defenseless if the enemy gives chase.

@@ -1801,7 +1801,7 @@ Veterancy: units level up (gold chevrons, max 5) from damage and kills: more dam
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.
 Rich deposits (+3.9 metal, normal +2.4): gold rings near the map center, teal rings offshore (offshore metal needs a Sea Constructor). The Power Core node in the middle (blue pad) gives +10 metal and +150 energy to whoever builds on it.
 The sea: Shipyards build Sea Constructors for them and
-  for Tidal Generators (+36 energy). Patrol Boats scout and carry flak, Destroyers hit hard at 420 with a spotter, Battleships (shipyard 4) shell anything you can see across the map - but need boats around them.
+  for Tidal Generators (+36 energy). Patrol Boats are the fleet's fast escort (flak, eyes on the water), Destroyers guard your coast out to 850 with a spotter, Battleships (shipyard 4) shell anything you can see, anywhere - but need boats around them.
 ]]
 
 local ARENA_HELP = [[

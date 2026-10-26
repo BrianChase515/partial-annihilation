@@ -607,6 +607,64 @@ function R.drawWorld(cam, game)
     end
   end
 
+  -- drop pods: the wreck where each Commander landed (his home, where he recharges)
+  if world.dropPods then
+    local now = world.time
+    for t, p in pairs(world.dropPods) do
+      local own = t == world.playerTeam or not world:hostile(t, world.playerTeam)
+      local tx, ty = math.floor(p.x / T), math.floor(p.y / T)
+      local vis = world.noFog or own or (world.visible[ty * map.w + tx] == 1) or p.seen
+      if vis then p.seen = true end
+      if vis and p.x > x0 - 120 and p.x < x1 + 120 and p.y > y0 - 900 and p.y < y1 + 120 then
+        local tc = D.teamColor[t]
+        local cr, cg, cb = tc[1], tc[2], tc[3]
+        if now < p.landAt then
+          -- falling: shadow growing on the ground, the pod and its flame trail coming down
+          local k = math.max(0, (p.landAt - now) / p.landAt)
+          local hgt = 700 * k * k
+          lg.setColor(0, 0, 0, 0.45 * (1 - k))
+          lg.ellipse("fill", p.x, p.y, 20 * (1 - k * 0.6), 9 * (1 - k * 0.6))
+          local py = p.y - hgt
+          for i = 1, 6 do
+            lg.setColor(1, 0.55 + i * 0.05, 0.2, 0.5 - i * 0.07)
+            lg.circle("fill", p.x + math.sin(now * 40 + i) * 2, py - 14 - i * 12, 9 - i)
+          end
+          lg.setColor(0.32, 0.34, 0.38)
+          lg.ellipse("fill", p.x, py, 12, 18)
+          lg.setColor(cr, cg, cb)
+          lg.rectangle("fill", p.x - 11, py - 3, 22, 6)
+        else
+          -- the wreck: a scorched crater and the opened pod, glowing while he recharges
+          lg.setColor(0.08, 0.07, 0.06, 0.55)
+          lg.circle("fill", p.x, p.y, 40)
+          lg.setColor(0.12, 0.1, 0.08, 0.5)
+          lg.circle("fill", p.x, p.y, 26)
+          local c = world.teams[t] and world.teams[t].commander
+          local healing = c and c.alive and c.key == "commander" and c.atBase and c.hp < c.maxhp - 0.5
+          if healing then
+            local pulse = 0.5 + 0.5 * math.sin(love.timer.getTime() * 4)
+            lg.setColor(0.4, 1, 0.6, 0.25 + 0.3 * pulse)
+            lg.setLineWidth(3)
+            lg.circle("line", p.x, p.y, 30 + 6 * pulse)
+          end
+          lg.setColor(0.22, 0.24, 0.27)
+          lg.ellipse("fill", p.x, p.y, 13, 19)
+          lg.setColor(0.36, 0.38, 0.42)
+          lg.ellipse("fill", p.x - 2, p.y - 3, 9, 13)
+          lg.setColor(0.05, 0.05, 0.06)
+          lg.ellipse("fill", p.x + 3, p.y - 4, 5, 8) -- the open hatch
+          lg.setColor(cr, cg, cb, 0.9)
+          lg.rectangle("fill", p.x - 12, p.y + 4, 24, 4)
+          -- three fins
+          lg.setColor(0.18, 0.19, 0.22)
+          lg.polygon("fill", p.x - 13, p.y + 10, p.x - 22, p.y + 22, p.x - 8, p.y + 16)
+          lg.polygon("fill", p.x + 13, p.y + 10, p.x + 22, p.y + 22, p.x + 8, p.y + 16)
+          lg.polygon("fill", p.x - 3, p.y + 18, p.x, p.y + 28, p.x + 3, p.y + 18)
+        end
+      end
+    end
+  end
+
   local sel = game.selected
   local margin = 80
 
@@ -617,6 +675,8 @@ function R.drawWorld(cam, game)
     if e.alive and e.x > x0 - margin and e.x < x1 + margin and e.y > y0 - margin and e.y < y1 + margin then
       local show = e.dormant or world:isVisible(e) or (e.def.building and e.seen[world.playerTeam])
       if e.inMine then show = false end
+      -- the Commander is still in his pod
+      if e.key == "commander" and world.dropPods and world.time < (require("src.world").POD_LAND or 0) then show = false end
       if e.def.domain == "sub" and world:hostile(e.team, world.playerTeam) and not world.noFog then
         -- enemy subs are only revealed near your ships
         show = show and game:subRevealed(e)

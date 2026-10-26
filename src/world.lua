@@ -167,6 +167,12 @@ function W.new(opts)
     c.cxp, c.clevel = 0, 0
     self.teams[t].commander = c
     self.teams[t].startX, self.teams[t].startY = x, y
+    -- (Annihilation) the Commander arrives in a drop pod: the wreck stays where he landed and
+    -- marks his home - where he recharges (see the regen at base)
+    if self.rtsTune then
+      self.dropPods = self.dropPods or {}
+      self.dropPods[t] = { x = x - 34, y = y - 22, team = t, landAt = W.POD_LAND }
+    end
     -- (Annihilation) two Defense Towers at the drop point: somewhere for a Commander to fall back
     -- to. A base that's lost them (or a player who led the enemy home) is still fair game
     if self.rtsTune and (self.rtsTune.dropTowers or 0) > 0 then self.pendingDrops = self.pendingDrops or {}; self.pendingDrops[#self.pendingDrops + 1] = { t = t, x = x, y = y } end
@@ -424,6 +430,8 @@ end
 -- Placement
 
 -- builderDomain: "sea" for a Sea Constructor, else "land" - offshore metal is the navy's
+W.POD_LAND = 1.3 -- seconds of game time until the pod hits the ground
+
 function W:placeDropTowers(t, x, y, n)
   local map, T = self.map, self.T
   local cx, cy = map.w * T / 2, map.h * T / 2
@@ -527,6 +535,16 @@ function W:issue(e, order, queue)
     e.chase = nil
   end
   e.orders[#e.orders + 1] = order
+end
+
+-- how fast a Commander repairs where he stands right now, under fire (the AI weighs this)
+function W:commanderRegenUnderFire(e)
+  if e.key ~= "commander" then return 0 end
+  local tm = self.teams[e.team]
+  local atBase = tm and tm.startX and U.dist2(e.x, e.y, tm.startX, tm.startY) < 450 * 450
+  local r = (e.mods and e.mods.regen) or 0
+  if atBase then r = r + (e.def.regen or 0) + ((self.rtsTune and self.rtsTune.homeRegen) or 0) end
+  return r, atBase
 end
 
 function W:isFleeing(e)
@@ -1662,6 +1680,8 @@ end
 function W:updateUnit(e, dt)
   e.moving = false
   e.retreating = false
+  -- still in the drop pod
+  if e.key == "commander" and self.dropPods and self.time < W.POD_LAND then return end
   if e.stunUntil and self.time < e.stunUntil then return end
   local regen = (e.mods and e.mods.regen) or e.def.regen
   if e.key == "commander" and not self.heroes then
@@ -1671,6 +1691,8 @@ function W:updateUnit(e, dt)
     local atBase = U.dist2(e.x, e.y, tm.startX or e.x, tm.startY or e.y) < 450 * 450
     regen = (e.mods and e.mods.regen) or 0
     if atBase then regen = regen + e.def.regen + (self.time - (e.lastHit or -99) > 3 and e.maxhp * 0.03 or 0) end
+    -- (Annihilation) at his drop pod he repairs a little even under fire
+    if atBase and self.rtsTune then regen = regen + (self.rtsTune.homeRegen or 0) end
     e.atBase = atBase
   end
   if regen and regen > 0 and e.hp < e.maxhp then e.hp = math.min(e.maxhp, e.hp + regen * dt); if e.key == "commander" and e.atBase then e.healing = 0.3 end end
@@ -2148,6 +2170,16 @@ function W:update(dt)
   end
 
   self:rebuildGrid()
+
+  -- drop pods hitting the ground
+  if self.dropPods and not self.podsLanded and self.time >= W.POD_LAND then
+    self.podsLanded = true
+    for _, p in pairs(self.dropPods) do
+      self.effects[#self.effects + 1] = { kind = "boom", x = p.x, y = p.y, t = 0, life = 0.9, size = 70 }
+      self.effects[#self.effects + 1] = { kind = "ping", x = p.x, y = p.y, t = 0, life = 0.8, r = 1, g = 0.75, b = 0.4 }
+    end
+    if self.onPodLand then self.onPodLand() end
+  end
 
   for _, e in ipairs(self.entities) do
     if e.alive then

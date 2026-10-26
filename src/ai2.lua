@@ -585,7 +585,31 @@ function AI2:goForTheKill()
             hunters[#hunters + 1] = u
           end
         end
-        if #hunters >= 2 then
+        -- is it worth it? At his drop pod he repairs even under fire, and his towers shoot back:
+        -- if ten of ours can't take him down in about 12 seconds, hit the economy instead
+        local worth = true
+        local regen, atHome = w:commanderRegenUnderFire(e)
+        if atHome and #hunters >= 2 then
+          local dps = 0
+          for i = 1, math.min(10, #hunters) do
+            local u = hunters[i]
+            local wpn = u.def.weapon
+            dps = dps + wpn.damage * (1 + 0.15 * (u.level or 0)) / wpn.reload
+          end
+          local towers = 0
+          w:query(e.x, e.y, 420, function(t) if t.alive and t.key == "turret" and t.team == e.team and t.built >= 1 then towers = towers + 1 end end)
+          local net = dps * (1 - 0.08 * towers) - regen
+          local ttk = net > 0 and e.hp / net or 999
+          if ttk > 12 then
+            worth = false
+            if w.time - (self.notWorthNoted or -99) > 30 then
+              self.notWorthNoted = w.time
+              Tel.note(w, "kill", self.team, string.format("their Commander is home (repairs %d/s, %d towers): about %ds to kill - not worth it, hits the economy instead",
+                math.floor(regen), towers, math.min(99, math.floor(ttk))))
+            end
+          end
+        end
+        if #hunters >= 2 and worth then
           for i = 1, math.min(10, #hunters) do
             w:issue(hunters[i], { type = "attack", target = e })
             self.wave[hunters[i]] = true
@@ -933,6 +957,9 @@ function AI2:pickTarget(domain)
     if e.key == "commander" and e.alive then
       local guard = defOf(e.x, e.y) - value(e)
       local s = 0.5 * P.hunt * (1 / (1 + math.max(0, guard) / 500)) * (e.hp / e.maxhp < 0.6 and 1.3 or 1)
+      -- at his drop pod he repairs under fire: a worse target than his economy
+      local _, home = w:commanderRegenUnderFire(e)
+      if home then s = s * 0.55 end
       opts[#opts + 1] = { key = "cmd", label = "their Commander", score = s, x = e.x, y = e.y }
     end
   end

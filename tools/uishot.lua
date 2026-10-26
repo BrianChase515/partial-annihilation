@@ -348,6 +348,28 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_PODSHOT") then
+    -- the drop pod: coming down, then the wreck with the Commander hurt and recharging beside it
+    game = startFn({ size = 96, water = 0.2, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local c = w.teams[1].commander
+    game.cam.zoom = 1.3
+    game:centerOn(c.x - 20, c.y - 60)
+    for _ = 1, 18 do w:update(1 / 30) end
+    for _ = 1, 3 do frame() end
+    pending = "uishot_pod1.png"
+    frame(); frame()
+    for _ = 1, 120 do w:update(1 / 30) end
+    c.hp = c.maxhp * 0.5
+    for _ = 1, 10 do w:update(1 / 30) end
+    for _ = 1, 3 do frame() end
+    pending = "uishot_pod2.png"
+    frame(); frame()
+    print("UISHOT pod", math.floor(c.hp))
+    return
+  end
   if os.getenv("PA_CORESHOT") then
     -- the Power Core tower built on its node, a Defense Tower beside it, zoomed in
     game = startFn({ size = 112, water = 0.3, seed = 31, autotest = true })

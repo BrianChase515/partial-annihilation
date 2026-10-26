@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.26.6"
+D.VERSION = "0.27.0"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
@@ -93,28 +93,29 @@ D.units = {
   -- can't fight off what gets close and can't touch aircraft - it needs boats around it)
   boat = {
     name = "Patrol Boat", short = "1", domain = "sea", shape = "circle",
-    radius = 11, hp = 520, speed = 135, sight = 560,
-    weapon = { damage = 14, range = 240, reload = 0.5, speed = 700, targets = { land = true, sea = true } },
-    aaWeapon = { damage = 28, range = 380, reload = 0.55, speed = 900, splash = 34, targets = { air = true } },
+    radius = 11, hp = 480, speed = 175, sight = 600,
+    weapon = { damage = 11, range = 220, reload = 0.5, speed = 700, targets = { land = true, sea = true } },
+    aaWeapon = { damage = 34, range = 270, reload = 0.45, speed = 950, splash = 36, targets = { air = true } },
     cost = { metal = 110, energy = 800, work = 85 },
-    desc = "The navy's scout and screen: fast, sees 560 (eyes for your destroyers and battleships) and carries long-range flak (380). Light guns against land and ships. Keep a few with every battleship.",
+    desc = "The navy's fast escort: quick (175), sees 600 across the water, and its flak shreds aircraft that come close (270). Light guns against ships and the shore. Keep a few with every battleship.",
   },
   destroyer = {
     name = "Destroyer", short = "2", domain = "sea", shape = "circle",
     radius = 16, hp = 2200, speed = 72, sight = 300, needsSpotter = true,
-    weapon = { damage = 80, range = 420, reload = 1.2, speed = 620, splash = 30, targets = { land = true, sea = true, sub = true } },
+    -- long guns: parked off your coast it covers the whole base (your buildings spot for it)
+    weapon = { damage = 80, range = 850, reload = 1.4, speed = 650, splash = 30, targets = { land = true, sea = true, sub = true } },
     cost = { metal = 280, energy = 1800, work = 200 },
-    desc = "The navy's line ship: heavy guns with splash out to 420 and depth charges for subs. It only sees 300 itself - patrol boats, units or buildings have to spot for the full reach. Can't hit aircraft.",
+    desc = "The navy's line ship and your coast's guard: heavy splash guns out to 850 - parked off your start it covers your whole base - and depth charges for subs. It only sees 300 itself: your buildings, units or patrol boats spot for it. Can't hit aircraft.",
   },
   battleship = {
     name = "Battleship", short = "4", domain = "sea", shape = "circle",
     radius = 22, hp = 6500, speed = 36, sight = 300, needsSpotter = true,
-    -- (the whole of a medium map, most of a large one: parked off your coast it shells anything your units or buildings
+    -- (the whole map, any size: parked off your coast it shells anything your units or buildings
     -- can see. Up close it's helpless, and it can't shoot at aircraft)
-    weapon = { damage = 115, range = 6000, minRange = 200, reload = 4.2, speed = 650, splash = 60, ballistic = true,
+    weapon = { damage = 115, range = 9000, minRange = 200, reload = 4.2, speed = 650, splash = 60, ballistic = true,
       targets = { land = true, sea = true } },
     cost = { metal = 800, energy = 5500, work = 520 },
-    desc = "Siege ship. Shells anything you can see anywhere on a medium map (6000 range) - but it only sees 300 itself, fires slowly, can't hit anything within 200 and can't shoot aircraft or subs. Very tough, very slow: a big army or an air raid will overwhelm it unless patrol boats screen it. Everyone will hunt it.",
+    desc = "Siege ship. Shells anything you can see, anywhere on the map - but it only sees 300 itself, fires slowly, can't hit anything within 200 and can't shoot aircraft or subs. Very tough, very slow: a big army or an air raid will overwhelm it unless patrol boats screen it. Everyone will hunt it.",
   },
   seabuilder = {
     name = "Sea Constructor", short = "B", domain = "sea", shape = "circle",
@@ -358,7 +359,7 @@ D.TOWER_VS_COMMANDER = 2.5
 -- within leadR that the Commander earns as XP; cthr: scales his level thresholds
 -- (tested AI vs AI on a medium map with some water: ~11.5-minute games, first fighting ~2:05, a
 -- level-5 Commander in about two games of three, a General in nearly every game)
-D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2, splashXp = 0.4, repairCost = 0.3, shipStartLevel = 1, shipXp = 1.75, xpMinHp = 300 }
+D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2, splashXp = 0.4, repairCost = 0.3, shipStartLevel = 1, shipXp = 1.25, xpMinHp = 300, homeRegen = 35 }
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do
