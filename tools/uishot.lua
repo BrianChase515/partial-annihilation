@@ -1,3 +1,4 @@
+local D = require("src.defs")
 local U = require("src.util")
 -- Dev tool: start a 2v2 (RTS or Arena), let the AIs play a while, take a screenshot.
 -- love . --uishot <rts|arena> [seconds]   (not shipped)
@@ -346,6 +347,61 @@ local function script(mode, secs)
     pending = "uishot_auto_units.png"
     frame(); frame()
     print("UISHOT auto")
+    return
+  end
+  if os.getenv("PA_MECHTEST") then
+    -- priority orders, abandoned-build decay, passing through own buildings, the reserved pod
+    game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local tm = w.teams[1]
+    tm.metal, tm.energy = 5000, 50000
+    local c = w.teams[1].commander
+    local map = w.map
+    local function land(x, y)
+      local tx, ty = map:tileAt(x, y)
+      local nx, ny = map:nearestTile(tx, ty, function(a, b2) return map:passable("land", a, b2) end, 30)
+      return map:center(nx, ny)
+    end
+    -- 1. priority: a plant halfway through a tank gets a priority constructor
+    local fx, fy = land(c.x + 300, c.y + 250)
+    local f = w:spawn("landfac", 1, fx, fy); f.built = 1
+    f.queue = { "tank", "tank" }; f.repeatMode = true
+    for _ = 1, 150 do w:update(1 / 30) end
+    local before = f.progress
+    game.selected = { [f] = true }
+    local m0 = tm.metal
+    game:queueUnit("builder", 1, false, true)
+    local t = 0
+    while f.prio and #f.prio > 0 and t < 30 do w:update(1 / 30); t = t + 1 / 30 end
+    print(string.format("MECH priority: tank paused at %d%% (now %d%%), constructor out after %.1fs, queue now %s, metal spent %d (a constructor is %d, +35%% = %d)",
+      before * 100, f.progress * 100, t, table.concat(f.queue, ","), m0 - tm.metal, D.units.builder.cost.metal, D.units.builder.cost.metal * 1.35))
+    -- 2. decay: a solar left at 99%
+    local sx, sy = land(c.x - 250, c.y + 250)
+    local sol = w:spawn("solar", 1, sx, sy, 0.99)
+    sol.hp = sol.maxhp * 0.99
+    local t2 = 0
+    while sol.alive and t2 < 40 do w:update(1 / 30); t2 = t2 + 1 / 30 end
+    print(string.format("MECH decay: abandoned solar at 99%% %s after %.1fs", sol.alive and "still standing" or "gone", t2))
+    -- 3. pass-through: a tank walks straight across a wall of our own solars
+    local wx, wy = land(c.x, c.y + 600)
+    local wtx, wty = map:tileAt(wx, wy)
+    for k = -4, 4 do local s2 = w:spawn("solar", 1, (wtx + 0.5 + 0) * w.T + w.T / 2, (wty + k * 2) * w.T + w.T, 1) end
+    local tk = w:spawn("tank", 1, wx - 200, wy); tk.built = 1
+    w:issue(tk, { type = "move", x = wx + 200, y = wy })
+    local t3 = 0
+    print("MECH path", tk.path and #tk.path or "nil", w.passFriendly, map.allyOf and map.allyOf[1])
+    while t3 < 15 and U.dist(tk.x, tk.y, wx + 200, wy) > 30 do
+      w:update(1 / 30); t3 = t3 + 1 / 30
+      if math.floor(t3 * 30) % 60 == 0 then print("MECH tank", math.floor(tk.x - wx), math.floor(tk.y - wy), tk.orders[1] and tk.orders[1].type, tk.path and #tk.path) end
+    end
+    print(string.format("MECH pass-through: tank crossed our solar wall in %.1fs (straight line would take %.1fs), %s", t3, 400 / tk.def.speed,
+      U.dist(tk.x, tk.y, wx + 200, wy) <= 30 and "arrived" or "did not arrive"))
+    -- 4. the pod is reserved
+    local pod = w.dropPods[1]
+    local ptx, pty = map:tileAt(pod.x, pod.y)
+    print("MECH pod: solar on the drop pod allowed? " .. tostring(w:canPlace("solar", ptx, pty, 1, "land")))
     return
   end
   if os.getenv("PA_PODSHOT") then

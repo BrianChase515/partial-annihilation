@@ -728,7 +728,13 @@ end
 function M:passable(layer, tx, ty)
   if not self:inBounds(tx, ty) then return false end
   local i = ty * self.w + tx
-  if self.blocked[i] then return false end
+  local bl = self.blocked[i]
+  if bl then
+    -- (Annihilation) units move through their own side's buildings: the world sets passFor (the
+    -- mover's alliance) around its path searches and steps
+    local pf = self.passFor
+    if not (pf and type(bl) == "table" and bl.team and self.allyOf and self.allyOf[bl.team] == pf) then return false end
+  end
   local t = self.terrain[i]
   if layer == "land" then return t == M.LAND or t == M.HILL end
   if layer == "sea" then return t == M.WATER end

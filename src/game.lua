@@ -1129,9 +1129,10 @@ function G:areaSites(key, ax, ay, bx, by)
   else
     local tx0, ty0 = world:footprintAt(key, x0, y0)
     local tx1, ty1 = world:footprintAt(key, x1, y1)
-    local stepX, stepY = d.w + 1, d.h + 1
-    -- a thin drag is a line: pack along it
-    if tx1 - tx0 < d.w then stepX = d.w + 1 end
+    -- (Annihilation: your units walk through your own buildings, so blocks pack tight; elsewhere
+    -- a one-tile lane is left between them)
+    local gap = world.passFriendly and 0 or 1
+    local stepX, stepY = d.w + gap, d.h + gap
     for ty = ty0, math.max(ty0, ty1), stepY do
       for tx = tx0, math.max(tx0, tx1), stepX do
         if free(tx, ty) then sites[#sites + 1] = { tx = tx, ty = ty } end
@@ -1187,8 +1188,32 @@ function G:builderCan(b, key)
   return false
 end
 
-function G:queueUnit(key, count, remove)
+function G:queueUnit(key, count, remove, priority)
   if self.craft then return CG.queueUnit(self, key, count, remove) end
+  if priority and not remove then
+    -- jumps the queue: the current build pauses (keeping its progress), costs 35% more, never repeats
+    local best
+    for _, f in ipairs(self:selectedFactories()) do
+      local ok = false
+      for _, k in ipairs(f.def.builds) do if k == key then ok = true end end
+      if ok and (not best or #(f.prio or {}) < #(best.prio or {})) then best = f end
+    end
+    if not best then return end
+    best.prio = best.prio or {}
+    for _ = 1, count do best.prio[#best.prio + 1] = key end
+    self:notice(string.format("Priority: %s%s at +%d%% cost - the current build waits", D.units[key].name,
+      count > 1 and (" x" .. count) or "", math.floor((require("src.world").PRIORITY_COST - 1) * 100 + 0.5)), 1.8)
+    return
+  end
+  -- right-click takes priority orders off first
+  if remove then
+    for _, f in ipairs(self:selectedFactories()) do
+      for i = #(f.prio or {}), 1, -1 do
+        if f.prio[i] == key and count > 0 then table.remove(f.prio, i); count = count - 1; if i == 1 then f.prioProgress = 0 end end
+      end
+    end
+    if count <= 0 then return end
+  end
   local factories = {}
   for _, f in ipairs(self:selectedFactories()) do
     for _, k in ipairs(f.def.builds) do if k == key then factories[#factories + 1] = f; break end end
@@ -1229,7 +1254,7 @@ function G:activateSlot(i, shift, right)
     self.mode = "build"
     self.buildKey = key
   else
-    self:queueUnit(key, shift and 5 or 1, right)
+    self:queueUnit(key, shift and 5 or 1, right, love.keyboard.isDown("lctrl", "rctrl"))
   end
 end
 

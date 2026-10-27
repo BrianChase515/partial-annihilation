@@ -827,7 +827,7 @@ function UI.drawSidebar(game)
       lg.setLineWidth(game.selected[e] and 2 or 1)
       lg.rectangle("line", it.x + 0.5, it.y + 0.5, it.w - 1, it.h - 1, 5)
       if e.def.factory then
-        local k = e.queue[1] or e.key
+        local k = (e.prio and e.prio[1]) or e.queue[1] or e.key
         UI.drawIcon(k, it.x + it.w / 2, it.y + 24, 32, 1)
         lg.setFont(font(10))
         lg.setColor(0.75, 0.8, 0.86)
@@ -1387,6 +1387,10 @@ function UI.drawInfo(game, L)
       lg.print("Queue" .. (e.repeatMode and "  (repeat ON - G)" or "  (G toggles repeat)") .. ":", qx, qy)
       local shown = 0
       local runs = {}
+      for _, k in ipairs(e.prio or {}) do
+        local last = runs[#runs]
+        if last and last.key == k and last.prio then last.n = last.n + 1 else runs[#runs + 1] = { key = k, n = 1, prio = true } end
+      end
       for _, k in ipairs(e.queue) do
         local last = runs[#runs]
         if last and last.key == k then last.n = last.n + 1 else runs[#runs + 1] = { key = k, n = 1 } end
@@ -1395,8 +1399,15 @@ function UI.drawInfo(game, L)
         if i > 10 then break end
         local ix = qx + (i - 1) * 46 + 22
         UI.drawIcon(run.key, ix, qy + 42, 34, 1)
-        if i == 1 then
-          lg.setColor(0.3, 1, 0.4)
+        if run.prio then
+          lg.setColor(1, 0.6, 0.15)
+          lg.setLineWidth(2)
+          lg.rectangle("line", ix - 19, qy + 23, 38, 38, 4)
+          lg.setLineWidth(1)
+          if i == 1 then lg.rectangle("fill", ix - 18, qy + 62, 36 * (e.prioProgress or 0), 3) end
+        elseif i == 1 or (runs[i - 1] and runs[i - 1].prio) then
+          -- the normal head of the queue (paused while a priority order runs)
+          lg.setColor(0.3, 1, 0.4, (e.prio and #e.prio > 0) and 0.4 or 1)
           lg.rectangle("fill", ix - 18, qy + 62, 36 * e.progress, 3)
         end
         if run.n > 1 then
@@ -1406,7 +1417,7 @@ function UI.drawInfo(game, L)
       end
       if #runs == 0 then
         lg.setColor(0.5, 0.55, 0.6)
-        lg.print("Empty. Click a unit on the right or press its key (Shift = 5, right-click removes).", qx, qy + 20)
+        lg.print("Empty. Click a unit on the right or press its key (Shift = 5, Ctrl = priority, right-click removes).", qx, qy + 20)
       end
     elseif e.orders and #e.orders > 0 and not foreign then
       local o = e.orders[1]
@@ -1706,7 +1717,7 @@ function UI.drawCard(game, L)
     text = text .. string.format("\nBuild time ~%ds", math.ceil(d.cost.work / power))
     if d.weapon then text = text .. string.format("\nDamage %d, range %d", d.weapon.damage, d.weapon.range) end
     text = text .. "\n" .. (d.desc or "")
-    if b.kind == "factory" then text = text .. "\nClick = 1, Shift-click = 5, right-click removes" end
+    if b.kind == "factory" then text = text .. "\nClick = 1, Shift-click = 5, right-click removes\nCtrl-click = PRIORITY: jumps the queue now (the current build waits), +35% cost, never repeats" end
     end
     lg.setFont(font(13))
     local tw = 290
@@ -1777,7 +1788,7 @@ Orders (hold Shift to queue)
 Building
   Select a constructor, press Q W E R T Y U I (or click), then click the map
   Shift-click places several; drag a box to fill an area (extractors: every deposit in the box)
-  Select a factory: Q W E R T queue units (Shift = 5), right-click a button removes
+  Select a factory: Q W E R T queue units (Shift = 5, Ctrl = priority: jumps the queue at +35% cost), right-click a button removes
   Right-click the ground with a factory selected = rally point,  G = repeat queue
   Constructors: P then DRAG a circle = repair zone (they stay and fix everything of yours in it)
   Option+1..9 with a factory selected = its new units join that group (Option+0 clears)
@@ -2701,7 +2712,7 @@ function UI.click(game, x, y, b)
           else game:notice(why, 1.6) end
         end
       elseif btn.kind == "factory" then
-        game:queueUnit(btn.key, shift and 5 or 1, b == 2)
+        game:queueUnit(btn.key, shift and 5 or 1, b == 2, love.keyboard.isDown("lctrl", "rctrl"))
       end
       return true
     end

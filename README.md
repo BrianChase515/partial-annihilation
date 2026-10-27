@@ -115,6 +115,14 @@ The result screen names the personality you faced; the match log has its map rea
 
 Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up quickly and a level-5 unit becomes a named General. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
 
+### Priority orders, packed bases, nothing left half-built
+
+- **Ctrl-click** a unit at a plant (or Ctrl + its key) to build it **now**: it jumps the queue - whatever was being built waits, keeping its progress - costs 35% more, and never goes into the Repeat loop. Then normal production carries on.
+- Your units move straight through your own buildings, so drag-built blocks of solar and the like pack tight with no gaps (the enemy's buildings still block).
+- A building left unfinished falls apart: after 8 seconds with nobody working on it, it crumbles over about 15 seconds.
+- Nothing can be built on a Commander's drop pod - it's his home.
+- The Power Core takes about a minute for one constructor to raise, and it falls about as fast.
+
 ### Auto: standing orders
 
 The **Auto** button in the top bar (or K) opens standing orders for the routine jobs, in the spirit of AI War's controls. Each is a switch, most with a number, and they're remembered between matches:

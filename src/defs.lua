@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.27.1"
+D.VERSION = "0.27.2"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
@@ -278,9 +278,11 @@ D.units = {
   },
   powercore = {
     name = "Power Core", short = "PC", domain = "building", building = true, coreOnly = true,
-    w = 2, h = 2, place = "core", hp = 3200, sight = 1100, -- (a tall tower: whoever holds it sees the whole middle)
+    w = 2, h = 2, place = "core", hp = 2400, sight = 1100, -- (a tall tower: whoever holds it sees the whole middle)
     income = { metal = 10, energy = 150 },
-    cost = { metal = 200, energy = 900, work = 160 },
+    -- (slow to raise - about a minute for one constructor - so taking it is a commitment, and
+    -- it falls about as fast as it went up)
+    cost = { metal = 200, energy = 900, work = 400 },
     desc = "Only on the Power Core node in the middle of the map: +10 metal and +150 energy a second - about four extractors' worth. It's a tall tower that sees 1100 around it, so your artillery and battleships can hit anything in the middle. Whoever holds the centre runs two fronts.",
   },
   refinery = {
@@ -359,7 +361,7 @@ D.TOWER_VS_COMMANDER = 2.5
 -- within leadR that the Commander earns as XP; cthr: scales his level thresholds
 -- (tested AI vs AI on a medium map with some water: ~11.5-minute games, first fighting ~2:05, a
 -- level-5 Commander in about two games of three, a General in nearly every game)
-D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2, splashXp = 0.4, repairCost = 0.3, shipStartLevel = 1, shipXp = 1.25, xpMinHp = 300, homeRegen = 35 }
+D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2, splashXp = 0.4, repairCost = 0.3, shipStartLevel = 1, shipXp = 1.25, xpMinHp = 300, homeRegen = 35, decayAfter = 8, decayTime = 15 }
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do

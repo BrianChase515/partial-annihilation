@@ -32,6 +32,7 @@ function W.new(opts)
       -- PA_TUNE="unithp=1.3,bldhp=1.5,cmdhp=1.2" overrides it for balance experiments
       self.rtsTune = {}
       for k, v in pairs(D.RTS_TUNE or {}) do self.rtsTune[k] = v end
+      self.passFriendly = true
       for k, v in (os.getenv("PA_TUNE") or ""):gmatch("(%w+)=([%d%.]+)") do self.rtsTune[k] = tonumber(v) end
     end
   end
@@ -51,6 +52,7 @@ function W.new(opts)
   self.np = #players
   self.ally = {}
   for i, p in ipairs(players) do self.ally[i] = p.ally or i end
+  self.map.allyOf = self.ally
   self.teams = {}
   for t = 1, self.np do
     self.teams[t] = {
@@ -239,8 +241,9 @@ function W:spawn(key, team, x, y, built)
     local dp = d.place == "deposit" and self.map.deposit[self.map:idx(e.tx, e.ty)]
     if dp and (dp.sea or dp.rich) then e.mods = { income = { metal = 1.5, energy = 0 } } end
     e.angle = 0
-    -- nudge any ground/sea units standing on the footprint out of the way
-    if self.grid then
+    -- nudge any ground/sea units standing on the footprint out of the way (in Annihilation only
+    -- enemies: friendly units can stand in their own buildings)
+    if self.grid and not self.passFriendly then
       local half = d.w * self.T / 2
       self:query(e.x, e.y, half + 30, function(u)
         if u.alive and not u.def.building and u.def.domain ~= "air" then
@@ -461,6 +464,13 @@ end
 function W:canPlace(key, tx, ty, team, builderDomain)
   local d = D.units[key]
   local map = self.map
+  -- (Annihilation) nothing gets built on a Commander's drop pod: it's his home
+  if self.dropPods then
+    for _, pod in pairs(self.dropPods) do
+      local px, py = math.floor(pod.x / self.T), math.floor(pod.y / self.T)
+      if px >= tx - 1 and px <= tx + d.w and py >= ty - 1 and py <= ty + d.h then return false end
+    end
+  end
   for yy = ty, ty + d.h - 1 do
     for xx = tx, tx + d.w - 1 do
       if not map:inBounds(xx, yy) then return false end
@@ -589,7 +599,9 @@ function W:setDest(e, x, y)
     return
   end
   self.pathCount = self.pathCount + 1
+  if self.passFriendly and e.team then self.map.passFor = self.ally[e.team] end
   e.path = Path.find(self.map, layer, e.x, e.y, x, y)
+  self.map.passFor = nil
   e.pathI = 1
   e.destX, e.destY = x, y
   e.repathAt = self.time + 4
@@ -665,6 +677,7 @@ function W:tryMove(e, mx, my)
     return
   end
   local map = self.map
+  if self.passFriendly and e.team then map.passFor = self.ally[e.team] end
   local nx, ny = e.x + mx, e.y + my
   local tx, ty = map:tileAt(nx, ny)
   if map:passable(layer, tx, ty) then
@@ -679,6 +692,7 @@ function W:tryMove(e, mx, my)
       if map:passable(layer, bx, by) then e.y = e.y + my end
     end
   end
+  map.passFor = nil
 end
 
 -- Push overlapping units apart
@@ -1617,10 +1631,12 @@ function W:kitePoint(e, threat)
     local px, py = e.x + cx * step, e.y + cy * step
     local ok = true
     if layer then
+      if self.passFriendly and e.team then self.map.passFor = self.ally[e.team] end
       for f = 0.5, 1, 0.5 do
         local tx, ty = self.map:tileAt(e.x + cx * step * f, e.y + cy * step * f)
         if not self.map:passable(layer, tx, ty) then ok = false; break end
       end
+      self.map.passFor = nil
     else
       ok = px > 0 and py > 0 and px < self.map.w * self.T and py < self.map.h * self.T
     end
@@ -1930,6 +1946,7 @@ end
 
 function W:applyBuild(e, b, power, dt)
   local frac = self:spend(e.team, b.def.cost, power, dt)
+  b.lastWorked = self.time
   local before = b.built
   b.built = math.min(1, b.built + frac)
   b.hp = math.min(b.maxhp, b.hp + b.maxhp * (b.built - before))
@@ -2014,9 +2031,32 @@ function W:updateRepairZone(e, o, dt)
   end
 end
 
+-- priority orders cost this much more (they jump the queue and pause what's being built)
+W.PRIORITY_COST = 1.35
+local prioCost = {}
+
 function W:updateFactory(e, dt)
   local power = self:buildPowerOf(e) + (e.assistPower or 0)
   e.assistPower = 0
+  -- a priority order goes first; the normal queue keeps its progress and waits
+  if e.prio and #e.prio > 0 then
+    local pk = e.prio[1]
+    local d = D.units[pk]
+    local pc = prioCost[pk]
+    if not pc then
+      pc = { metal = d.cost.metal * W.PRIORITY_COST, energy = d.cost.energy * W.PRIORITY_COST, work = d.cost.work }
+      prioCost[pk] = pc
+    end
+    local frac = self:spend(e.team, pc, power, dt)
+    e.prioProgress = (e.prioProgress or 0) + frac
+    e.nanoTimer = 0.1
+    if e.prioProgress >= 1 then
+      e.prioProgress = 0
+      table.remove(e.prio, 1)
+      self:produce(e, pk)
+    end
+    return
+  end
   local key = e.queue[1]
   if not key then e.progress = 0; return end
   local d = D.units[key]
@@ -2191,7 +2231,24 @@ function W:update(dt)
       if not e.alive or e.dormant then
         -- just self-destructed, or the dormant alien walker
       elseif e.def.building then
-        if e.built >= 1 then
+        if e.built < 1 and self.rtsTune and (self.rtsTune.decayAfter or 0) > 0 then
+          -- (Annihilation) a building left unfinished falls apart: after decayAfter seconds with
+          -- nobody working on it, it loses a whole build's worth over decayTime seconds
+          e.lastWorked = e.lastWorked or self.time
+          if self.time - e.lastWorked > self.rtsTune.decayAfter then
+            local lose = dt / (self.rtsTune.decayTime or 15)
+            e.built = e.built - lose
+            e.hp = math.min(e.hp, e.maxhp * math.max(0.02, e.built))
+            e.decaying = true
+            if e.built <= 0.005 then
+              self.effects[#self.effects + 1] = { kind = "boom", x = e.x, y = e.y, t = 0, life = 0.4, size = e.def.radius or 20 }
+              self:remove(e)
+            end
+          else
+            e.decaying = nil
+          end
+        end
+        if e.alive and e.built >= 1 then
           if e.def.factory then self:updateFactory(e, dt) end
           if e.def.weapon then self:updateWeapon(e, dt) end
           if e.def.aaWeapon then self:updateAA(e, dt) end
