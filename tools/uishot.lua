@@ -349,6 +349,28 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_BOXTEST") then
+    -- a selection box dragged while the view pans: it should cover the whole span on the map
+    game = startFn({ size = 128, water = 0.1, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local c = w.teams[1].commander
+    local list = {}
+    for k = 0, 9 do list[#list + 1] = w:spawn("tank", 1, c.x + k * 300, c.y + 40) end
+    game.cam.zoom = 1
+    game:centerOn(c.x + 200, c.y)
+    local sx, sy = game:worldToScreen(c.x - 40, c.y - 40)
+    game:mousepressed(sx, sy, 1)
+    -- the view scrolls 2500 to the right while the mouse is held
+    game:centerOn(c.x + 2700, c.y)
+    local ex, ey = game:worldToScreen(c.x + 2800, c.y + 100)
+    game:mousereleased(ex, ey, 1)
+    local n = 0
+    for _, t in ipairs(list) do if game.selected[t] then n = n + 1 end end
+    print("BOXTEST selected " .. n .. " of 10 tanks spread over 2700 (the view panned 2500 during the drag)")
+    return
+  end
   if os.getenv("PA_PODDEP") then
     -- across many maps: does any drop pod lock up a metal deposit?
     local bad, n = 0, 0

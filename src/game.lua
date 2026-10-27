@@ -1499,7 +1499,7 @@ function G:draw()
   -- box selection
   if self.boxStart then
     local mx, my = love.mouse.getPosition()
-    local x0, y0 = self.boxStart[1], self.boxStart[2]
+    local x0, y0 = self:worldToScreen(self.boxStart[3], self.boxStart[4])
     if math.abs(mx - x0) > 4 or math.abs(my - y0) > 4 then
       lg.setColor(0.3, 1, 0.4, 0.12)
       lg.rectangle("fill", math.min(x0, mx), math.min(y0, my), math.abs(mx - x0), math.abs(my - y0))
@@ -1817,7 +1817,9 @@ function G:mousepressed(x, y, button)
       self.mode = nil
       return
     end
-    self.boxStart = { x, y }
+    -- the box's first corner is pinned to the map, so it stays put while the view edge-pans
+    local bwx, bwy = self:screenToWorld(x, y)
+    self.boxStart = { x, y, bwx, bwy }
   elseif button == 2 then
     if self.mode then self.mode = nil; return end
     -- decide on release: a drag pans the camera, a click gives an order
@@ -1911,7 +1913,8 @@ function G:mousereleased(x, y, button)
   end
   self.buildDrag = nil
   if button ~= 1 or not self.boxStart then return end
-  local x0, y0 = self.boxStart[1], self.boxStart[2]
+  -- (where the first corner is on screen now: the view may have panned while dragging)
+  local x0, y0 = self:worldToScreen(self.boxStart[3], self.boxStart[4])
   self.boxStart = nil
   local shift = love.keyboard.isDown("lshift", "rshift")
   local world = self.world
@@ -1945,9 +1948,12 @@ function G:mousereleased(x, y, button)
     self.lastClick = { t = now, e = e }
     return
   end
-  -- box select: prefer mobile units over buildings
-  local ax, ay = self:screenToWorld(math.min(x, x0), math.min(y, y0))
-  local bx, by = self:screenToWorld(math.max(x, x0), math.max(y, y0))
+  -- box select: prefer mobile units over buildings (corners in map space: the box can be bigger
+  -- than the screen)
+  local ex, ey = self:screenToWorld(x, y)
+  local sx2, sy2 = self:screenToWorld(x0, y0)
+  local ax, ay = math.min(ex, sx2), math.min(ey, sy2)
+  local bx, by = math.max(ex, sx2), math.max(ey, sy2)
   local units, buildings = {}, {}
   for _, e in ipairs(world.entities) do
     if e.alive and e.team == 1 and e.x >= ax and e.x <= bx and e.y >= ay and e.y <= by then
