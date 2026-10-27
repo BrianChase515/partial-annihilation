@@ -20,6 +20,7 @@ M.STREAK_WINDOW = 10     -- multiplier holds until 10s pass with no enemy deaths
 M.STREAK_WINDOW_MIN = 5  -- ...and the window shrinks as the streak grows (1s per 10 kills, down to 5s)
 M.STREAK_STEP = 0.1
 M.STREAK_MAX = 3
+M.STREAK_MAX_RTS = 2    -- Annihilation: x2 at most, and a streak ends the moment you lose a unit (see onKill)
 
 function M.streakWindow(sc)
   return math.max(M.STREAK_WINDOW_MIN, M.STREAK_WINDOW - (sc.streak or 0) * 0.1)
@@ -302,7 +303,7 @@ function M.addPoints(world, team, pts, streaky, kind)
   if streaky then
     if world.time - sc.last > M.streakWindow(sc) then sc.streak = 0 end
     sc.streak = sc.streak + 1
-    sc.mult = math.min(M.STREAK_MAX, 1 + M.STREAK_STEP * (sc.streak - 1))
+    sc.mult = math.min(world.rtsTune and M.STREAK_MAX_RTS or M.STREAK_MAX, 1 + M.STREAK_STEP * (sc.streak - 1))
     sc.last = world.time
     sc.bestStreak = math.max(sc.bestStreak, sc.streak)
     sc.bestMult = math.max(sc.bestMult, sc.mult)
@@ -316,6 +317,10 @@ end
 
 function M.onKill(world, o, attacker)
   M.convoyKilled(world, o)
+  -- a kill streak is kills without losses: losing a unit (not a building) ends yours
+  -- (Annihilation only: in the Arena and Craft your creeps die all the time)
+  local vs = world.rtsTune and world.score and o.team and world.score[o.team]
+  if vs and not o.def.building then vs.streak, vs.mult = 0, 1 end
   if not world.score or not attacker or not attacker.team or attacker.team < 1 then return end
   if o.team == 0 or not world:hostile(attacker.team, o.team) then return end
   if world.arena and not (attacker.key == "commander" or attacker.owner or o.arenaTower) then return end -- creeps' own fights don't score

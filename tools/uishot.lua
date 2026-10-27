@@ -349,6 +349,20 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_NUKESHOT") then
+    -- the Nuke becomes ready: the banner, and the flashing button under the Commander card
+    game = startFn({ size = 96, water = 0.2, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local c = w.teams[1].commander
+    for _ = 1, 60 do w:update(1 / 30) end
+    c.clevel, c.nukeReady = 5, w.time
+    for _ = 1, 4 do frame() end
+    pending = "uishot_nuke.png"
+    frame(); frame()
+    print("UISHOT nuke", tostring(game.nukeBtn ~= nil))
+    return
+  end
   if os.getenv("PA_COREFOG") then
     -- the Power Core node outlined under the fog, in the view and on the minimap
     game = startFn({ size = 128, water = 0.3, seed = 31, autotest = true })

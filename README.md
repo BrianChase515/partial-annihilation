@@ -99,7 +99,7 @@ A fourth mode, in the spirit of Company of Heroes, built on Annihilation's units
 
 ### AI v2 (beta)
 
-The computer opponent in Annihilation and Commander of Heroes is v2. It lists what it could do, scores each option by the situation and a personality drawn for that game, and - like AI War - takes the very best only some of the time: about 63% at level 5, 95% at level 10, otherwise one of the nearly-best. Level 8+ knows everything you have. v2 level 5 plays with level 7's economy; its judgement follows the level you pick. The old opponent is still there as **Classic AI (legacy)**, a toggle at the bottom of the title screen: it's kept as a reference while v2 is developed, and it isn't well tested or balanced.
+The computer opponent in Annihilation and Commander of Heroes is v2. It lists what it could do, scores each option by the situation and a personality drawn for that game, and - like AI War - takes the very best only some of the time: about 63% at level 5, 95% at level 10, otherwise one of the nearly-best. Level 8+ knows everything you have. v2 level 5 plays with level 7's economy; its judgement follows the level you pick. Above level 5 it also sizes up a base before attacking it - towers, artillery, ships covering it from the water - and goes elsewhere unless its army is clearly stronger (a little at 6, completely by 9); level 5 keeps throwing itself at you. The old opponent is still there as **Classic AI (legacy)**, a toggle at the bottom of the title screen: it's kept as a reference while v2 is developed, and it isn't well tested or balanced.
 
 In Annihilation it keeps the classic economy and building and adds:
 - **It reads the map at the start**: how much of the metal sits in the middle, how much is out on the flanks to raid, whether water gives a navy a way in. That makes some personalities likelier than others (Raider on open maps, Admiral where the water reaches in) and sets how far forward the army waits - right up to the centre on centre maps.
@@ -137,6 +137,10 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
 
 The button turns green while any of them is on. Annihilation only.
 
+### The Nuke
+
+At level 5 your Commander unlocks the Nuke. When it's ready - and again each time it recharges - a banner flashes across the screen and a pulsing **NUKE READY (N)** button appears under the Commander card: press N or click it, then click a target.
+
 ### Drop pods and home
 
 Each Commander arrives in a drop pod. The wreck stays where he landed, and that's his home: near it he repairs quickly once out of the fight, and a little (35 health a second) even under fire - it glows green while he recharges. The computer weighs that: if it can't kill your Commander at home in about 12 seconds with what it has (towers count against it), it goes after your economy instead.
@@ -166,7 +170,7 @@ Lose him and you lose the game, but he only grows by fighting. He levels up **on
 **Level 5 is always the Nuke.** Every player hears the warning and watches the slow missile and its target circle. It flattens every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune, and it takes 10 minutes to recharge. Every fight that makes him stronger is also a chance to lose everything.
 
 ### Every match is a scored run on a seasonal online leaderboard
-Kills pay out what you destroy is worth (its metal plus a tenth of its energy), and towers, AA and sea batteries pay a 1.5x siege bonus, so cracking a fortified Turtle is worth the trouble. A kill-streak multiplier climbs to x3 and resets after 10 seconds without an enemy death (the window tightens as the streak grows). At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. Speed pays: winning in half the par time doubles your score, and a third of it triples it. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
+Kills pay out what you destroy is worth (its metal plus a tenth of its energy), and towers, AA and sea batteries pay a 1.5x siege bonus, so cracking a fortified Turtle is worth the trouble. A kill-streak multiplier climbs to x2 (x3 in the Arena and Craft) and resets after 10 seconds without an enemy death (the window tightens as the streak grows) - and in Annihilation, the moment you lose a unit. At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. Speed pays: winning in half the par time doubles your score, and a third of it triples it. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
 
 ### A soundtrack that follows the fighting, and a robot announcer
 The score is three tempo-locked orchestral layers that crossfade with the action:

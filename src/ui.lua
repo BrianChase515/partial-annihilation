@@ -563,6 +563,73 @@ function UI.squadPanelClick(game, x, y)
   return false
 end
 
+-- the Nuke is ready: a big flashing button under the Commander card (click it or press N), and a
+-- banner across the screen the moment it becomes ready - easy to miss with the sound down
+function UI.drawNukeAlert(game)
+  game.nukeBtn = nil
+  local world = game.world
+  if world.heroes or world.squads or game.craft then return end
+  local c = world.teams[1].commander
+  if not c or not c.alive or c.key ~= "commander" or not c.nukeReady then return end
+  local ready = world.time >= c.nukeReady and world:canNuke(c)
+  if not ready then game.nukeWasReady = false; return end
+  if not game.nukeWasReady then
+    game.nukeWasReady = true
+    game.nukeBannerUntil = love.timer.getTime() + 4
+  end
+  local t = love.timer.getTime()
+  local pulse = 0.5 + 0.5 * math.sin(t * 6)
+  local cc = game.cmdCard
+  if cc then
+    local bx, by, bw, bh = cc.x, cc.y + cc.h + 6, cc.w, 40
+    local armed = game.mode == "nuke"
+    -- glow
+    lg.setColor(1, 0.35, 0.1, 0.25 + 0.35 * pulse)
+    lg.rectangle("fill", bx - 5, by - 5, bw + 10, bh + 10, 10)
+    lg.setColor(armed and 0.55 or (0.45 + 0.25 * pulse), 0.08, 0.04)
+    lg.rectangle("fill", bx, by, bw, bh, 7)
+    lg.setColor(1, 0.75 + 0.2 * pulse, 0.3)
+    lg.setLineWidth(2 + pulse)
+    lg.rectangle("line", bx, by, bw, bh, 7)
+    lg.setLineWidth(1)
+    -- the radiation trefoil
+    local ix, iy, r = bx + 22, by + bh / 2, 12
+    lg.setColor(1, 0.85, 0.2)
+    lg.circle("fill", ix, iy, r)
+    lg.setColor(0.15, 0.05, 0.02)
+    for k = 0, 2 do
+      local a0 = -math.pi / 2 + k * 2 * math.pi / 3 - 0.5
+      lg.arc("fill", ix, iy, r - 2, a0, a0 + 1.0)
+    end
+    lg.setColor(1, 0.85, 0.2)
+    lg.circle("fill", ix, iy, 3.5)
+    lg.setColor(0.15, 0.05, 0.02)
+    lg.circle("fill", ix, iy, 2)
+    lg.setFont(font(16))
+    lg.setColor(1, 0.95, 0.85)
+    local label = armed and "NUKE: CLICK A TARGET" or "NUKE READY  (N)"
+    lg.print(label, bx + 44, by + bh / 2 - 10)
+    game.nukeBtn = { x = bx, y = by, w = bw, h = bh }
+  end
+  -- the moment it's ready: a banner across the middle of the screen
+  if game.nukeBannerUntil and t < game.nukeBannerUntil then
+    local w = lg.getWidth()
+    local k = math.min(1, (game.nukeBannerUntil - t) / 0.6)
+    local msg = "NUKE READY  -  press N"
+    lg.setFont(font(26))
+    local tw = font(26):getWidth(msg) + 60
+    local x, y = w / 2 - tw / 2, 120
+    lg.setColor(0.35, 0.05, 0.02, 0.85 * k)
+    lg.rectangle("fill", x, y, tw, 54, 10)
+    lg.setColor(1, 0.75, 0.3, k * (0.6 + 0.4 * pulse))
+    lg.setLineWidth(3)
+    lg.rectangle("line", x, y, tw, 54, 10)
+    lg.setLineWidth(1)
+    lg.setColor(1, 0.95, 0.85, k)
+    lg.print(msg, x + 30, y + 12)
+  end
+end
+
 function UI.drawCommanderCard(game)
   if game.craft then return craftUI().drawHeroBar(game) end
   if game.world.squads then return UI.drawSquadPanel(game) end
@@ -2249,7 +2316,7 @@ function UI.drawOver(game)
   end
   if how then lg.printf(how, px + 30, py + OVER_H - 150, OVER_W - 60) else
   lg.printf("How scoring works: every enemy you destroy is worth its metal cost (a Commander is 3000, veterans more). "
-    .. "Each kill soon after the last raises your multiplier by 0.1, up to x3; it resets after 10 seconds without an enemy death "
+    .. "Each kill soon after the last raises your multiplier by 0.1, up to x2; it resets the moment you lose a unit, or after 10 seconds without an enemy death "
     .. "(the window shrinks to 5s as the streak grows). "
     .. "Building earns 10% of the metal spent and each Commander promotion pays 150 x level. Then the total is scaled by "
     .. "how strong the enemies were, how many there were (and whether they were teamed up against you), and how fast you won: "
@@ -2476,6 +2543,7 @@ function UI.draw(game)
   UI.drawTop(game)
   UI.drawLeaderboard(game)
   UI.drawCommanderCard(game)
+  UI.drawNukeAlert(game)
   UI.drawJunglePanel(game)
   if game.arena then UI.drawLanePanel(game) end
   UI.drawCommanderHover(game)
@@ -2647,6 +2715,11 @@ function UI.click(game, x, y, b)
   local L = layout(w, h)
   if game.showHelp then game.showHelp = false; return true end
   if b == 1 and UI.cmdCardClick(game, x, y) then return true end
+  local nb = game.nukeBtn
+  if b == 1 and nb and x >= nb.x and x <= nb.x + nb.w and y >= nb.y and y <= nb.y + nb.h then
+    if game.mode == "nuke" then game.mode = nil else game:startNuke() end
+    return true
+  end
   for _, ob in ipairs(game.offerBtns or {}) do
     if x >= ob.x and x <= ob.x + ob.w and y >= ob.y and y <= ob.y + ob.h then
       game:pickUpgrade(ob.i)

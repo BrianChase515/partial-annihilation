@@ -919,6 +919,26 @@ function AI2:pickTarget(domain)
   end
   local diag = math.sqrt((w.map.w * w.T) ^ 2 + (w.map.h * w.T) ^ 2)
   local opts = {}
+  -- siege sense (above level 5 only - level 5 keeps throwing itself at you, as players liked):
+  -- it adds up everything that defends a place, ships covering it from the water included,
+  -- and backs off attacking where its army isn't clearly stronger
+  local siegeSense = math.max(0, math.min(1, (self.level - 5) / 4))
+  local myArmy = 0
+  if siegeSense > 0 then
+    for _, e in ipairs(w.entities) do
+      if e.alive and e.team == self.team and e.def.weapon and not e.def.building and e.key ~= "commander" and e.key ~= "builder" then myArmy = myArmy + value(e) end
+    end
+  end
+  local function seaCover(x, y)
+    local s = 0
+    for _, e in ipairs(units) do
+      if (e.def.domain == "sea" or e.def.domain == "sub") and e.def.weapon and e.def.weapon.targets and e.def.weapon.targets.land then
+        local r = math.min(e.def.weapon.range, 1500)
+        if U.dist2(e.x, e.y, x, y) < r * r then s = s + value(e) end
+      end
+    end
+    return s
+  end
   for k, c in ipairs(clusters) do
     local guard = c.def + defOf(c.x, c.y)
     local soft = 1 / (1 + guard / 600)
@@ -927,6 +947,10 @@ function AI2:pickTarget(domain)
     s = s * (soft ^ (1 / math.max(0.5, P.risk))) * (1 + (P.weakness - 1) * soft)
     if c.eco > 0 and c.fac == 0 then s = s * (1 + 0.4 * (P.raid - 1) + 0.15) end      -- an outlying expansion
     if c.fac > 0 then s = s * (1 + 0.3 * (P.aggression - 1) + 0.2) end                -- their production
+    if siegeSense > 0 then
+      local full = guard + seaCover(c.x, c.y)
+      if myArmy < full * 1.3 then s = s * (1 - 0.75 * siegeSense) end
+    end
     opts[#opts + 1] = { key = string.format("b%d_%d", math.floor(c.x / 400), math.floor(c.y / 400)),
       label = (c.fac > 0 and "their base" or (c.eco > 0 and "an expansion" or "buildings")) .. string.format(" (%d)", c.n),
       score = s, x = c.x, y = c.y }
