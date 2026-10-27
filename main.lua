@@ -202,6 +202,13 @@ function love.load(args)
       smoke.start(function(opts) startGame(opts) return game end, rest)
       return
     end
+    if a == "--updtest" then
+      -- the in-game updater, end to end: download the newest build over the .love we run from
+      UPDTEST = { t = 0 }
+      menu = Menu.new()
+      state = "menu"
+      return
+    end
     if a == "--uishot" then
       smoke = require("tools.uishot")
       menu = Menu.new()
@@ -349,6 +356,17 @@ end
 
 function love.update(dt)
   dt = math.min(dt, 0.1)
+  if UPDTEST then
+    local ON = require("src.online")
+    if not UPDTEST.started then UPDTEST.started = true; ON.update(); print("UPDTEST tmp", ON.tmp) end
+    ON.poll()
+    UPDTEST.t = UPDTEST.t + dt
+    if ON.state == "updated" or ON.state == "failed" or UPDTEST.t > 150 then
+      print("UPDTEST", ON.state, ON.msg)
+      love.event.quit()
+    end
+    return
+  end
   if autotest then
     if not autotest.done then
       autotest.done = true

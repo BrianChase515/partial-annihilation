@@ -51,6 +51,10 @@ end
 local function run(id, cmd)
   if not O.enabled() then return end
   pending[id] = true
+  -- macOS: helper programs (sh, curl) don't share LOVE's folder permissions, so a helper working in
+  -- the game's folder (often inside Documents) asks for access every single time. Run them from
+  -- the temp folder instead, and never point them at the game's folder
+  if love.system.getOS() ~= "Windows" then cmd = 'cd "${TMPDIR:-/tmp}" 2>/dev/null || cd /; ' .. cmd end
   love.thread.newThread(THREAD):start(cmd, id)
 end
 
@@ -90,7 +94,9 @@ function O.update()
     return
   end
   O.state = "downloading"
-  O.tmp = dst .. ".download"
+  -- download into LOVE's own save folder (no permission prompts); the game itself copies it into
+  -- place afterwards
+  O.tmp = love.filesystem.getSaveDirectory() .. "/update.love.download"
   run("download", "curl -fsSL --max-time 120 -o " .. shellQuote(O.tmp) .. " " .. O.LOVE_URL .. " && echo OK")
 end
 
@@ -101,15 +107,26 @@ local function finishDownload(out)
   local size = f and f:seek("end") or 0
   if f then f:close() end
   if out:match("OK") and head == "PK" and size > 100000 then
-    os.remove(dst .. ".old")
-    os.rename(dst, dst .. ".old")
-    if os.rename(O.tmp, dst) then
+    -- copy it next to the game in-process (the save folder may be on another disk than the game)
+    local src = io.open(O.tmp, "rb")
+    local data = src and src:read("*a")
+    if src then src:close() end
+    local out2 = data and io.open(dst .. ".new", "wb")
+    local wrote = out2 and out2:write(data)
+    if out2 then out2:close() end
+    if wrote and #data == size then
       os.remove(dst .. ".old")
-      O.state = "updated"
-      O.msg = "Updated to v" .. (O.latest or "?") .. ". Restart to play it."
-      return
+      os.rename(dst, dst .. ".old")
+      if os.rename(dst .. ".new", dst) then
+        os.remove(dst .. ".old")
+        os.remove(O.tmp)
+        O.state = "updated"
+        O.msg = "Updated to v" .. (O.latest or "?") .. ". Restart to play it."
+        return
+      end
+      os.rename(dst .. ".old", dst)
     end
-    os.rename(dst .. ".old", dst)
+    os.remove(dst .. ".new")
   end
   os.remove(O.tmp)
   O.state = "failed"

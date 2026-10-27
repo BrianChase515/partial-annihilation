@@ -9,9 +9,14 @@ local function logDir()
   local base = love.filesystem.getSource()
   if base and base:match("%.love$") and love.system.getOS() ~= "Web" then
     local dir = love.filesystem.getSourceBaseDirectory() .. "/logs"
-    if love.system.getOS() == "Windows" then os.execute('mkdir "' .. dir .. '" 2>nul')
-    else os.execute("mkdir -p '" .. dir:gsub("'", "'\\''") .. "'") end
+    -- (only start a helper to make the folder when it isn't there yet: on macOS every helper
+    -- that touches Documents asks for permission again)
     local probe = io.open(dir .. "/.probe", "w")
+    if not probe then
+      if love.system.getOS() == "Windows" then os.execute('mkdir "' .. dir .. '" 2>nul')
+      else os.execute("mkdir -p '" .. dir:gsub("'", "'\\''") .. "'") end
+      probe = io.open(dir .. "/.probe", "w")
+    end
     if probe then probe:close(); os.remove(dir .. "/.probe"); return dir, true end
   end
   love.filesystem.createDirectory("logs")
