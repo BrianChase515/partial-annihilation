@@ -349,6 +349,28 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_PODDEP") then
+    -- across many maps: does any drop pod lock up a metal deposit?
+    local bad, n = 0, 0
+    for seed = 1, 60 do
+      local g = startFn({ size = ({ 96, 128, 160 })[seed % 3 + 1], water = ({ 0.15, 0.3, 0.45 })[seed % 3 + 1], seed = seed * 7919, autotest = true,
+        players = seed % 2 == 0 and { { ally = 1 }, { ally = 2 }, { ally = 3 }, { ally = 4 } } or nil })
+      local w = g.world
+      for _, dp in ipairs(w.map.deposits) do
+        if not dp.sea then
+          n = n + 1
+          if not w:canPlace("mex", dp.x, dp.y, 1, "land") and not w:canPlace("mex", dp.x, dp.y, 2, "land") then
+            for _, pod in pairs(w.dropPods) do
+              local ptx, pty = math.floor(pod.x / w.T), math.floor(pod.y / w.T)
+              if math.abs(ptx - dp.x) <= 1 and math.abs(pty - dp.y) <= 1 then bad = bad + 1 end
+            end
+          end
+        end
+      end
+    end
+    print("PODDEP deposits locked by a pod: " .. bad .. " of " .. n .. " land deposits on 60 maps")
+    return
+  end
   if os.getenv("PA_MECHTEST") then
     -- priority orders, abandoned-build decay, passing through own buildings, the reserved pod
     game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })

@@ -173,7 +173,42 @@ function W.new(opts)
     -- marks his home - where he recharges (see the regen at base)
     if self.rtsTune then
       self.dropPods = self.dropPods or {}
-      self.dropPods[t] = { x = x - 34, y = y - 22, team = t, landAt = W.POD_LAND }
+      -- (land where it doesn't lock up a metal deposit: the pod's tiles can't be built on)
+      local map, T = self.map, self.T
+      local px, py = x - 34, y - 22
+      local found = false
+      for _, off in ipairs({ { -34, -22 }, { 34, -22 }, { -34, 22 }, { 34, 22 }, { 0, -48 }, { 0, 48 }, { -64, 0 }, { 64, 0 },
+        { -64, -48 }, { 64, -48 }, { -64, 48 }, { 64, 48 }, { 0, -90 }, { 0, 90 }, { -96, 0 }, { 96, 0 } }) do
+        local cx, cy = x + off[1], y + off[2]
+        local tx, ty = math.floor(cx / T), math.floor(cy / T)
+        local ok = map:inBounds(tx, ty) and map:passable("land", tx, ty)
+        for yy = ty - 2, ty + 2 do
+          for xx = tx - 2, tx + 2 do
+            if ok and map:inBounds(xx, yy) and map.deposit[map:idx(xx, yy)] then ok = false end
+          end
+        end
+        if ok then px, py = cx, cy; found = true; break end
+      end
+      if not found then
+        -- crowded start: look further out, all the way round
+        for r = 3, 7 do
+          for k = 0, 15 do
+            if not found then
+              local a = k / 16 * math.pi * 2
+              local cx, cy = x + math.cos(a) * r * T, y + math.sin(a) * r * T
+              local tx, ty = math.floor(cx / T), math.floor(cy / T)
+              local ok = map:inBounds(tx, ty) and map:passable("land", tx, ty)
+              for yy = ty - 2, ty + 2 do
+                for xx = tx - 2, tx + 2 do
+                  if ok and map:inBounds(xx, yy) and map.deposit[map:idx(xx, yy)] then ok = false end
+                end
+              end
+              if ok then px, py, found = cx, cy, true end
+            end
+          end
+        end
+      end
+      self.dropPods[t] = { x = px, y = py, team = t, landAt = W.POD_LAND }
     end
     -- (Annihilation) two Defense Towers at the drop point: somewhere for a Commander to fall back
     -- to. A base that's lost them (or a player who led the enemy home) is still fair game
