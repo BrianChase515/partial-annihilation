@@ -349,6 +349,23 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_COREFOG") then
+    -- the Power Core node outlined under the fog, in the view and on the minimap
+    game = startFn({ size = 128, water = 0.3, seed = 31, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = false
+    for _ = 1, 10 do w:update(1 / 30) end
+    w.fogChanged = true
+    local cn = w.map.coreNode
+    game.cam.zoom = 0.6
+    game:centerOn((cn.x + 1) * w.T, (cn.y + 1) * w.T)
+    for _ = 1, 5 do frame() end
+    pending = "uishot_corefog.png"
+    frame(); frame()
+    print("UISHOT corefog visible=" .. tostring(w.visible[(cn.y + 1) * w.map.w + cn.x + 1]))
+    return
+  end
   if os.getenv("PA_BOXTEST") then
     -- a selection box dragged while the view pans: it should cover the whole span on the map
     game = startFn({ size = 128, water = 0.1, seed = 5, autotest = true })

@@ -971,6 +971,19 @@ function R.drawWorld(cam, game)
         end
       end
     end
+    -- the Power Core node stays outlined under the fog too: you always know where the middle's
+    -- prize is (not whether anyone has built on it)
+    local cn = map.coreNode
+    if cn and world.visible[(cn.y + 1) * map.w + cn.x + 1] ~= 1 then
+      local px, py = (cn.x + 1) * T, (cn.y + 1) * T
+      if px > x0 - 2 * T and px < x1 + 2 * T and py > y0 - 2 * T and py < y1 + 2 * T then
+        lg.setColor(0.45, 0.88, 1, 0.8)
+        lg.setLineWidth(2)
+        lg.rectangle("line", cn.x * T + 2, cn.y * T + 2, 2 * T - 4, 2 * T - 4, 6)
+        lg.setColor(0.45, 0.88, 1, 0.65)
+        lg.circle("fill", px, py, 5)
+      end
+    end
   end
 
   -- Commander of Heroes: capture points and flares

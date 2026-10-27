@@ -916,15 +916,18 @@ function UI.drawMinimap(game, L)
     lg.rectangle("fill", mm.x + dp.x * s, mm.y + dp.y * s, math.max(1.5, s), math.max(1.5, s))
   end
   -- the Power Core node
-  if map.coreNode then
-    lg.setColor(0.4, 0.85, 1, 0.95)
-    local cx, cy = mm.x + (map.coreNode.x + 1) * s, mm.y + (map.coreNode.y + 1) * s
-    lg.polygon("fill", cx, cy - 4, cx + 4, cy, cx, cy + 4, cx - 4, cy)
-  end
   -- fog
   if not world.noFog then
     lg.setColor(1, 1, 1)
     lg.draw(R.fogImage, mm.x, mm.y, 0, s, s)
+  end
+  -- the Power Core node, on top of the fog (where it is - not who holds it)
+  if map.coreNode then
+    local cx, cy = mm.x + (map.coreNode.x + 1) * s, mm.y + (map.coreNode.y + 1) * s
+    lg.setColor(0, 0, 0, 0.6)
+    lg.polygon("fill", cx, cy - 6, cx + 6, cy, cx, cy + 6, cx - 6, cy)
+    lg.setColor(0.4, 0.85, 1, 0.95)
+    lg.polygon("fill", cx, cy - 4, cx + 4, cy, cx, cy + 4, cx - 4, cy)
   end
   local T = D.TILE
   for _, e in ipairs(world.entities) do
