@@ -127,8 +127,8 @@ Annihilation is tuned for about 12 minutes on a medium map with some water (less
 
 The **Auto** button in the top bar (or K) opens standing orders for the routine jobs, in the spirit of AI War's controls. Each is a switch, most with a number, and they're remembered between matches:
 
-- **Units flee when hurt** at a health you pick (30% by default), back to the plant that built them - and **Per unit...** sets each kind on its own (scouts at 60%, say).
-- **Repaired units rejoin** your flag (or where they were) once they're whole again.
+- **Units flee when hurt** at a health you pick (30% by default), to your flag (Ctrl+F) if you've set one, else back to the plant that built them - and they drop out of your selection (and Ctrl+A), so your next attack-move doesn't drag them back unarmed; **Per unit...** sets each kind on its own (scouts at 60%, say).
+- **Repaired units rejoin** the fight where they fled from once they're whole again. (A unit that fled somewhere nothing can repair it gets its guns back after 8 seconds.)
 - **Keep constructors**: below the minimum, a vehicle plant builds one next, without interrupting what it's making (and Repeat won't copy it).
 - **When a constructor is idle** - never overriding an order you gave, and never the Commander - it does the first of these jobs that's switched on and has work, in the order you drag them into:
   - **Repair** damaged units and buildings near it (repairs cost resources: 30% of the price for a full repair)

@@ -2509,8 +2509,10 @@ end
 
 -- Every combat unit you own (not the Commander or constructors)
 function G:selectAllArmy()
-  local list = self.world:teamEntities(1, function(e)
-    return not e.def.building and e.def.weapon and e.key ~= "commander"
+  -- (not the ones fleeing or powered down for repairs: they'd be dragged back into the fight unarmed)
+  local world = self.world
+  local list = world:teamEntities(1, function(e)
+    return not e.def.building and e.def.weapon and e.key ~= "commander" and not e.disarmed and not world:isFleeing(e)
   end)
   self:select(list)
   self:notice("Selected all " .. #list .. " combat units", 1)

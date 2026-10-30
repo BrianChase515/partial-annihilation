@@ -349,6 +349,42 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_FLAGFLEE") then
+    -- Auto flee with a flag: to the flag, out of the selection, skipped by select-all; and re-armed
+    -- later even with nothing to repair it
+    local A = require("src.automation")
+    A.v.flee, A.v.fleePct = true, 30
+    game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local c = w.teams[1].commander
+    local map = w.map
+    local function land(x, y)
+      local tx, ty = map:tileAt(x, y)
+      local nx, ny = map:nearestTile(math.max(1, math.min(map.w - 2, tx)), math.max(1, math.min(map.h - 2, ty)), function(a2, b2) return map:passable("land", a2, b2) end, 40)
+      return map:center(nx, ny)
+    end
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    local fx, fy = land(c.x + (cx - c.x) * 0.3, c.y + (cy - c.y) * 0.3)
+    game.flag = { x = fx, y = fy }
+    local tx, ty = land(c.x + (cx - c.x) * 0.7, c.y + (cy - c.y) * 0.7)
+    local hurt = w:spawn("tank", 1, tx, ty); hurt.hp = hurt.maxhp * 0.2
+    local fine = w:spawn("tank", 1, tx + 30, ty)
+    game.selected = { [hurt] = true, [fine] = true }
+    game.opts.autotest = false
+    for _ = 1, 20 do game:update(1 / 30) end
+    local o = hurt.orders[1]
+    print(string.format("FLAGFLEE order %s to the flag? %s; still selected? %s", o and o.type or "none",
+      tostring(o and U.dist(o.x, o.y, fx, fy) < 120), tostring(game.selected[hurt] == true)))
+    game:selectAllArmy()
+    print("FLAGFLEE Ctrl+A picks the fleeing one? " .. tostring(game.selected[hurt] == true) .. "; the healthy one? " .. tostring(game.selected[fine] == true))
+    local t = 0
+    while hurt.alive and t < 90 and (hurt.disarmed or hurt.orders[1]) do game:update(1 / 30); t = t + 1 / 30 end
+    game.opts.autotest = true
+    print(string.format("FLAGFLEE re-armed after %.0fs at the flag (hp %d%%, nothing to repair it)", t, hurt.hp / hurt.maxhp * 100))
+    return
+  end
   if os.getenv("PA_NUKESHOT") then
     -- the Nuke becomes ready: the banner, and the flashing button under the Commander card
     game = startFn({ size = 96, water = 0.2, seed = 5, autotest = true })

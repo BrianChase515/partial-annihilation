@@ -1518,7 +1518,13 @@ function W:updateWeapon(e, dt, focus)
   local w = e.def.weapon
   if not w or e.built < 1 or e.neutral then return end
   if e.disarmed then
-    if e.hp >= e.maxhp then e.disarmed = nil else return end
+    if e.hp >= e.maxhp then e.disarmed = nil; e.disT = nil
+    elseif self.rtsTune and not self:isFleeing(e) then
+      -- (Annihilation) done fleeing but nothing is repairing it (a flag far from any plant or
+      -- constructor): after 8 seconds without a repair, its guns come back on
+      if not e.disT or e.hp > (e.disHp or 0) + 0.5 then e.disT, e.disHp = self.time, e.hp end
+      if self.time - e.disT > 8 then e.disarmed, e.disT = nil, nil else return end
+    else return end
   end
   e.reload = math.max(0, e.reload - dt)
   e.scanTimer = e.scanTimer - dt

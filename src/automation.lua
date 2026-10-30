@@ -21,9 +21,9 @@ local A = {}
 
 A.FILE = "automation.lua"
 A.RULES = {
-  { key = "flee", label = "Units flee when hurt", desc = "Combat units below this health flee to the plant that built them.",
+  { key = "flee", label = "Units flee when hurt", desc = "Combat units below this health flee to your flag (or, with no flag, the plant that built them) and leave your selection.",
     value = "fleePct", min = 10, max = 70, step = 5, unit = "% health" },
-  { key = "rejoin", label = "Repaired units rejoin", desc = "Units that fled return to your flag (or where they were) once fully repaired." },
+  { key = "rejoin", label = "Repaired units rejoin", desc = "Units that fled go back to where they fled from once fully repaired." },
   { key = "builders", label = "Keep constructors", desc = "If you have fewer than this, a vehicle plant builds one next (it doesn't interrupt the current build).",
     value = "builderMin", min = 1, max = 8, step = 1, unit = " minimum" },
 }
@@ -210,15 +210,25 @@ function A.update(game, dt)
       -- 1. fall back when hurt
       if v.flee and u.def.weapon and u.key ~= "commander" and u.key ~= "builder" and not u.disarmed
         and u.hp < u.maxhp * A.fleePctFor(u.key) / 100 and not (o and o.type == "retreat") then
-        local hx, hy = homeFor(w, u)
+        -- to your flag if you've set one (put it where you want the line to fall back to - near a
+        -- plant, for repairs), else to the plant that built it
+        local hx, hy
+        if game.flag then
+          hx, hy = game.flag.x + math.random(-50, 50), game.flag.y + math.random(-50, 50)
+        else
+          hx, hy = homeFor(w, u)
+        end
         if U.dist2(u.x, u.y, hx, hy) > 250 * 250 then
           u.autoFled = { x = u.x, y = u.y }
           w:issue(u, { type = "retreat", x = hx, y = hy })
+          -- out of your selection, so the next attack-move doesn't drag it back unarmed (select it
+          -- again on purpose to use it)
+          if game.selected then game.selected[u] = nil end
         end
       -- 2. back to the fight once whole
       elseif v.rejoin and u.autoFled and u.hp >= u.maxhp - 0.5 and not u.disarmed and not (o and o.type == "retreat") then
+        -- back to where it fled from (the front)
         local tx, ty = u.autoFled.x, u.autoFled.y
-        if game.flag then tx, ty = game.flag.x, game.flag.y end
         u.autoFled = nil
         w:issue(u, { type = "amove", x = tx + math.random(-60, 60), y = ty + math.random(-60, 60) })
       end
