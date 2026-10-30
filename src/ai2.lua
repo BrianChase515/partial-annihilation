@@ -214,6 +214,7 @@ function AI2:updateStage()
   local k = self.stageK or 0.3
   local pk = self.posture.choice and self.posture.choice.key
   if pk == "dig" then k = math.min(k, 0.2) elseif pk == "strike" then k = math.min(0.85, k + 0.1) end
+  if self.regroup then k = math.min(k, 0.12) end
   -- don't park the army out there before it's an army
   local n = 0
   for _, e in ipairs(self.world.entities) do
@@ -288,7 +289,10 @@ function AI2:thinkCommander()
   end
   if not c or not c.alive or c.key ~= "commander" or self.cmdMode ~= "build" then return end
   local P = self.p.w
-  if P.hold > 1.4 or w.time < (self.rush and 100 or 150) or c.hp < c.maxhp * (self.rush and 0.45 or 0.7) then return end
+  -- early on, like a player would: once the first plant is up, the Commander walks to the middle
+  -- and claims the Power Core and the metal there - while it's quiet, with flak at his side
+  if self:commanderToCentre(c) then return end
+  if P.hold > 1.4 or w.time < (self.rush and 100 or 110) or c.hp < c.maxhp * (self.rush and 0.45 or 0.7) then return end
   local builders, army = 0, 0
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == self.team then
@@ -296,18 +300,18 @@ function AI2:thinkCommander()
       elseif e.def.weapon and not e.def.building and e.key ~= "commander" and U.dist2(e.x, e.y, self.stageX, self.stageY) < 500 * 500 then army = army + 1 end
     end
   end
-  if builders < (self.rush and 2 or 3) then return end
+  if builders < 2 then return end
   -- ride with an attack wave (from behind), or wait with the army at the staging point
   local wl, wx, wy = 0, 0, 0
   for u in pairs(self.wave) do
     if u.alive and u.def.domain == "land" and u.key ~= "scout" then wl, wx, wy = wl + 1, wx + u.x, wy + u.y end
   end
   local tx, ty, why
-  if wl >= (self.rush and 2 or 5) then
+  if wl >= (self.rush and 2 or 3) then
     wx, wy = wx / wl, wy / wl
     local bx, by = U.norm(self.baseX - wx, self.baseY - wy)
     tx, ty, why = wx + bx * 150, wy + by * 150, "with the wave"
-  elseif army >= (self.rush and 2 or 3) then
+  elseif army >= 2 then
     local bx, by = U.norm(self.baseX - self.stageX, self.baseY - self.stageY)
     tx, ty, why = self.stageX + bx * 120, self.stageY + by * 120, "at the staging point"
   else
@@ -423,6 +427,47 @@ function AI2:bbParkSpot(b)
   local a = k * 2.3
   local x, y = self:waterNear(self.bbPark.x + math.cos(a) * 90 * (k - 1), self.bbPark.y + math.sin(a) * 90 * (k - 1), 6)
   return x or self.bbPark.x, y or self.bbPark.y
+end
+
+function AI2:commanderToCentre(c)
+  local w = self.world
+  local t = w.time
+  if self.rush or t < 70 or t > 420 or #c.orders > 0 or c.hp < c.maxhp * 0.65 or self.regroup then return false end
+  if self.p.w.hold > 1.4 then return false end
+  local map = w.map
+  local cn = map.coreNode
+  local cx, cy
+  if cn then cx, cy = map:center(cn.x, cn.y) else cx, cy = map.w * w.T / 2, map.h * w.T / 2 end
+  -- a plant first (that's how a player opens)
+  local plants = 0
+  for _, e in ipairs(w.entities) do if e.alive and e.team == self.team and e.def.factory and e.built >= 1 then plants = plants + 1 end end
+  if plants < 1 then return false end
+  -- quiet enough? (he's tough, but not alone against an army)
+  local danger = self:strengthNear(cx, cy, 650, true)
+  local ours = self:strengthNear(cx, cy, 650, false)
+  if danger > ours + 500 then return false end
+  local job
+  if cn and not map.blocked[cn.y * map.w + cn.x] and not self.coreClaimed and w:canPlace("powercore", cn.x, cn.y, self.team, "land") then
+    self.coreClaimed = true
+    job = { type = "build", key = "powercore", tx = cn.x, ty = cn.y }
+  else
+    local best, bd
+    for _, dp in ipairs(map.deposits) do
+      if not dp.sea then
+        local x, y = map:center(dp.x, dp.y)
+        local d = U.dist2(x, y, cx, cy)
+        if d < 750 * 750 and (not bd or d < bd) and w:canPlace("mex", dp.x, dp.y, self.team, "land") then best, bd = dp, d end
+      end
+    end
+    if best then job = { type = "build", key = "mex", tx = best.x, ty = best.y } end
+  end
+  if not job then return false end
+  w:issue(c, job)
+  if not self.centreNoted then
+    self.centreNoted = true
+    Tel.note(w, "commander", self.team, "walks to the centre to claim " .. (job.key == "powercore" and "the Power Core" or "the metal there"))
+  end
+  return true
 end
 
 -- one or two flak trucks stay with the Commander wherever it goes (gunships are what kill it)
@@ -663,6 +708,57 @@ end
 ---------------------------------------------------------------------------
 -- Posture: when waves go
 
+-- Losing the trades: a beaten AI used to keep feeding its army in a few units at a time while its
+-- economy froze. Now, when the last minute went badly (it lost far more than it killed), it pulls
+-- everything home behind its towers, stops sending small waves and raids, keeps expanding where
+-- it's safe, and comes back only with a real army
+local function unitValue(key)
+  local d = D.units[key]
+  local c = d and d.cost
+  return c and (c.metal + c.energy / 10) or 60
+end
+
+function AI2:thinkRegroup(t, ours, theirs)
+  local w = self.world
+  local tel = w.tel
+  if not tel or t < 120 then return false end
+  local lost, killed = 0, 0
+  for i = #tel.kills, 1, -1 do
+    local k = tel.kills[i]
+    if t - k.t > 60 then break end
+    local d = D.units[k.vk]
+    if d and not d.building and k.vk ~= "builder" then
+      if k.vt == self.team then lost = lost + unitValue(k.vk)
+      elseif k.at == self.team and k.vt and self:isHostile(k.vt) then killed = killed + unitValue(k.vk) end
+    end
+  end
+  local d = self.diff
+  if not self.regroup then
+    if lost > 700 and lost > killed * 1.8 then
+      self.regroup = { since = t, minUntil = t + 75 }
+      self.savedRaid, self.savedSmall = d.raidEvery, self.smallRaids
+      Tel.note(w, "regroup", self.team, string.format("losing the trades (lost %d, killed %d in the last minute): pulls back home, builds up before attacking again",
+        math.floor(lost), math.floor(killed)))
+    else
+      return false
+    end
+  end
+  -- out of it once the army is back up to a real fight (or after a long while)
+  local ready = ours > theirs * (self.omniscient and 1.0 or 0.8) and ours > self.baseWave * 250
+  if (t > self.regroup.minUntil and ready) or t - self.regroup.since > 240 then
+    self.regroup = nil
+    d.raidEvery, self.smallRaids = self.savedRaid, self.savedSmall
+    Tel.note(w, "regroup", self.team, string.format("army back up (%d vs their %d): goes on the attack again", math.floor(ours), math.floor(theirs)))
+    self.nextPosture = 0
+    return false
+  end
+  -- while regrouping: big waves only, no raids, keep growing the economy
+  d.waveBase, d.waveGrow, d.raidEvery = math.floor(self.baseWave * 2 + 0.5), self.baseGrow + 1, nil
+  self.smallRaids = false
+  if self.baseEco then d.expandMul = self.baseEco.expand end
+  return true
+end
+
 function AI2:thinkPosture()
   local w = self.world
   local P = self.p.w
@@ -683,6 +779,7 @@ function AI2:thinkPosture()
   local threat = self:enemyNearBase() and 1 or 0
   local since = t - (self.lastWave or -999)
   self:balanceArmy(ours)
+  if self:thinkRegroup(t, ours, theirs) then return end
   local opts = {
     { key = "strike", label = "strike now", score = 0.55 * P.aggression * (0.3 + odds) * (P.risk ^ 0.5) * (since > 90 and 1.2 or 0.7) },
     { key = "mass", label = "mass up first", score = 0.5 * P.patience * (1.25 - odds) },

@@ -46,7 +46,7 @@ function G.new(opts)
     -- Annihilation AI v2 plays two levels up economically (its level 5 is a real fight; its
     -- choices still follow the level you picked)
     local v2 = not p.human and (p.aiV2 or opts.aiV2 or (opts.aiV2Teams and opts.aiV2Teams[i])) and not opts.coh and opts.mode ~= "arena" and opts.mode ~= "craft"
-    income[i] = p.human and 1 or D.aiLevel(v2 and math.min(10, (p.level or 5) + 2) or p.level).income
+    income[i] = p.human and 1 or (v2 and D.V2_INCOME[math.max(1, math.min(10, p.level or 5))] or D.aiLevel(p.level).income)
   end
   self.world = World.new({
     size = opts.size, water = opts.water, seed = opts.seed, mapPlayers = opts.mapPlayers, mods = opts.mods,

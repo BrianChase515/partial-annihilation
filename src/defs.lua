@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.27.7"
+D.VERSION = "0.28.0"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
@@ -431,6 +431,10 @@ function D.aiLevel(n)
     raids = n >= 6,            -- occasional harassment of outlying extractors
   }
 end
+
+-- v2's income by the level you pick: it plays with a bigger economy than its level (it's built
+-- to out-earn you a little), in even steps - no cliff between 6 and 7
+D.V2_INCOME = { 0.8, 0.9, 1.0, 1.12, 1.24, 1.30, 1.38, 1.46, 1.55, 1.64 }
 
 -- AI personalities, independent of strength. Multipliers adjust the level's values.
 D.profiles = {
