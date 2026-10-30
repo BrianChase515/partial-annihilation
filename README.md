@@ -113,7 +113,7 @@ The result screen names the personality you faced; the match log has its map rea
 
 ### Fight early, decide late
 
-Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up quickly and a level-5 unit becomes a named General. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
+Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up and a level-5 unit becomes a named General - each rank gives +10% health, +10% damage and +5% fire rate, but ranking up doesn't repair a unit and Generals don't patch themselves up in the field: fleeing home to repair is how veterans stay alive. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
 
 ### Priority orders, packed bases, nothing left half-built
 
@@ -121,6 +121,7 @@ Annihilation is tuned for about 12 minutes on a medium map with some water (less
 - Your units move straight through your own buildings, so drag-built blocks of solar and the like pack tight with no gaps (the enemy's buildings still block).
 - A building left unfinished falls apart: after 8 seconds with nobody working on it, it crumbles over about 15 seconds.
 - Nothing can be built on a Commander's drop pod - it's his home.
+- Metal deposits are for extractors only: nothing else can be built over one (drag-building skips them).
 - The Power Core takes about a minute for one constructor to raise, and it falls about as fast.
 
 ### Auto: standing orders
@@ -200,7 +201,7 @@ Most maps are ringed by ocean, and every body of water connects. Much of the ric
 
 Wetter maps carry long inlets deep into the land on every side, so a navy can reach almost anywhere. Sea Constructors also build **Sea Batteries**: floating gun platforms, tougher than land towers, that hit land, sea and air.
 
-The navy mirrors the army. The **Patrol Boat** is the fleet's fast escort: quick, sees far across the water, and its short-range flak shreds aircraft that come close; light guns against ships and the shore. The **Destroyer** is the line ship and your coast's guard: heavy splash guns out to 850 - parked off your start it covers your whole base - but it only sees 300, so your buildings, units or boats spot for it. The **Battleship** shells anything your side can see, anywhere on the map. It's very tough and very slow, but it sees only 300, can't hit anything within 200 and can't shoot aircraft or submarines - a big army or an air raid overwhelms it unless patrol boats screen it. Ships come into the war later than the army, against veterans they never got to fight, so they leave the shipyard with trained crews (level 1) and rank up 1.25x as fast. The computer players send bombers and subs after any battleship near their base, screen their own with patrol boats, and park them in the water nearest the centre.
+The navy mirrors the army. The **Patrol Boat** is the fleet's fast escort: quick, sees far across the water, and its short-range flak shreds aircraft that come close; light guns against ships and the shore. The **Destroyer** is the line ship and your coast's guard: heavy splash guns out to 850 - parked off your start it covers your whole base - but it only sees 300, so your buildings, units or boats spot for it. The **Battleship** shells anything your side can see, anywhere on the map. It's very tough and very slow, but it sees only 300, can't hit anything within 200 and can't shoot aircraft or submarines - a big army or an air raid overwhelms it unless patrol boats screen it. Ships come into the war later than the army, against veterans they never got to fight, so they leave the shipyard with trained crews (level 1) and rank up at the normal rate. The computer players send bombers and subs after any battleship near their base, screen their own with patrol boats, and park them in the water nearest the centre.
 
 ### Retreat has a price, and your Commander needs a home
 `F` pulls units back at +25% speed, but their weapons stay offline until they're fully repaired. Fleeing saves units, and it also leaves them defenseless if the enemy gives chase.

@@ -11,7 +11,7 @@ local CRAFT -- Commander Craft, loaded lazily too
 local W = {}
 W.__index = W
 
-local CELL = 96
+local CELL = 192
 
 function W.new(opts)
   local self = setmetatable({}, W)
@@ -343,6 +343,13 @@ end
 function W:query(x, y, r, fn)
   local x0, x1 = math.floor((x - r) / CELL), math.floor((x + r) / CELL)
   local y0, y1 = math.floor((y - r) / CELL), math.floor((y + r) / CELL)
+  -- (only the cells on the map: a whole-map gun used to walk thousands of empty ones per search)
+  local mc = self.mapCells
+  if not mc then mc = { math.ceil(self.map.w * self.T / CELL), math.ceil(self.map.h * self.T / CELL) }; self.mapCells = mc end
+  if x0 < 0 then x0 = 0 end
+  if y0 < 0 then y0 = 0 end
+  if x1 > mc[1] then x1 = mc[1] end
+  if y1 > mc[2] then y1 = mc[2] end
   for cy = y0, y1 do
     for cx = x0, x1 do
       local c = self.grid[cy * 1000 + cx]
@@ -499,6 +506,14 @@ end
 function W:canPlace(key, tx, ty, team, builderDomain)
   local d = D.units[key]
   local map = self.map
+  -- (Annihilation) metal deposits are for extractors only: nothing else may cover one
+  if self.rtsTune and d.place ~= "deposit" and self.map.deposit then
+    for yy = ty, ty + d.h - 1 do
+      for xx = tx, tx + d.w - 1 do
+        if self.map:inBounds(xx, yy) and self.map.deposit[self.map:idx(xx, yy)] then return false end
+      end
+    end
+  end
   -- (Annihilation) nothing gets built on a Commander's drop pod: it's his home
   if self.dropPods then
     for _, pod in pairs(self.dropPods) do
@@ -624,6 +639,21 @@ function W:setDest(e, x, y)
     return
   end
   if e.destX and e.path and U.dist2(e.destX, e.destY, x, y) < 24 * 24 then return end
+  -- chasing something that moved a little: keep the route and just move its end (a full search
+  -- every time the target shuffles was the biggest cost in big battles)
+  if e.destX and e.path and #e.path > 0 and self.time < (e.repathAt or 0) and U.dist2(e.destX, e.destY, x, y) < 160 * 160 then
+    local last = e.path[#e.path]
+    local map = self.map
+    local tx, ty = map:tileAt(x, y)
+    if self.passFriendly and e.team then map.passFor = self.ally[e.team] end
+    local ok = map:passable(layer, tx, ty)
+    map.passFor = nil
+    if ok then
+      last.x, last.y = x, y
+      e.destX, e.destY = x, y
+      return
+    end
+  end
   -- spread expensive searches over frames: past the per-tick cap, head straight
   -- for the goal briefly and search again shortly
   if self.pathCount >= 6 then
@@ -923,7 +953,9 @@ W.MAX_LEVEL = 5
 function W:xpForLevel(e, L)
   -- cumulative xp needed to reach level L
   -- (Annihilation: at least 300, so cheap units like scouts can't rank up off a kill or two)
-  local base = self.rtsTune and math.max(e.def.hp, self.rtsTune.xpMinHp or 0) or e.def.hp
+  -- (Annihilation: on the unit's real health - units are tougher there, so a kill is worth more -
+  -- and at least 300, so cheap units like scouts can't rank up off a kill or two)
+  local base = self.rtsTune and math.max(e.def.hp * (e.hpMul or 1), self.rtsTune.xpMinHp or 0) or e.def.hp
   return base * ((self.rtsTune and self.rtsTune.xpf) or 0.7) * L * (L + 1) / 2
 end
 
@@ -993,7 +1025,7 @@ function W:repairZones()
     if u.alive and not u.def.building and u.hp < u.maxhp and self.time - (u.lastHit or -99) > 4
       and (u.key ~= "commander" or self.arena) then
       -- Generals patch themselves up anywhere once out of the fight
-      if u.general then u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.012); u.healing = 0.6 end
+      if u.general and not self.rtsTune then u.hp = math.min(u.maxhp, u.hp + u.maxhp * 0.012); u.healing = 0.6 end
       for _, h in ipairs(healers) do
         if h.team == u.team and U.dist2(u.x, u.y, h.x, h.y) < 380 * 380 then
           local add = math.min(u.maxhp - u.hp, u.maxhp * 0.04 * 0.5)
@@ -1021,8 +1053,9 @@ function W:gainXP(e, amount)
     L = L + 1
     local oldMax = e.maxhp
     e.maxhp = math.floor(e.def.hp * (1 + 0.10 * L) * (e.hpMul or 1))
-    if e.arenaTower then
-      e.hp = e.hp + (e.maxhp - oldMax) -- towers just grow; ranking up never repairs them
+    if e.arenaTower or self.rtsTune then
+      -- towers just grow; and in Annihilation ranking up never repairs a unit (fleeing home does)
+      if e.arenaTower then e.hp = e.hp + (e.maxhp - oldMax) end
     else
       e.hp = math.min(e.maxhp, e.hp + (e.maxhp - oldMax) + e.maxhp * 0.25) -- level-up heals a bit
     end
@@ -1121,14 +1154,25 @@ end
 -- can e's side see o? (its own eyes, or any friendly unit or building close enough to o)
 function W:spotted(e, o)
   if U.dist2(e.x, e.y, o.x, o.y) <= self:sightOf(e) ^ 2 then return true end
-  for _, v in ipairs(self.visionSources or {}) do
-    if v.ally == self.ally[e.team] and U.dist2(v.x, v.y, o.x, o.y) <= v.r * v.r then return true end
-  end
+  local ally = self.ally[e.team]
+  -- what a side can see is worked out once a quarter-second and shared by all its shooters
+  -- (it used to be redone for every shooter and every candidate target)
+  self.spotC = self.spotC or {}
+  local sc = self.spotC[ally]
+  if not sc or self.time - sc.t > 0.25 then sc = { t = self.time, m = {} }; self.spotC[ally] = sc end
+  local v = sc.m[o]
+  if v ~= nil then return v end
   local seen = false
-  self:query(o.x, o.y, 480, function(f)
-    if not seen and f.alive and f ~= e and f.team and self.ally[f.team] == self.ally[e.team] and f.def.sight
-      and U.dist2(f.x, f.y, o.x, o.y) <= self:sightOf(f) ^ 2 then seen = true end
-  end)
+  for _, vs in ipairs(self.visionSources or {}) do
+    if vs.ally == ally and U.dist2(vs.x, vs.y, o.x, o.y) <= vs.r * vs.r then seen = true; break end
+  end
+  if not seen then
+    self:query(o.x, o.y, 480, function(f)
+      if not seen and f.alive and f.team and self.ally[f.team] == ally and f.def.sight
+        and U.dist2(f.x, f.y, o.x, o.y) <= self:sightOf(f) ^ 2 then seen = true end
+    end)
+  end
+  sc.m[o] = seen
   return seen
 end
 
@@ -1200,7 +1244,7 @@ function W:fire(e, o, wov)
   end
   local L = e.level or 0
   local m = self:modsOf(e)
-  local dmg = w.damage * (1 + 0.15 * L) * (m.dmg or 1)
+  local dmg = w.damage * (1 + ((self.rtsTune and self.rtsTune.lvlDmg) or 0.15) * L) * (m.dmg or 1)
   -- Inspiring Presence: allies near a Commander with the aura hit harder
   local c = self.teams[e.team].commander
   if c and c ~= e and c.alive and c.mods and c.mods.dmgAura and U.dist2(c.x, c.y, e.x, e.y) < 350 * 350 then
@@ -1240,7 +1284,7 @@ function W:fire(e, o, wov)
       p.target, p.tx, p.ty, p.miss = nil, o.x + math.cos(a) * r, o.y + math.sin(a) * r, true
     end
   end
-  e.reload = w.reload / (1 + 0.08 * L) / (m.rof or 1) / (self.heroes and (self:bv(e, "rof") or 1) or 1) / (e.sqRof or 1)
+  e.reload = w.reload / (1 + ((self.rtsTune and self.rtsTune.lvlRof) or 0.08) * L) / (m.rof or 1) / (self.heroes and (self:bv(e, "rof") or 1) or 1) / (e.sqRof or 1)
   if self.heroes and (m.chill or e.stanceChill) then self.projectiles[#self.projectiles].chill = true end
   if self.heroes and e.stancePoison then self.projectiles[#self.projectiles].poison = e.stancePoison end
   -- melee fighters (Ascetic) strike instead of shoot: the blow lands at once and leaves no trail

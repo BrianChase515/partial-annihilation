@@ -830,6 +830,17 @@ local TILE = 58
 
 function UI.sidebarItems(game)
   if game.arena then return {} end
+  -- (rebuilt at most ten times a second: it walks every entity on the map, and the hover checks
+  -- ask for it several times a frame)
+  local now = love.timer.getTime()
+  local c = game.sbCache
+  if c and now - c.t < 0.1 and c.h == lg.getHeight() then return c.items, c.nf, c.nb end
+  local items, nf, nb = UI.sidebarBuild(game)
+  game.sbCache = { t = now, items = items, nf = nf, nb = nb, h = lg.getHeight() }
+  return items, nf, nb
+end
+
+function UI.sidebarBuild(game)
   local facs, blds = {}, {}
   if game.craft then
     facs, blds = craftUI().sidebarLists(game)

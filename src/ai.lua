@@ -743,7 +743,8 @@ function AI:thinkEconomy()
   for _, b in ipairs(builders) do
     if b.def.domain == "sea" then
       if #b.orders == 0 then self:seaBuilderTask(b) end
-    elseif #b.orders == 0 and not (b.key == "commander" and self.cmdMode and self.cmdMode ~= "build") then
+    elseif #b.orders == 0 and not (b.key == "commander" and self.cmdMode and self.cmdMode ~= "build")
+      and not (b.key == "commander" and self.cmdReserved) then -- (v2: the Commander is wanted at the centre)
       local isCmd = b.key == "commander"
       local task = nil
       local bx, by = self:baseTile()

@@ -349,6 +349,97 @@ local function script(mode, secs)
     print("UISHOT auto")
     return
   end
+  if os.getenv("PA_PROF") then
+    -- where does the time go in a busy mid-game? two v2 AIs, medium map, some water
+    game = startFn({ size = 128, water = 0.3, seed = 1793103957, autotest = true,
+      aiV2Teams = { [1] = true, [2] = true }, level = 5, level1 = 5, players = { { ally = 1 }, { ally = 2 } } })
+    local w = game.world
+    local W = getmetatable(w).__index
+    local prof = {}
+    local function wrap(obj, name)
+      local f = obj[name]
+      obj[name] = function(...)
+        local t0 = love.timer.getTime()
+        local a, b2, c2, d2 = f(...)
+        local p = prof[name] or { t = 0, n = 0 }
+        prof[name] = p
+        p.t, p.n = p.t + love.timer.getTime() - t0, p.n + 1
+        return a, b2, c2, d2
+      end
+    end
+    for _, n in ipairs({ "update", "updateWeapon", "updateAA", "findTarget", "spotted", "updateUnit", "separate", "repairZones", "rebuildGrid", "query", "setDest", "updateFactory", "followPath" }) do
+      if W[n] then wrap(W, n) end
+    end
+    local AIm = getmetatable(game.ais[1]).__index
+    local aiT = 0
+    local total0 = love.timer.getTime()
+    local segs = {}
+    for sec = 1, 480 do
+      local s0 = love.timer.getTime()
+      for _ = 1, 30 do
+        w:update(1 / 30)
+        local a0 = love.timer.getTime()
+        for _, ai in ipairs(game.ais) do ai:update(1 / 30) end
+        aiT = aiT + love.timer.getTime() - a0
+        if w.over then break end
+      end
+      if sec % 60 == 0 then
+        local n = 0
+        for _, e in ipairs(w.entities) do if e.alive then n = n + 1 end end
+        segs[#segs + 1] = string.format("%d:00 %d entities, %.0f ms per game-second", sec / 60, n, (love.timer.getTime() - s0) * 1000)
+      end
+      if w.over then break end
+    end
+    print("PROF total " .. string.format("%.1f s for %.0f s of game, AI %.1f s", love.timer.getTime() - total0, w.time, aiT))
+    -- drawing: frames at zoom 1 over the busiest spot, and zoomed out to the whole map
+    local R = require("src.render")
+    local UI = require("src.ui")
+    local busiest, bn
+    for _, e in ipairs(w.entities) do
+      if e.alive and not e.def.building then
+        local n = 0
+        w:query(e.x, e.y, 500, function() n = n + 1 end)
+        if not bn or n > bn then busiest, bn = e, n end
+      end
+    end
+    local parts = {}
+    local function wrapM(mod, name, label)
+      local f = mod[name]
+      mod[name] = function(...)
+        local t0 = love.timer.getTime()
+        local r1, r2 = f(...)
+        parts[label] = (parts[label] or 0) + love.timer.getTime() - t0
+        return r1, r2
+      end
+    end
+    for _, n in ipairs({ "drawWorld", "drawEntity", "drawHealth", "updateFogImage", "drawMinimap" }) do if R[n] then wrapM(R, n, "R." .. n) end end
+    for _, n in ipairs({ "draw", "drawMinimap", "drawCommanderCard", "drawSidebar", "drawTop", "drawInfo", "drawCard", "drawOrders" }) do if UI[n] then wrapM(UI, n, "UI." .. n) end end
+    for _, z in ipairs({ 1, 0.5, 0.25 }) do
+      game.cam.zoom = z
+      if busiest then game:centerOn(busiest.x, busiest.y) end
+      for _ = 1, 3 do game:draw() end
+      local f0 = love.timer.getTime()
+      local tw, tu = 0, 0
+      for _ = 1, 20 do
+        local a0 = love.timer.getTime()
+        game:draw()
+        love.graphics.present()
+        tw = tw + love.timer.getTime() - a0
+      end
+      print(string.format("PROF draw zoom %.2f: %.1f ms per frame", z, tw / 20 * 1000))
+      local pl = {}
+      for k, v in pairs(parts) do pl[#pl + 1] = string.format("%s %.1f", k, v / 23 * 1000) end
+      table.sort(pl)
+      print("PROF   parts (ms/frame): " .. table.concat(pl, ", "))
+      parts = {}
+    end
+    for _, l in ipairs(segs) do print("PROF " .. l) end
+    local list = {}
+    for k, v in pairs(prof) do list[#list + 1] = { k, v } end
+    table.sort(list, function(a, b2) return a[2].t > b2[2].t end)
+    for _, it in ipairs(list) do print(string.format("PROF %-14s %7.2f s  %9d calls", it[1], it[2].t, it[2].n)) end
+    return
+  end
   if os.getenv("PA_FLAGFLEE") then
     -- Auto flee with a flag: to the flag, out of the selection, skipped by select-all; and re-armed
     -- later even with nothing to repair it

@@ -432,7 +432,8 @@ end
 function AI2:commanderToCentre(c)
   local w = self.world
   local t = w.time
-  if self.rush or t < 70 or t > 420 or #c.orders > 0 or c.hp < c.maxhp * 0.65 or self.regroup then return false end
+  self.cmdReserved = false
+  if self.rush or t < 70 or t > 420 or c.hp < c.maxhp * 0.65 then return false end
   if self.p.w.hold > 1.4 then return false end
   local map = w.map
   local cn = map.coreNode
@@ -448,7 +449,6 @@ function AI2:commanderToCentre(c)
   if danger > ours + 500 then return false end
   local job
   if cn and not map.blocked[cn.y * map.w + cn.x] and not self.coreClaimed and w:canPlace("powercore", cn.x, cn.y, self.team, "land") then
-    self.coreClaimed = true
     job = { type = "build", key = "powercore", tx = cn.x, ty = cn.y }
   else
     local best, bd
@@ -462,6 +462,10 @@ function AI2:commanderToCentre(c)
     if best then job = { type = "build", key = "mex", tx = best.x, ty = best.y } end
   end
   if not job then return false end
+  -- wanted at the centre: the economy stops handing him home jobs; he finishes what he's on, then goes
+  self.cmdReserved = true
+  if #c.orders > 0 then return false end
+  if job.key == "powercore" then self.coreClaimed = true end
   w:issue(c, job)
   if not self.centreNoted then
     self.centreNoted = true

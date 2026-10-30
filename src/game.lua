@@ -1314,6 +1314,12 @@ end
 -- Update
 
 function G:update(dt)
+  -- frame timing for the match log (fps and the slowest frame each minute)
+  local pf = self.perf
+  if not pf then pf = { frames = 0, time = 0, worst = 0, slow = 0 }; self.perf = pf end
+  pf.frames, pf.time = pf.frames + 1, pf.time + dt
+  if dt > pf.worst then pf.worst = dt end
+  if dt > 0.034 then pf.slow = pf.slow + 1 end
   if self.world.wih then require("src.cries").bed(self.paused or self.menuOpen or self.world.over) end
   -- (re)center on the Commander on the first frame: the window may have been resized
   -- after the game was created (browser builds especially)

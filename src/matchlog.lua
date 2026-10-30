@@ -114,6 +114,15 @@ function L:snapshot()
   local w = self.game.world
   local g = self.game
   self:raw(string.format("--- %s ---", mmss(w.time)))
+  -- how smoothly it ran this minute on this machine, and what was playing
+  local pf = g.perf
+  if pf and pf.frames > 0 then
+    local M = require("src.music")
+    local track = M and M.NAMES and M.suite and M.NAMES[M.suite]
+    self:raw(string.format("  fps %d (slowest frame %d ms, %d frames over 33 ms), game speed %sx%s", math.floor(pf.frames / math.max(0.01, pf.time) + 0.5),
+      math.floor(pf.worst * 1000 + 0.5), pf.slow, tostring(g.speed or 1), track and ("   music: " .. track) or ""))
+  end
+  g.perf = { frames = 0, time = 0, worst = 0, slow = 0 }
   if w.squads and w.capPoints then
     local SQ = require("src.squads")
     local parts = {}

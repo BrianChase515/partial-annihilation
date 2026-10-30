@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.28.0"
+D.VERSION = "0.28.1"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
@@ -361,7 +361,8 @@ D.TOWER_VS_COMMANDER = 2.5
 -- within leadR that the Commander earns as XP; cthr: scales his level thresholds
 -- (tested AI vs AI on a medium map with some water: ~11.5-minute games, first fighting ~2:05, a
 -- level-5 Commander in about two games of three, a General in nearly every game)
-D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2, splashXp = 0.4, repairCost = 0.3, shipStartLevel = 1, shipXp = 1.25, xpMinHp = 300, homeRegen = 35, decayAfter = 8, decayTime = 15 }
+D.RTS_TUNE = { unithp = 2, bldhp = 2, cmdhp = 1.5, xpf = 0.45, lead = 0.35, leadR = 600, cthr = 1, homeArmor = 0, dropTowers = 2, splashXp = 0.4, repairCost = 0.3, shipStartLevel = 1, shipXp = 1.0, xpMinHp = 300, homeRegen = 35, decayAfter = 8, decayTime = 15,
+  lvlDmg = 0.10, lvlRof = 0.05 } -- (veterancy per level in Annihilation: +10% damage, +5% fire rate, +10% health - no heal on ranking up)
 
 -- Fill in derived fields
 for key, d in pairs(D.units) do
