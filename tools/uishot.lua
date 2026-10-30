@@ -472,8 +472,63 @@ local function script(mode, secs)
     print("FLAGFLEE Ctrl+A picks the fleeing one? " .. tostring(game.selected[hurt] == true) .. "; the healthy one? " .. tostring(game.selected[fine] == true))
     local t = 0
     while hurt.alive and t < 90 and (hurt.disarmed or hurt.orders[1]) do game:update(1 / 30); t = t + 1 / 30 end
+    -- a unit hurt right next to the flag flees too (it used to fight on there)
+    local near = w:spawn("tank", 1, fx + 60, fy); near.hp = near.maxhp * 0.2
+    for _ = 1, 20 do game:update(1 / 30) end
+    print("FLAGFLEE hurt beside the flag flees? " .. tostring(near.autoFled ~= nil) .. "; guns off? " .. tostring(near.disarmed == true))
     game.opts.autotest = true
     print(string.format("FLAGFLEE re-armed after %.0fs at the flag (hp %d%%, nothing to repair it)", t, hurt.hp / hurt.maxhp * 100))
+    return
+  end
+  if os.getenv("PA_SCOUTFLEE") then
+    -- per-unit flee: scouts at 60%, everyone else 30%; scouts driven into enemies of each kind
+    local A = require("src.automation")
+    A.v.flee, A.v.fleePct, A.v.flee_scout = true, 30, 60
+    local kinds = { "tank", "artillery", "flak", "turret", "scout", "gunship", "destroyer" }
+    for _, foe in ipairs(kinds) do
+      game = startFn({ size = 96, water = 0.3, seed = 5, autotest = true })
+      game.ais = {}
+      local w = game.world
+      w.noFog = true
+      local map = w.map
+      local c = w.teams[1].commander
+      local function land(x, y, dom)
+        local tx, ty = map:tileAt(x, y)
+        local nx, ny = map:nearestTile(math.max(1, math.min(map.w - 2, tx)), math.max(1, math.min(map.h - 2, ty)), function(a2, b2) return map:passable(dom or "land", a2, b2) end, 60)
+        return map:center(nx, ny)
+      end
+      local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+      local ex, ey = land(c.x + (cx - c.x) * 0.8, c.y + (cy - c.y) * 0.8, foe == "destroyer" and "sea" or nil)
+      for k = 1, (foe == "turret" and 1 or 3) do w:spawn(foe, 2, ex + k * 20, ey) end
+      local sx, sy = land(c.x + (cx - c.x) * 0.4, c.y + (cy - c.y) * 0.4)
+      local scouts = {}
+      for k = 1, 4 do
+        local u = w:spawn("scout", 1, sx + k * 18, sy)
+        scouts[#scouts + 1] = { u = u }
+        w:issue(u, { type = "amove", x = ex, y = ey })
+      end
+      game.opts.autotest = false
+      local t = 0
+      while t < 40 do
+        game:update(1 / 30); t = t + 1 / 30
+        for _, r in ipairs(scouts) do
+          local u = r.u
+          if u.alive then
+            r.minhp = math.min(r.minhp or 1, u.hp / u.maxhp)
+            local o = u.orders[1]
+            if o and o.type == "retreat" and not r.fled then r.fled = u.hp / u.maxhp end
+            r.last = u.hp / u.maxhp
+          elseif not r.dead then r.dead = t end
+        end
+      end
+      game.opts.autotest = true
+      local out = {}
+      for _, r in ipairs(scouts) do
+        out[#out + 1] = string.format("%s%s", r.fled and string.format("fled@%d%%", r.fled * 100) or "noflee",
+          r.dead and string.format("/died(last seen %d%%)", r.last * 100) or string.format("/alive %d%%", r.u.hp / r.u.maxhp * 100))
+      end
+      print("SCOUTFLEE vs " .. foe .. ": " .. table.concat(out, "  "))
+    end
     return
   end
   if os.getenv("PA_NUKESHOT") then

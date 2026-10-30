@@ -198,18 +198,32 @@ function A.update(game, dt)
   end
   local w = game.world
   if w.over then return end
-  A.timer = (A.timer or 0) - dt
-  if A.timer > 0 then return end
-  A.timer = 0.5
   local team = game.playerTeam or w.playerTeam or 1
   local v = A.v
+  -- the flee check runs ten times a second (a scout can lose half its health in a single
+  -- artillery or destroyer volley), the rest twice a second
+  A.fleeTimer = (A.fleeTimer or 0) - dt
+  local fleeNow = v.flee and A.fleeTimer <= 0
+  if fleeNow then A.fleeTimer = 0.1 end
+  A.timer = (A.timer or 0) - dt
+  local slow = A.timer <= 0
+  if slow then A.timer = 0.5 end
+  if not fleeNow and not slow then return end
 
   for _, u in ipairs(w.entities) do
     if u.alive and u.team == team and not u.def.building and u.built >= 1 then
       local o = u.orders[1]
-      -- 1. fall back when hurt
-      if v.flee and u.def.weapon and u.key ~= "commander" and u.key ~= "builder" and not u.disarmed
-        and u.hp < u.maxhp * A.fleePctFor(u.key) / 100 and not (o and o.type == "retreat") then
+      -- how fast it's losing health: compare with where it stood about a second ago
+      local losing = 0
+      if fleeNow then
+        local now = w.time
+        if not u.autoHpT or now - u.autoHpT >= 1 then u.autoHpT, u.autoHpWas = now, u.hp end
+        if u.autoHpWas and u.autoHpWas > u.hp then losing = (u.autoHpWas - u.hp) / math.max(0.2, now - u.autoHpT) end
+      end
+      -- 1. fall back when hurt - or about to be: under heavy fire, it goes a second early
+      local line = u.maxhp * A.fleePctFor(u.key) / 100
+      if fleeNow and u.def.weapon and u.key ~= "commander" and u.key ~= "builder" and not u.disarmed
+        and (u.hp < line or (u.hp < line * 1.5 and u.hp - losing * 1.0 < line)) and not (o and o.type == "retreat") then
         -- to your flag if you've set one (put it where you want the line to fall back to - near a
         -- plant, for repairs), else to the plant that built it
         local hx, hy
@@ -218,7 +232,9 @@ function A.update(game, dt)
         else
           hx, hy = homeFor(w, u)
         end
-        if U.dist2(u.x, u.y, hx, hy) > 250 * 250 then
+        -- (even when it's already near the flag: it still ceases fire, steps back to the flag
+        -- itself and waits there for repairs, instead of fighting on until it dies)
+        do
           u.autoFled = { x = u.x, y = u.y }
           w:issue(u, { type = "retreat", x = hx, y = hy })
           -- out of your selection, so the next attack-move doesn't drag it back unarmed (select it
@@ -226,14 +242,14 @@ function A.update(game, dt)
           if game.selected then game.selected[u] = nil end
         end
       -- 2. back to the fight once whole
-      elseif v.rejoin and u.autoFled and u.hp >= u.maxhp - 0.5 and not u.disarmed and not (o and o.type == "retreat") then
+      elseif slow and v.rejoin and u.autoFled and u.hp >= u.maxhp - 0.5 and not u.disarmed and not (o and o.type == "retreat") then
         -- back to where it fled from (the front)
         local tx, ty = u.autoFled.x, u.autoFled.y
         u.autoFled = nil
         w:issue(u, { type = "amove", x = tx + math.random(-60, 60), y = ty + math.random(-60, 60) })
       end
       -- 4. idle constructors: the first job (in the player's order) that has something to do
-      if u.key == "builder" and #u.orders == 0 and (v.repair or v.expand or v.power) then
+      if slow and u.key == "builder" and #u.orders == 0 and (v.repair or v.expand or v.power) then
         for _, job in ipairs(A.jobOrder()) do
           if v[job] and A.doJob[job](game, w, team, u) then break end
         end
@@ -242,7 +258,7 @@ function A.update(game, dt)
   end
 
   -- 3. keep a minimum number of constructors
-  if v.builders and countBuilders(w, team) < v.builderMin then
+  if slow and v.builders and countBuilders(w, team) < v.builderMin then
     local plant
     for _, e in ipairs(w.entities) do
       if e.alive and e.team == team and e.key == "landfac" and e.built >= 1 then
