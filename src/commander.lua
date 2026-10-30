@@ -1,7 +1,7 @@
 -- Commander progression: levels from his own kills, a roguelike upgrade pick
--- (2 random choices from 20) at levels 1-4, and the Nuke at level 5. In long games he keeps
--- going: every level after 5 adds another nuke (stored, ready at once), each level a good deal
--- harder to reach than the last.
+-- (2 random choices from 20) at levels 1-4, and a Nuke at level 5. In long games he keeps
+-- going: every level after 5 adds another nuke, each level a good deal harder to reach than the
+-- last. Nukes don't recharge - they stockpile, one per level from 5 up.
 local C = {}
 
 -- Commander XP = metal value of everything he personally destroys (cumulative per level)
@@ -9,7 +9,7 @@ C.THRESHOLDS = { 300, 820, 1650, 2850, 4500, 9000, 16000, 26000, 40000, 60000 }
 C.MAX_LEVEL = 10
 C.NUKE_LEVEL = 5
 C.NUKE_RADIUS = 280
-C.NUKE_COOLDOWN = 600      -- seconds of game time
+-- (no recharge: level 5 gives one nuke and every level after gives another; they stockpile)
 C.NUKE_SPEED = 420         -- missile speed (it's a long, visible flight)
 
 -- Each upgrade sets fields in cmd.mods (read by the world) or does something once.

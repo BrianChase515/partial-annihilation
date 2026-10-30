@@ -406,7 +406,7 @@ function UI.drawLeaderboard(game)
           if L + 1 >= 5 then lg.setColor(1, 0.35, 0.25, 0.95) else lg.setColor(0.55, 0.75, 1, 0.8) end
           lg.rectangle("fill", bx0, by0, bwid * frac, 3)
         end
-        -- the nuke: a small trefoil badge - pulsing red when one is ready, grey while recharging
+        -- the nuke: a small trefoil badge - pulsing red when one is ready, grey when he has none left
         if c.nukeReady then
           local n = world:nukesReady(c)
           local ix, iy = x + 150, yy + 10
@@ -1473,13 +1473,11 @@ function UI.drawInfo(game, L)
       for _, u in ipairs(e.upgrades) do names[#names + 1] = u.name end
       local nuke = ""
       if e.nukeReady then
-        local left = e.nukeReady - game.world.time
         local n = game.world:nukesReady(e)
+        local L = e.clevel or 0
+        local CMD = require("src.commander")
         nuke = n > 1 and string.format("    %d NUKES READY (N)", n) or (n == 1 and "    NUKE READY (N)"
-          or string.format("    Nuke recharging %d:%02d", math.floor(left / 60), math.floor(left % 60)))
-        if n >= 1 and left > 0 and (e.nukeExtra or 0) > 0 then
-          nuke = nuke .. string.format(", next recharges in %d:%02d", math.floor(left / 60), math.floor(left % 60))
-        end
+          or (L < CMD.MAX_LEVEL and string.format("    No nukes - the next at level %d", L + 1) or "    No nukes left"))
       end
       lg.setColor(1, 0.85, 0.35)
       lg.print("Upgrades: " .. (#names > 0 and table.concat(names, ", ") or "none yet") .. nuke, x + 72, y + 126)
@@ -1923,8 +1921,8 @@ Game  (icons: game-icons.net, CC BY 3.0)
 
 Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20
   (Z / X or click a card). Level 5 = NUKE (N): destroys every building in the circle,
-  halves units, Commanders immune, 10 minute recharge. Levels 6-10 each add one more nuke, stored
-  and ready at once (each level a lot more XP). Risk him to grow him - lose him, lose the game.
+  halves units, Commanders immune. No recharge: levels 6-10 each add one more nuke, and they
+  stockpile (each level a lot more XP). Risk him to grow him - lose him, lose the game.
 Goal: destroy the enemy Commanders. Lose yours and you're out.
 Veterancy: units level up (gold chevrons, max 5) from damage and kills: more damage, HP, fire rate, range.
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.

@@ -613,8 +613,11 @@ function AI2:guardCommander(c, before)
       if not safe and self.rng:random() < B.sharpness(self.level) + 0.3 then
         self.cmdMode = "retreat"
         w:issue(c, { type = "retreat", x = tm2.startX, y = tm2.startY })
-        Tel.note(w, "commander", self.team, string.format("pulls out early: what's coming could kill him in %.0fs%s", killT,
-          airT < math.huge and string.format(" (air alone %.0fs)", airT) or ""))
+        if w.time - (self.pullNoted or -99) > 20 then
+          self.pullNoted = w.time
+          Tel.note(w, "commander", self.team, string.format("pulls out early: what's coming could kill him in %.0fs%s", killT,
+            airT < math.huge and string.format(" (air alone %.0fs)", airT) or ""))
+        end
       end
     end
   end

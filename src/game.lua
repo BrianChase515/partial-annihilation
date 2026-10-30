@@ -824,15 +824,26 @@ function G:rightClick(wx, wy, queue)
     return
   end
   if self.craft and CG.rightClick(self, wx, wy, queue) then return end
-  if self.arena and target and target.creep and world:allied(target.team, 1) then
-    local ok = false
+  if (self.arena or self.craft) and target and target.creep and world:allied(target.team, 1) then
+    -- right-clicking one of your own creeps always means "deny it": heroes close in and take
+    -- the last hit the moment it drops below 35% (nobody repairs it or guards it)
+    local heroes, ready = 0, false
     for _, u in ipairs(units) do
-      if world:canDeny(u, target) then world:issue(u, { type = "attack", target = target }, queue); ok = true end
+      if u.def.weapon and (u.key == "commander" or u.owner) then
+        world:issue(u, { type = "attack", target = target, deny = true }, queue)
+        heroes = heroes + 1
+        if world:canDeny(u, target) then ready = true end
+      end
     end
-    if ok then
+    if heroes > 0 then
+      if not ready then self:notice("Deny: your hero strikes when it drops below 35% health", 1.5) end
       world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 1, g = 1, b = 1 }
       return
     end
+    -- (no hero selected: everyone else just walks over there)
+    local slots = self:formation(units, wx, wy)
+    for _, u in ipairs(units) do world:issue(u, { type = "move", x = slots[u][1], y = slots[u][2] }, queue) end
+    return
   end
   if target and target.team ~= 1 and not world:hostile(target.team, 1) then target = nil end
   if target and target.team ~= 1 then
@@ -1295,9 +1306,7 @@ function G:updateVoice(dt)
       if c.hp < c.maxhp * 0.3 then VOICE.say("commander_low") elseif not self.arena then VOICE.say("commander_attack") end
     end
     vs.cmdHp = c.hp
-    if c.nukeReady and not vs.nukeReady and (c.clevel or 0) >= 5 and vs.sawNukeCycle then VOICE.say("nuke_ready") end
-    if c.nukeReady and (c.clevel or 0) >= 5 then vs.sawNukeCycle = true end
-    vs.nukeReady = c.nukeReady
+    -- (the level-up itself announces each new nuke)
   end
   -- stalled economy: demand outstrips supply for a few seconds
   local tm = w.teams[1]
@@ -2418,8 +2427,9 @@ function G:startNuke()
   if not c.nukeReady then
     self:notice("The Nuke unlocks at Commander level 5", 1.5)
   elseif not self.world:canNuke(c) then
-    local left = math.ceil(c.nukeReady - self.world.time)
-    self:notice(string.format("Nuke recharging: %d:%02d", math.floor(left / 60), left % 60), 1.5)
+    local CMD = require("src.commander")
+    local L = c.clevel or 0
+    self:notice(L < CMD.MAX_LEVEL and string.format("No nukes left - the next comes at Commander level %d", L + 1) or "No nukes left", 1.5)
   else
     self.mode = "nuke"
   end

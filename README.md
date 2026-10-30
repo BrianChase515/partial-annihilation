@@ -74,7 +74,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **The Colossus** wakes in its pit at 7:00. Bring it down and your whole side gets the **Colossus Crest**: stronger Commanders and stronger creeps for 2 minutes. On Battlefield it alternates between two pits.
   - **Healing relics** respawn every 70 seconds.
   - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler; on Battlefield the fourth.
-- **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy.
+- **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy: right-click it (below 35% health) - right-click it earlier and your hero waits on it and takes the shot the moment it's low enough.
 - **Creep veterancy:** creeps that land killing blows rank up (gold pips, up to 3), getting +12% health and damage each rank and becoming worth more experience. Denying your dying creep doesn't just starve the enemy Commander; it stops the enemy creep that was about to rank up off it. Computer players from difficulty 4 deny too, more often the better they are.
 
 ![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)
@@ -140,7 +140,7 @@ The button turns green while any of them is on. Annihilation only.
 
 ### The Nuke
 
-At level 5 your Commander unlocks the Nuke. When it's ready - and again each time it recharges - a banner flashes across the screen and a pulsing **NUKE READY (N)** button appears under the Commander card: press N or click it, then click a target.
+At level 5 your Commander unlocks the Nuke. When it unlocks - and each time he gains another - a banner flashes across the screen and a pulsing **NUKE READY (N)** button appears under the Commander card: press N or click it, then click a target.
 
 ### Drop pods and home
 
@@ -168,7 +168,7 @@ Lose him and you lose the game, but he only grows by fighting. He levels up **on
 - Resource Siphon and Salvager
 - instant veteran Reinforcements, and more
 
-**Level 5 is always the Nuke.** Every player hears the warning and watches the slow missile and its target circle. It flattens every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune, and it takes 10 minutes to recharge. In a long game he keeps levelling, up to 10: every level after 5 gives him **another nuke**, stored and ready at once on top of the one that recharges, and each level costs a good deal more experience than the last (4,500 for level 5; then 9,000, 16,000, 26,000, 40,000 and 60,000 - level 6 is something for a long game, level 7 a very long one). Every fight that makes him stronger is also a chance to lose everything.
+**Level 5 is always the Nuke.** Every player hears the warning and watches the slow missile and its target circle. It flattens every building in the blast (yours too, if you aim badly) and halves the health of every unit caught in it. Commanders are immune. Nukes don't recharge: in a long game he keeps levelling, up to 10, and every level after 5 gives him **another nuke**. They stockpile - two or three at once if he hasn't used them - and each level costs a good deal more experience than the last (4,500 for level 5; then 9,000, 16,000, 26,000, 40,000 and 60,000 - level 6 is something for a long game, level 7 a very long one). Every fight that makes him stronger is also a chance to lose everything.
 
 ### Every match is a scored run on a seasonal online leaderboard
 Kills pay out what you destroy is worth (its metal plus a tenth of its energy), and towers, AA and sea batteries pay a 1.5x siege bonus, so cracking a fortified Turtle is worth the trouble. A kill-streak multiplier climbs to x2 (x3 in the Arena and Craft) and resets after 10 seconds without an enemy death (the window tightens as the streak grows) - and in Annihilation, the moment you lose a unit. At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. Speed pays: winning in half the par time doubles your score, and a third of it triples it. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.

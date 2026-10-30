@@ -349,9 +349,14 @@ function AI:thinkCommander()
   -- 1. spend level-ups
   while #c.offers > 0 do world:chooseUpgrade(c, self:pickUpgrade(c, c.offers[1])) end
   -- 2. nuke when it's worth it
-  if world:canNuke(c) then
+  -- (with a stockpile, one at a time: wait for the last one to land before picking the next
+  -- target, or two would go at the same base)
+  if world:canNuke(c) and world.time >= (self.nextNuke or 0) then
     local x, y, score = self:bestNukeTarget()
-    if x and score >= (style == "aggressive" and 350 or 600) then world:launchNuke(c, x, y) end
+    if x and score >= (style == "aggressive" and 350 or 600) then
+      world:launchNuke(c, x, y)
+      self.nextNuke = world.time + 25
+    end
   end
 
   local hpf = c.hp / c.maxhp

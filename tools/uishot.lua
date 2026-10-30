@@ -503,6 +503,33 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_DENY") then
+    -- Arena: right-click your own creep. Above 35% the hero waits on it (no repair, no guard);
+    -- below 35% he takes the last hit
+    game = startFn({ mode = "arena", size = 80, water = 0.3, seed = 31, autotest = true,
+      players = { { ally = 1, level = 5, class = "ranger" }, { ally = 2, level = 5 } } })
+    game.ais = {}
+    local w = game.world
+    local h = w.teams[1].commander
+    local cr = w:spawn("tank", 1, h.x + 120, h.y)
+    cr.creep = true
+    cr.hp = cr.maxhp * 0.8
+    w:update(1 / 30)
+    game.selected = { [h] = true }
+    print("DENY hero key " .. tostring(h.key) .. " weapon " .. tostring(h.def.weapon ~= nil) .. " owner " .. tostring(h.owner) .. " units " .. #game:selectedMobile())
+    local tg = w:entityAt(cr.x, cr.y, function(e) return e.team == 1 end)
+    print("DENY picks " .. tostring(tg and tg.key) .. " creep? " .. tostring(tg == cr) .. " arena? " .. tostring(game.arena) .. " allied " .. tostring(w:allied(cr.team, 1)))
+    game:rightClick(cr.x, cr.y, false)
+    local o = h.orders[1]
+    print("DENY order at 80%: " .. tostring(o and o.type) .. (o and o.deny and " (deny)" or "") .. "; creep being repaired? " .. tostring(o and o.type == "assist"))
+    for _ = 1, 60 do w:update(1 / 30) end
+    print(string.format("DENY after 2s: still on it? %s; creep %d%%", tostring(h.orders[1] and h.orders[1].deny or false), cr.hp / cr.maxhp * 100))
+    cr.hp = cr.maxhp * 0.3
+    local t = 0
+    while cr.alive and t < 8 do w:update(1 / 30); t = t + 1 / 30 end
+    print(string.format("DENY at 30%%: creep %s after %.1fs", cr.alive and "still alive" or "denied", t))
+    return
+  end
   if os.getenv("PA_GARRISON") then
     -- a hurt Commander home at his drop point, an enemy Commander and 4 tanks on his heels:
     -- the two Garrison Towers vs two ordinary Defense Towers in the same spots
@@ -576,6 +603,7 @@ local function script(mode, secs)
     local function lv(L) w:commanderXP(c, CMD.THRESHOLDS[L] - (c.cxp or 0) + 1) end
     lv(5); print("NUKES at L" .. c.clevel .. ": ready " .. w:nukesReady(c))
     w:launchNuke(c, 100, 100); print("NUKES after one launch: ready " .. w:nukesReady(c) .. ", can? " .. tostring(w:canNuke(c) or false))
+    for _ = 1, 30 * 60 * 11 do w.time = w.time + 1 / 30 end; print("NUKES 11 minutes later (no recharge): ready " .. w:nukesReady(c))
     lv(6); lv(7); print("NUKES at L" .. c.clevel .. ": ready " .. w:nukesReady(c))
     w:launchNuke(c, 100, 100); w:launchNuke(c, 100, 100)
     print("NUKES after two more: ready " .. w:nukesReady(c) .. ", can? " .. tostring(w:canNuke(c) or false))

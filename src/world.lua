@@ -808,11 +808,12 @@ function W:commanderXP(e, amount)
     self.cmdLvlAt[e.team] = self.cmdLvlAt[e.team] or {}
     self.cmdLvlAt[e.team][e.clevel] = self.time
     if e.clevel == CMD.NUKE_LEVEL then
-      e.nukeReady = self.time   -- unlocked
+      e.nukeReady = self.time   -- unlocked (the nuke controls appear)
+      e.nukes = (e.nukes or 0) + 1
       if self.onCommanderLevel then self.onCommanderLevel(e, nil) end
     elseif e.clevel > CMD.NUKE_LEVEL then
-      -- every level past 5: another nuke, stored (on top of the one that recharges)
-      e.nukeExtra = (e.nukeExtra or 0) + 1
+      -- every level past 5: another nuke for the stockpile
+      e.nukes = (e.nukes or 0) + 1
       e.nukeReady = e.nukeReady or self.time
       if self.onCommanderLevel then self.onCommanderLevel(e, nil) end
     else
@@ -867,20 +868,18 @@ end
 
 -- The Nuke: unlimited range, slow visible flight, 10 minute cooldown
 function W:canNuke(e)
-  return e and e.alive and e.nukeReady and (self.time >= e.nukeReady or (e.nukeExtra or 0) > 0)
+  return e and e.alive and (e.nukes or 0) > 0
 end
 
 -- nukes he could launch right now (the recharging one, if it's back, plus any stored)
 function W:nukesReady(e)
-  if not (e and e.alive and e.nukeReady) then return 0 end
-  return (self.time >= e.nukeReady and 1 or 0) + (e.nukeExtra or 0)
+  if not (e and e.alive) then return 0 end
+  return e.nukes or 0
 end
 
 function W:launchNuke(e, x, y)
   if not self:canNuke(e) then return false end
-  -- the recharging one goes first; a stored one is used only while that's still charging
-  if self.time >= e.nukeReady then e.nukeReady = self.time + CMD.NUKE_COOLDOWN
-  else e.nukeExtra = e.nukeExtra - 1 end
+  e.nukes = e.nukes - 1
   self.nukeCount = (self.nukeCount or 0) + 1
   local n = { x = e.x, y = e.y, sx = e.x, sy = e.y, tx = x, ty = y, team = e.team, t = 0, src = e }
   self.nukes[#self.nukes + 1] = n
@@ -1932,6 +1931,9 @@ function W:updateUnit(e, dt)
     local t = o.target
     if not t or not t.alive then
       self:popOrder(e)
+    elseif o.deny and e.def.weapon and not self:canDeny(e, t) and self.time - (o.issued or self.time) < 12 then
+      -- a deny ordered early: stay on it (guns held) until it's low enough to take, for a while
+      self:approach(e, t, dt)
     elseif not e.def.weapon or not (self:canTarget(e, t) or self:canDeny(e, t)) then
       self:popOrder(e)
     else
