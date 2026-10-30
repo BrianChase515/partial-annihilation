@@ -1153,6 +1153,13 @@ function W:canDeny(e, o)
     and o.hp < o.maxhp * 0.35 and (e.key == "commander" or e.owner) and e.def.weapon ~= nil
 end
 
+-- (Arena) a hero you've told to shoot one of your own creeps may, at any health - a waste
+-- above 35%, but your call (the computer only denies when it's low)
+function W:canShootOwnCreep(e, o)
+  return self.arena and o.alive and o.creep and self.ally[o.team] == self.ally[e.team]
+    and (e.key == "commander" or e.owner) and e.def.weapon ~= nil
+end
+
 function W:canTarget(e, o)
   if not o.alive or o.dormant or o.neutral or self.ally[o.team] == self.ally[e.team] then return false end
   if o.passive and (e.creep or e.arenaTower) then return false end
@@ -1589,7 +1596,9 @@ function W:updateWeapon(e, dt, focus)
   e.scanTimer = e.scanTimer - dt
   local tgt = nil
   if e.holdFire then return end
-  if focus and focus.alive and (self:canTarget(e, focus) or self:canDeny(e, focus)) and self:inRange(e, focus)
+  local o1 = e.orders and e.orders[1]
+  if focus and focus.alive and (self:canTarget(e, focus) or self:canDeny(e, focus)
+    or (o1 and o1.deny and o1.target == focus and self:canShootOwnCreep(e, focus))) and self:inRange(e, focus)
     and (focus.team == nil or not self:hostile(focus.team, e.team) or self:spotted(e, focus)) then
     tgt = focus
   else
@@ -1931,8 +1940,8 @@ function W:updateUnit(e, dt)
     local t = o.target
     if not t or not t.alive then
       self:popOrder(e)
-    elseif o.deny and e.def.weapon and not self:canDeny(e, t) and self.time - (o.issued or self.time) < 12 then
-      -- a deny ordered early: stay on it (guns held) until it's low enough to take, for a while
+    elseif o.deny and self:canShootOwnCreep(e, t) then
+      focus = t
       self:approach(e, t, dt)
     elseif not e.def.weapon or not (self:canTarget(e, t) or self:canDeny(e, t)) then
       self:popOrder(e)

@@ -523,7 +523,7 @@ local function script(mode, secs)
     local o = h.orders[1]
     print("DENY order at 80%: " .. tostring(o and o.type) .. (o and o.deny and " (deny)" or "") .. "; creep being repaired? " .. tostring(o and o.type == "assist"))
     for _ = 1, 60 do w:update(1 / 30) end
-    print(string.format("DENY after 2s: still on it? %s; creep %d%%", tostring(h.orders[1] and h.orders[1].deny or false), cr.hp / cr.maxhp * 100))
+    print(string.format("DENY after 2s of shooting it at full health: creep %d%%", cr.hp / cr.maxhp * 100))
     cr.hp = cr.maxhp * 0.3
     local t = 0
     while cr.alive and t < 8 do w:update(1 / 30); t = t + 1 / 30 end

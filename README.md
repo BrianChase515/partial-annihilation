@@ -74,7 +74,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **The Colossus** wakes in its pit at 7:00. Bring it down and your whole side gets the **Colossus Crest**: stronger Commanders and stronger creeps for 2 minutes. On Battlefield it alternates between two pits.
   - **Healing relics** respawn every 70 seconds.
   - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler; on Battlefield the fourth.
-- **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy: right-click it (below 35% health) - right-click it earlier and your hero waits on it and takes the shot the moment it's low enough.
+- **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy: right-click it and your hero shoots it.
 - **Creep veterancy:** creeps that land killing blows rank up (gold pips, up to 3), getting +12% health and damage each rank and becoming worth more experience. Denying your dying creep doesn't just starve the enemy Commander; it stops the enemy creep that was about to rank up off it. Computer players from difficulty 4 deny too, more often the better they are.
 
 ![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)

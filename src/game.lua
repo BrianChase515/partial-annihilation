@@ -825,18 +825,15 @@ function G:rightClick(wx, wy, queue)
   end
   if self.craft and CG.rightClick(self, wx, wy, queue) then return end
   if (self.arena or self.craft) and target and target.creep and world:allied(target.team, 1) then
-    -- right-clicking one of your own creeps always means "deny it": heroes close in and take
-    -- the last hit the moment it drops below 35% (nobody repairs it or guards it)
-    local heroes, ready = 0, false
+    -- right-clicking one of your own creeps: your hero shoots it (any health - your call)
+    local heroes = 0
     for _, u in ipairs(units) do
-      if u.def.weapon and (u.key == "commander" or u.owner) then
+      if world:canShootOwnCreep(u, target) then
         world:issue(u, { type = "attack", target = target, deny = true }, queue)
         heroes = heroes + 1
-        if world:canDeny(u, target) then ready = true end
       end
     end
     if heroes > 0 then
-      if not ready then self:notice("Deny: your hero strikes when it drops below 35% health", 1.5) end
       world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 1, g = 1, b = 1 }
       return
     end
@@ -861,7 +858,7 @@ function G:rightClick(wx, wy, queue)
     local helps = target.built < 1 or target.hp < target.maxhp or target.def.factory
     local others = {}
     for _, u in ipairs(units) do
-      if u.def.builds and helps and u ~= target then
+      if u.def.builds and helps and u ~= target and not self.arena then -- (no repairs by the Commander in the Arena)
         world:issue(u, { type = "assist", target = target, persist = target.def.factory and target.built >= 1 }, queue)
       elseif not target.def.building and u ~= target and u.def.weapon then
         -- right-click a friendly unit: guard it (follow and protect)
