@@ -71,7 +71,7 @@ function L.start(game)
     self:raw("Snapshots every minute: each Commander's class, level, health, deaths, skills and upgrades.")
   else
   self:raw("Snapshots every minute: income m/e per second, banked metal, unit and building counts,")
-  self:raw("army = metal value of combat units, Cmd = Commander level/hp/upgrades, K/L = enemy kills/own losses so far.")
+  self:raw("army = metal value of combat units, Cmd = Commander level/hp, how far out (0% home, 100% centre; max this minute), order, upgrades, K/L = enemy kills/own losses so far.")
   end
   self:raw("")
   self.kills, self.losses = {}, {}
@@ -108,6 +108,18 @@ function L:onKill(o, attacker)
     self:event(string.format("%s's Commander destroyed by %s", D.teamName[o.team] or "?",
       attacker and ((D.teamName[attacker.team] or "?") .. " " .. attacker.key) or "self-destruct/unknown"))
   end
+end
+
+-- how far out a Commander stands: 0 at his start point, 100 at the map centre
+local function outPct(w, t, c)
+  local tm = w.teams[t]
+  if not (c and c.alive and tm and tm.startX) then return nil end
+  local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+  local full = math.sqrt((cx - tm.startX) ^ 2 + (cy - tm.startY) ^ 2)
+  if full < 1 then return nil end
+  -- distance from home, projected on the line towards the centre
+  local px = ((c.x - tm.startX) * (cx - tm.startX) + (c.y - tm.startY) * (cy - tm.startY)) / full
+  return math.max(0, math.floor(px / full * 100 + 0.5))
 end
 
 function L:snapshot()
@@ -224,10 +236,20 @@ function L:snapshot()
       local extra = ""
       if t == 1 then extra = string.format("  actions/min %d", g.stats.actions or 0); g.stats.actions = 0 end
       local sc = w.score and w.score[t]
-      self:raw(string.format("  %-7s m +%.1f e +%.0f bank %d | units %d blds %d army %d | K %d L %d | pts %d | Cmd L%d hp %d%s%s",
+      -- where the Commander is (0% = home, 100% = the centre), the furthest he got this minute,
+      -- and what he's doing
+      local where = ""
+      local now = outPct(w, t, c)
+      if now then
+        local o = c.orders and c.orders[1]
+        where = string.format(" out %d%% (max %d%%) %s", now, math.max(now, (self.outMax or {})[t] or 0),
+          o and o.type or "idle")
+      end
+      if self.outMax then self.outMax[t] = nil end
+      self:raw(string.format("  %-7s m +%.1f e +%.0f bank %d | units %d blds %d army %d | K %d L %d | pts %d | Cmd L%d hp %d%s%s%s",
         D.teamName[t] or "?", tm.mIncome or 0, tm.eIncome or 0, tm.metal or 0, units, blds, army,
         self.kills[t] or 0, self.losses[t] or 0, sc and math.floor(sc.pts) or 0,
-        c and c.clevel or 0, c and c.alive and math.floor(c.hp) or 0, #ups > 0 and (" [" .. table.concat(ups, ", ") .. "]") or "", extra))
+        c and c.clevel or 0, c and c.alive and math.floor(c.hp) or 0, where, #ups > 0 and (" [" .. table.concat(ups, ", ") .. "]") or "", extra))
       self:raw("          " .. table.concat(ks, ", "))
     end
   end
@@ -236,6 +258,15 @@ end
 
 function L:update()
   local w = self.game.world
+  -- once a second: track how far out each Commander got this minute
+  if w.time - (self.lastOut or -1) >= 1 then
+    self.lastOut = w.time
+    self.outMax = self.outMax or {}
+    for t = 1, w.np do
+      local p = outPct(w, t, w.teams[t] and w.teams[t].commander)
+      if p and p > (self.outMax[t] or -1) then self.outMax[t] = p end
+    end
+  end
   if w.time >= self.nextSnap then
     self.nextSnap = self.nextSnap + 60
     self:snapshot()

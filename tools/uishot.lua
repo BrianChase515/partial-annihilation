@@ -480,6 +480,16 @@ local function script(mode, secs)
     print(string.format("FLAGFLEE re-armed after %.0fs at the flag (hp %d%%, nothing to repair it)", t, hurt.hp / hurt.maxhp * 100))
     return
   end
+  if os.getenv("PA_LOGCMD") then
+    -- the match log's Commander position column, over a few minutes of AI vs AI
+    game = startFn({ size = 112, water = 0.3, seed = tonumber(os.getenv("PA_LOGCMD")) or 7, autotest = true,
+      level = 5, level1 = 5, profile = "Random", profile1 = "Random", aiV2Teams = { [1] = true, [2] = true } })
+    local lg = require("src.matchlog").start(game)
+    game.log = lg
+    for _ = 1, 30 * 60 * 7 do game:update(1 / 30) end
+    lg:flush()
+    return
+  end
   if os.getenv("PA_SCOUTFLEE") then
     -- per-unit flee: scouts at 60%, everyone else 30%; scouts driven into enemies of each kind
     local A = require("src.automation")
