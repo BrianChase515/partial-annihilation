@@ -92,6 +92,17 @@ end
 local function homeFor(w, u)
   local f = u.bornFrom
   local x, y
+  local ship = u.def.domain == "sea" or u.def.domain == "sub"
+  if ship and not (f and f.alive) then
+    -- its own yard is gone: the nearest shipyard we still have
+    local bd
+    for _, e in ipairs(w.entities) do
+      if e.alive and e.team == u.team and e.key == "shipyard" and e.built >= 1 then
+        local d = U.dist2(u.x, u.y, e.x, e.y)
+        if not bd or d < bd then f, bd = e, d end
+      end
+    end
+  end
   if f and f.alive then x, y = f.x, f.y + (f.def.h * w.T) / 2 + 40
   elseif u.bornX then x, y = u.bornX, u.bornY
   else local tm = w.teams[u.team]; x, y = tm.startX, tm.startY end
@@ -100,10 +111,25 @@ local function homeFor(w, u)
   local layer = (u.def.domain == "sea" or u.def.domain == "sub") and "sea" or "land"
   if u.def.domain ~= "air" then
     local tx, ty = map:tileAt(x + math.random(-50, 50), y + math.random(-30, 30))
-    local nx, ny = map:nearestTile(tx, ty, function(a, b) return map:passable(layer, a, b) and not map.blocked[b * map.w + a] end, 8)
+    local nx, ny = map:nearestTile(tx, ty, function(a, b) return map:passable(layer, a, b) and not map.blocked[b * map.w + a] end, ship and 40 or 8)
     if nx then return map:center(nx, ny) end
   end
   return x, y
+end
+
+A.homeFor = homeFor
+
+-- can this unit use the flag? Ships only when it's on (or right by) water they can reach -
+-- a flag on land would leave them stuck at the shore, far from any repairs. Ships otherwise go
+-- back to the shipyard that built them (it repairs them like a plant repairs tanks)
+function A.flagFor(w, flag, u)
+  if not flag then return nil end
+  if u.def.domain ~= "sea" and u.def.domain ~= "sub" then return flag.x, flag.y end
+  local map = w.map
+  local tx, ty = map:tileAt(flag.x, flag.y)
+  local nx, ny = map:nearestTile(tx, ty, function(a, b) return map:passable("sea", a, b) and not map.blocked[b * map.w + a] end, 3)
+  if nx then return map:center(nx, ny) end
+  return nil
 end
 
 -- the idle jobs: each returns true if it gave the constructor something to do
@@ -227,8 +253,10 @@ function A.update(game, dt)
         -- to your flag if you've set one (put it where you want the line to fall back to - near a
         -- plant, for repairs), else to the plant that built it
         local hx, hy
-        if game.flag then
-          hx, hy = game.flag.x + math.random(-50, 50), game.flag.y + math.random(-50, 50)
+        local flx, fly = A.flagFor(w, game.flag, u)
+        if flx then
+          hx, hy = flx + math.random(-50, 50), fly + math.random(-50, 50)
+          if u.def.domain == "sea" or u.def.domain == "sub" then hx, hy = flx, fly end
         else
           hx, hy = homeFor(w, u)
         end

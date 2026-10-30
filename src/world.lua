@@ -806,8 +806,13 @@ function W:commanderXP(e, amount)
     self.cmdLvlAt = self.cmdLvlAt or {}
     self.cmdLvlAt[e.team] = self.cmdLvlAt[e.team] or {}
     self.cmdLvlAt[e.team][e.clevel] = self.time
-    if e.clevel >= CMD.MAX_LEVEL then
+    if e.clevel == CMD.NUKE_LEVEL then
       e.nukeReady = self.time   -- unlocked
+      if self.onCommanderLevel then self.onCommanderLevel(e, nil) end
+    elseif e.clevel > CMD.NUKE_LEVEL then
+      -- every level past 5: another nuke, stored (on top of the one that recharges)
+      e.nukeExtra = (e.nukeExtra or 0) + 1
+      e.nukeReady = e.nukeReady or self.time
       if self.onCommanderLevel then self.onCommanderLevel(e, nil) end
     else
       local offer = CMD.offer(self.rngCmd, e)
@@ -861,12 +866,20 @@ end
 
 -- The Nuke: unlimited range, slow visible flight, 10 minute cooldown
 function W:canNuke(e)
-  return e and e.alive and e.nukeReady and self.time >= e.nukeReady
+  return e and e.alive and e.nukeReady and (self.time >= e.nukeReady or (e.nukeExtra or 0) > 0)
+end
+
+-- nukes he could launch right now (the recharging one, if it's back, plus any stored)
+function W:nukesReady(e)
+  if not (e and e.alive and e.nukeReady) then return 0 end
+  return (self.time >= e.nukeReady and 1 or 0) + (e.nukeExtra or 0)
 end
 
 function W:launchNuke(e, x, y)
   if not self:canNuke(e) then return false end
-  e.nukeReady = self.time + CMD.NUKE_COOLDOWN
+  -- the recharging one goes first; a stored one is used only while that's still charging
+  if self.time >= e.nukeReady then e.nukeReady = self.time + CMD.NUKE_COOLDOWN
+  else e.nukeExtra = e.nukeExtra - 1 end
   self.nukeCount = (self.nukeCount or 0) + 1
   local n = { x = e.x, y = e.y, sx = e.x, sy = e.y, tx = x, ty = y, team = e.team, t = 0, src = e }
   self.nukes[#self.nukes + 1] = n

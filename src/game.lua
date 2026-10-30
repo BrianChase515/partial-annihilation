@@ -103,6 +103,9 @@ function G.new(opts)
       else
       if offer then
         self:notice("Commander reached level " .. e.clevel .. "!  Pick an upgrade (Z / X)", 3)
+      elseif (e.clevel or 0) > 5 then
+        local n = world:nukesReady(e)
+        self:notice(string.format("Commander level %d: another NUKE (%d ready).  Select him and press N", e.clevel, n), 5)
       else
         self:notice("Commander level 5: NUKE ARMED.  Select him and press N", 5)
       end
@@ -110,7 +113,7 @@ function G.new(opts)
       end
       SFX.play("ready", 0.7, 0)
     elseif e.clevel >= 5 and world:hostile(e.team, 1) and not world.heroes then
-      self:notice(D.teamName[e.team] .. "'s Commander now has a NUKE.", 4)
+      self:notice(D.teamName[e.team] .. "'s Commander " .. (e.clevel > 5 and ("reached level " .. e.clevel .. ": another NUKE.") or "now has a NUKE."), 4)
     end
   end
   world.onCommanderEvent = function(e, text)
@@ -2469,7 +2472,21 @@ function G:retreat(where)
   local c = self.world.teams[1].commander
   local x, y
   local hq = self.world.squads and self.world.teams[1].hq
-  if where == "flag" and self.flag then x, y = self.flag.x, self.flag.y
+  if where == "flag" and self.flag then
+    x, y = self.flag.x, self.flag.y
+    -- ships can't reach a flag on land: they go back to their shipyard (it repairs them) instead
+    local A = require("src.automation")
+    local keep, ships = {}, 0
+    for _, u in ipairs(list) do
+      if (u.def.domain == "sea" or u.def.domain == "sub") and not A.flagFor(self.world, self.flag, u) then
+        local hx, hy = A.homeFor(self.world, u)
+        self.world:issue(u, { type = "retreat", x = hx, y = hy })
+        ships = ships + 1
+      else keep[#keep + 1] = u end
+    end
+    if ships > 0 then self:notice(ships .. (ships == 1 and " ship" or " ships") .. " back to the shipyard (the flag is on land)", 1.5) end
+    list = keep
+    if #list == 0 then return end
   elseif hq and hq.alive then x, y = hq.x, hq.y + 90 -- Commander of Heroes: flee to the HQ (it heals)
   elseif self.world.squads then x, y = self.world.teams[1].startX, self.world.teams[1].startY -- War is Hell: back where we came in
   elseif where ~= "commander" then

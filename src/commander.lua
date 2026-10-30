@@ -1,10 +1,13 @@
 -- Commander progression: levels from his own kills, a roguelike upgrade pick
--- (2 random choices from 20) at levels 1-4, and the Nuke at level 5.
+-- (2 random choices from 20) at levels 1-4, and the Nuke at level 5. In long games he keeps
+-- going: every level after 5 adds another nuke (stored, ready at once), each level a good deal
+-- harder to reach than the last.
 local C = {}
 
 -- Commander XP = metal value of everything he personally destroys (cumulative per level)
-C.THRESHOLDS = { 300, 820, 1650, 2850, 4500 }
-C.MAX_LEVEL = 5
+C.THRESHOLDS = { 300, 820, 1650, 2850, 4500, 7000, 10500, 15500, 22500, 32500 }
+C.MAX_LEVEL = 10
+C.NUKE_LEVEL = 5
 C.NUKE_RADIUS = 280
 C.NUKE_COOLDOWN = 600      -- seconds of game time
 C.NUKE_SPEED = 420         -- missile speed (it's a long, visible flight)

@@ -571,7 +571,7 @@ function UI.drawNukeAlert(game)
   if world.heroes or world.squads or game.craft then return end
   local c = world.teams[1].commander
   if not c or not c.alive or c.key ~= "commander" or not c.nukeReady then return end
-  local ready = world.time >= c.nukeReady and world:canNuke(c)
+  local ready = world:canNuke(c)
   if not ready then game.nukeWasReady = false; return end
   if not game.nukeWasReady then
     game.nukeWasReady = true
@@ -607,7 +607,8 @@ function UI.drawNukeAlert(game)
     lg.circle("fill", ix, iy, 2)
     lg.setFont(font(16))
     lg.setColor(1, 0.95, 0.85)
-    local label = armed and "NUKE: CLICK A TARGET" or "NUKE READY  (N)"
+    local nn = world:nukesReady(c)
+    local label = armed and "NUKE: CLICK A TARGET" or (nn > 1 and string.format("%d NUKES READY  (N)", nn) or "NUKE READY  (N)")
     lg.print(label, bx + 44, by + bh / 2 - 10)
     game.nukeBtn = { x = bx, y = by, w = bw, h = bh }
   end
@@ -1380,7 +1381,8 @@ function UI.drawInfo(game, L)
     elseif e.key == "commander" then
       local CMD = require("src.commander")
       local L = e.clevel or 0
-      if L >= CMD.MAX_LEVEL then hpTxt = hpTxt .. "    Commander level 5 (max)"
+      if L >= CMD.MAX_LEVEL then hpTxt = hpTxt .. string.format("    Commander level %d (max)", L)
+      elseif L >= CMD.NUKE_LEVEL then hpTxt = hpTxt .. string.format("    Commander level %d   XP %d / %d to the next nuke", L, e.cxp or 0, CMD.THRESHOLDS[L + 1])
       else hpTxt = hpTxt .. string.format("    Commander level %d   XP %d / %d (earn it with his own kills)", L, e.cxp or 0, CMD.THRESHOLDS[L + 1]) end
     elseif game.craft then
       if e.key == "goldmine" then hpTxt = string.format("%d / %d gold left", e.gold, e.goldMax) end
@@ -1443,7 +1445,12 @@ function UI.drawInfo(game, L)
       local nuke = ""
       if e.nukeReady then
         local left = e.nukeReady - game.world.time
-        nuke = left <= 0 and "    NUKE READY (N)" or string.format("    Nuke recharging %d:%02d", math.floor(left / 60), math.floor(left % 60))
+        local n = game.world:nukesReady(e)
+        nuke = n > 1 and string.format("    %d NUKES READY (N)", n) or (n == 1 and "    NUKE READY (N)"
+          or string.format("    Nuke recharging %d:%02d", math.floor(left / 60), math.floor(left % 60)))
+        if n >= 1 and left > 0 and (e.nukeExtra or 0) > 0 then
+          nuke = nuke .. string.format(", next recharges in %d:%02d", math.floor(left / 60), math.floor(left % 60))
+        end
       end
       lg.setColor(1, 0.85, 0.35)
       lg.print("Upgrades: " .. (#names > 0 and table.concat(names, ", ") or "none yet") .. nuke, x + 72, y + 126)
@@ -1887,7 +1894,8 @@ Game  (icons: game-icons.net, CC BY 3.0)
 
 Commander: levels up from HIS OWN kills. Levels 1-4 offer 2 random upgrades out of 20
   (Z / X or click a card). Level 5 = NUKE (N): destroys every building in the circle,
-  halves units, Commanders immune, 10 minute recharge. Risk him to grow him - lose him, lose the game.
+  halves units, Commanders immune, 10 minute recharge. Levels 6-10 each add one more nuke, stored
+  and ready at once (each level a lot more XP). Risk him to grow him - lose him, lose the game.
 Goal: destroy the enemy Commanders. Lose yours and you're out.
 Veterancy: units level up (gold chevrons, max 5) from damage and kills: more damage, HP, fire rate, range.
 Economy: Metal Extractors on yellow deposits, Solar for energy. Everything costs both.

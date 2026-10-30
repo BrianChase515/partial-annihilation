@@ -225,7 +225,7 @@ function Tel.fingerprint(world, team)
   f.cmdLevel = cm and cm.clevel or 0
   -- (the highest level it reached, even if it died later)
   local la = world.cmdLvlAt and world.cmdLvlAt[team] or {}
-  for L = 5, 1, -1 do if la[L] then f.cmdLevel = math.max(f.cmdLevel, L); break end end
+  for L = 10, 1, -1 do if la[L] then f.cmdLevel = math.max(f.cmdLevel, L); break end end
   f.cmd5At = la[5]
   f.generals = world.genCount and world.genCount[team] or 0
   -- veterancy by domain: average level of its combat units still alive, and the best

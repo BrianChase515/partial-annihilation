@@ -475,6 +475,19 @@ local function script(mode, secs)
     -- a unit hurt right next to the flag flees too (it used to fight on there)
     local near = w:spawn("tank", 1, fx + 60, fy); near.hp = near.maxhp * 0.2
     for _ = 1, 20 do game:update(1 / 30) end
+    -- a hurt ship with the flag on land: back to water by its yard, not to the shore under the flag
+    do
+      local sx, sy
+      for _ = 1, 400 do
+        local tx, ty = math.random(2, map.w - 3), math.random(2, map.h - 3)
+        if map:passable("sea", tx, ty) then sx, sy = map:center(tx, ty); break end
+      end
+      local ship = w:spawn("destroyer", 1, sx, sy); ship.hp = ship.maxhp * 0.2
+      for _ = 1, 6 do game:update(1 / 30) end
+      local o = ship.orders[1]
+      local ok = o and o.type == "retreat" and map:passable("sea", map:tileAt(o.x, o.y))
+      print("FLAGFLEE ship with the flag on land flees to water? " .. tostring(ok or false) .. " (flag on land? " .. tostring(map:passable("land", map:tileAt(fx, fy))) .. ")")
+    end
     print("FLAGFLEE hurt beside the flag flees? " .. tostring(near.autoFled ~= nil) .. "; guns off? " .. tostring(near.disarmed == true))
     game.opts.autotest = true
     print(string.format("FLAGFLEE re-armed after %.0fs at the flag (hp %d%%, nothing to repair it)", t, hurt.hp / hurt.maxhp * 100))
@@ -488,6 +501,23 @@ local function script(mode, secs)
     game.log = lg
     for _ = 1, 30 * 60 * 7 do game:update(1 / 30) end
     lg:flush()
+    return
+  end
+  if os.getenv("PA_NUKES") then
+    -- Commander past level 5: one more nuke per level, stored; firing uses the recharging one first
+    game = startFn({ size = 96, water = 0.3, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local c = w.teams[1].commander
+    local CMD = require("src.commander")
+    local function lv(L) w:commanderXP(c, CMD.THRESHOLDS[L] - (c.cxp or 0) + 1) end
+    lv(5); print("NUKES at L" .. c.clevel .. ": ready " .. w:nukesReady(c))
+    w:launchNuke(c, 100, 100); print("NUKES after one launch: ready " .. w:nukesReady(c) .. ", can? " .. tostring(w:canNuke(c) or false))
+    lv(6); lv(7); print("NUKES at L" .. c.clevel .. ": ready " .. w:nukesReady(c))
+    w:launchNuke(c, 100, 100); w:launchNuke(c, 100, 100)
+    print("NUKES after two more: ready " .. w:nukesReady(c) .. ", can? " .. tostring(w:canNuke(c) or false))
+    lv(10); print("NUKES at L" .. c.clevel .. " (max): ready " .. w:nukesReady(c) .. "; more XP changes nothing:")
+    w:commanderXP(c, 1e6); print("NUKES level " .. c.clevel)
     return
   end
   if os.getenv("PA_SCOUTFLEE") then
