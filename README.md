@@ -2,7 +2,7 @@
 
 **A lightweight real-time strategy game for the Mac, in the spirit of Total Annihilation, where the units are shapes and numbers, your Commander levels up like a roguelike hero, and the soundtrack goes to war with you.**
 
-Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of Lua plus 11 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
+Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of Lua plus about 50 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
 
 ![A 2v2 battle](screenshots/rts-battle.gif)
 
