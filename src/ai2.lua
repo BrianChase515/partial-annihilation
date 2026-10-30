@@ -429,11 +429,46 @@ function AI2:bbParkSpot(b)
   return x or self.bbPark.x, y or self.bbPark.y
 end
 
+-- could what's around (x, y) kill the Commander before he gets away? He's tanky and early
+-- armies are small, so most of the time the answer is no. Ground units he can outrun once he
+-- turns for home (a few seconds of fire); aircraft chase him all the way, so against air he needs
+-- to survive the whole run home - unless flak rides with him. Returns ok, plus the seconds it
+-- would take everything there to kill him, and the air alone
+function AI2:commanderSafe(c, x, y, r)
+  local w = self.world
+  local ground, air, flak = 0, 0, 0
+  w:query(x, y, r + 300, function(e)
+    if not e.alive or (e.built or 1) < 1 or e.disarmed then return end
+    local wp = e.def.weapon
+    if self:isHostile(e.team) then
+      if wp and wp.targets and wp.targets.land and U.dist2(x, y, e.x, e.y) < (r + (wp.range or 0)) ^ 2 then
+        local dps = (wp.damage or 0) * (wp.shots or 1) / math.max(0.1, wp.reload or 1) * (1 + 0.1 * (e.level or 0))
+        if e.def.domain == "air" then air = air + dps elseif not e.def.building then ground = ground + dps
+        elseif U.dist2(x, y, e.x, e.y) < r * r then ground = ground + dps end
+      end
+    elseif e.team == self.team and e.key == "flak" and U.dist2(c.x, c.y, e.x, e.y) < 450 * 450 then
+      flak = flak + 1
+    end
+  end)
+  -- flak at his side shoots the aircraft down as they come: each truck roughly halves what gets through
+  air = air * (0.5 ^ math.min(2, flak))
+  local hp = c.hp
+  local killT = (ground + air) > 0 and hp / (ground + air) or math.huge
+  local airT = air > 0 and hp / air or math.huge
+  local tm = w.teams[self.team]
+  local home = tm and tm.startX and U.dist(x, y, tm.startX, tm.startY) or 1500
+  local runHome = home / math.max(30, (c.def.speed or 50) * 1.25)
+  -- (careful above level 5: a little more margin)
+  local margin = self.level > 5 and 1.25 or 1
+  local ok = killT > 12 * margin and airT > runHome * margin
+  return ok, killT, airT
+end
+
 function AI2:commanderToCentre(c)
   local w = self.world
   local t = w.time
   self.cmdReserved = false
-  if self.rush or t < 70 or t > 420 or c.hp < c.maxhp * 0.65 then return false end
+  if self.rush or t < 70 or t > 480 or c.hp < c.maxhp * 0.65 then return false end
   if self.p.w.hold > 1.4 then return false end
   local map = w.map
   local cn = map.coreNode
@@ -443,10 +478,22 @@ function AI2:commanderToCentre(c)
   local plants = 0
   for _, e in ipairs(w.entities) do if e.alive and e.team == self.team and e.def.factory and e.built >= 1 then plants = plants + 1 end end
   if plants < 1 then return false end
-  -- quiet enough? (he's tough, but not alone against an army)
-  local danger = self:strengthNear(cx, cy, 650, true)
-  local ours = self:strengthNear(cx, cy, 650, false)
-  if danger > ours + 500 then return false end
+  -- a couple of fighting units out (they'll be heading the same way): he goes with them
+  local army = 0
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == self.team and e.def.weapon and not e.def.building and e.key ~= "commander"
+      and e.key ~= "builder" and e.built >= 1 and e.def.domain ~= "sea" and e.def.domain ~= "sub" then army = army + 1 end
+  end
+  if army < 2 and t < 150 then return false end
+  -- the one real danger: something there that can kill him before he gets away (air, above all)
+  local safe, killT = self:commanderSafe(c, cx, cy, 650)
+  if not safe then
+    if not self.centreUnsafeNoted then
+      self.centreUnsafeNoted = true
+      Tel.note(w, "commander", self.team, string.format("stays off the centre: what's there could kill him in %.0fs", killT))
+    end
+    return false
+  end
   local job
   if cn and not map.blocked[cn.y * map.w + cn.x] and not self.coreClaimed and w:canPlace("powercore", cn.x, cn.y, self.team, "land") then
     job = { type = "build", key = "powercore", tx = cn.x, ty = cn.y }
@@ -461,15 +508,25 @@ function AI2:commanderToCentre(c)
     end
     if best then job = { type = "build", key = "mex", tx = best.x, ty = best.y } end
   end
-  if not job then return false end
-  -- wanted at the centre: the economy stops handing him home jobs; he finishes what he's on, then goes
+  -- nothing to build there (it's taken, or all claimed): hold the centre and fight for it -
+  -- that's where he levels up and where he props up a small army
+  local hold = false
+  if not job then
+    if U.dist(c.x, c.y, cx, cy) < 300 and #c.orders > 0 then self.cmdReserved = true; return true end
+    job = { type = "amove", x = cx + self.rng:random(-80, 80), y = cy + self.rng:random(-80, 80) }
+    hold = true
+  end
+  -- wanted at the centre: the economy stops handing him home jobs; he finishes what he's on (just
+  -- that - anything queued after it is dropped), then goes
   self.cmdReserved = true
-  if #c.orders > 0 then return false end
+  if #c.orders > 1 then for i = #c.orders, 2, -1 do c.orders[i] = nil end end
+  if #c.orders > 0 and c.orders[1].type == "build" then return false end
   if job.key == "powercore" then self.coreClaimed = true end
   w:issue(c, job)
   if not self.centreNoted then
     self.centreNoted = true
-    Tel.note(w, "commander", self.team, "walks to the centre to claim " .. (job.key == "powercore" and "the Power Core" or "the metal there"))
+    Tel.note(w, "commander", self.team, hold and "walks to the centre to fight for it and level up"
+      or ("walks to the centre to claim " .. (job.key == "powercore" and "the Power Core" or "the metal there")))
   end
   return true
 end
@@ -545,6 +602,22 @@ function AI2:guardCommander(c, before)
     end
   end
   if self.cmdMode == "evade" and w.time >= (self.cmdHoldUntil or 0) then self.cmdMode = nil end
+  -- out in the field and something arrives that could kill him faster than he could run (a
+  -- gunship pack, above all): leave now, while he's still healthy, not at 60%
+  if (self.cmdMode == "build" or self.cmdMode == "front") and hpf >= 0.62 and w.time >= (self.nextSafeCheck or 0) then
+    self.nextSafeCheck = w.time + 1
+    local tm2 = w.teams[self.team]
+    local out = tm2 and tm2.startX and U.dist(c.x, c.y, tm2.startX, tm2.startY) > 700
+    if out then
+      local safe, killT, airT = self:commanderSafe(c, c.x, c.y, 450)
+      if not safe and self.rng:random() < B.sharpness(self.level) + 0.3 then
+        self.cmdMode = "retreat"
+        w:issue(c, { type = "retreat", x = tm2.startX, y = tm2.startY })
+        Tel.note(w, "commander", self.team, string.format("pulls out early: what's coming could kill him in %.0fs%s", killT,
+          airT < math.huge and string.format(" (air alone %.0fs)", airT) or ""))
+      end
+    end
+  end
   -- home, but the fight followed it there: sitting powered down at the spawn is death. Fight
   -- with the base if that's a fight it can win, otherwise slip away (guns up) and come back
   local spawnD = U.dist(c.x, c.y, tm.startX, tm.startY)
