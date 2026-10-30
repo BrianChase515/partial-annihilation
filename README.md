@@ -2,7 +2,7 @@
 
 **A lightweight real-time strategy game for the Mac, in the spirit of Total Annihilation, where the units are shapes and numbers, your Commander levels up like a roguelike hero, and the soundtrack goes to war with you.**
 
-Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of Lua plus 8 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
+Land, sea and air. Up to 4 players with teams. Procedural maps. About 130 KB of Lua plus 11 MB of music, on the tiny [LÖVE](https://love2d.org) engine, running natively on Apple Silicon. It was built to stay out of the way on a machine that's busy doing other things, like running a local AI model.
 
 ![A 2v2 battle](screenshots/rts-battle.gif)
 
@@ -41,7 +41,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Crossroads (2v2):** you and a computer ally against two enemies. Each team is one race, and heroes can repeat across players.
 - **Melee matters.** Swords, axes and cavalry have to reach their target; ranged units and towers can hit flyers; siege wrecks buildings; casters heal, slow and bloodlust on their own.
 - **A computer opponent (difficulty 1-10)** that works its economy, creeps with its heroes, expands, techs up and attacks. Levels 8-10 also mine 10-30% faster.
-- **Its own soundtrack**: seven fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove, Frostpeak Vigil, Caravan of Sands, The Elven Watch, Siege of Ironhold). Annihilation keeps its five; the Arena mixes all twelve.
+- **Its own soundtrack**: seven fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove, Frostpeak Vigil, Caravan of Sands, The Elven Watch, Siege of Ironhold). Annihilation has its own eight; the Arena mixes the orchestral and fantasy suites.
 
 ### Commander Arena: a single-player lane battler
 Switch the title screen to **COMMANDER ARENA** for a different game. There's no base and no army: just your Commander, three lanes, towers, a Core to protect, and endless waves of creeps marching at the enemy.
@@ -179,7 +179,7 @@ The score is three tempo-locked orchestral layers that crossfade with the action
 - **enemies in sight:** cellos, tremolo strings and timpani
 - **a real battle:** full brass and war drums
 
-There are five soundtracks, and a match rotates through them every couple of loops so a long game never sits on one tune. Battles have their own sound too: rifle cracks, energy guns, heavy cannons, artillery that booms across the map, shell impacts, flak and explosions. All of it is synthesized from scratch, panned to where it happens on screen and quieter the further away it is.
+There are eight soundtracks for Annihilation. Each match opens on a random one (never one of the last few you heard), and each suite plays through once before the next comes in, so a long game never sits on one tune. Battles have their own sound too: rifle cracks, energy guns, heavy cannons, artillery that booms across the map, shell impacts, flak and explosions. All of it is synthesized from scratch, panned to where it happens on screen and quieter the further away it is.
 
 Victory and defeat get their own fanfares. A robotic voice calls out "Warning. Nuke en route.", "Commander under fire", "Dropship approaching", "Alien tech secured", stalled economies and more.
 
@@ -221,7 +221,7 @@ The whole game is a 3 MB file. The title screen checks GitHub and updates to the
 - **Up to 4 players and any teams:** free-for-all, 2v2, 1v3, or you with a computer ally, sharing vision.
 - **Procedural, symmetric maps:** an ocean ring with bays, rivers and inlets on most of them. You start in a random corner. Save the seeds you like by name.
 - **Guard and follow:** right-click a friendly unit to have your army guard it, or right-click one with a factory selected so every new unit joins it and follows it around, your Commander included.
-- **Five soundtracks:** the original D-minor score, **Iron Tide** (driving strings and war drums), **Ashfall** (dark choir and low brass), **Overdrive** (marimba, racing strings and taiko) and **Last Light** (piano, solo horn and a snare-driven march). A match rotates through them.
+- **Five soundtracks:** the original D-minor score, **Iron Tide** (driving strings and war drums), **Ashfall** (dark choir and low brass), **Overdrive** (marimba, racing strings and taiko) **Last Light** (piano, solo horn and a snare-driven march), plus three in a rock and prog vein: **Thunder Run** (F# minor, drum-led, double kick and tom runs), **Steel Sky** (B minor, a bending lead guitar with a harmony guitar) and **Glass Mountain** (E lydian in 7/8: twelve-string, busy bass, organ, choir and a synth lead, in the spirit of 70s symphonic rock). A match rotates through them, each one once.
 - **Always know who's on your side:** every Commander wears a YOU / ALLY / ENEMY tag, health bars are framed green for allies and red for enemies, and the scoreboard and player chips group your team together.
 - **Total Annihilation-style economy:** overspending slows every project by the same amount.
 - **Veterancy for every unit, including towers.**
@@ -380,6 +380,7 @@ Plain Lua on LÖVE 11.5, with no other dependencies.
 | `src/matchlog.lua` | Per-game logs for balance review |
 | `src/arena.lua`, `src/arena_ai.lua` | Commander Arena: lane map, towers, creep waves, the seven classes and their skills, and the computer Commanders |
 | `tools/compose_suites.py` | The four extra soundtracks |
+| `tools/compose_rock.py` | Thunder Run, Steel Sky and Glass Mountain |
 | `tools/sfx.py` | Synthesizes the combat sound effects |
 | `tools/leaderboard.py`, `.github/workflows/leaderboard.yml` | The leaderboard bot: checks a submitted score issue, updates `LEADERBOARD.md`, then replies and closes the issue |
 | `src/game.lua`, `src/ui.lua`, `src/render.lua` | Input, the HUD and drawing |

@@ -8,7 +8,7 @@ local M = { muted = false, volume = 0.55, intensity = 0, heat = 0, mood = 0 }
 -- mood (-1 losing .. +1 winning) colours the mix: behind, an uneasy tension layer never quite
 -- leaves even in quiet moments; ahead, the calm is fuller and the fights swell harder. The next
 -- suite in a rotation is picked to match (bright suites when winning, dark ones when losing).
-M.BRIGHT = { _f = true, _k = true, _d = true }
+M.BRIGHT = { _f = true, _k = true, _d = true, _r = true }
 M.DARK = { _c = true, _h = true, _l = true, _i = true, _m = true, _n = true, _o = true }
 local stems, gains = {}, { ambient = 0, tension = 0, combat = 0 }
 local stinger
@@ -17,6 +17,38 @@ local resyncT = 0
 local lastTell, loops = 0, 0
 local swap = 1          -- gain multiplier while crossing from one suite to the next
 local swapping = false
+
+-- music has its own random stream, seeded from the clock, so the first suite of every match is a
+-- fresh pick no matter what the map generator or the AIs drew from love.math beforehand
+local rng
+local function rand(a, b)
+  if not rng then
+    local t = (love.timer and love.timer.getTime() or 0) * 1000
+    rng = love.math.newRandomGenerator(os.time() + math.floor(t) % 1000003)
+    for _ = 1, 3 do rng:random() end
+  end
+  if a then return rng:random(a, b) end
+  return rng:random()
+end
+local recent = {}   -- the last few suites heard, newest first (avoided when picking)
+local function heard(s)
+  for i = #recent, 1, -1 do if recent[i] == s then table.remove(recent, i) end end
+  table.insert(recent, 1, s)
+  while #recent > 3 do table.remove(recent) end
+end
+-- a random suite from the pool, steering clear of the ones heard most recently
+local function pickFrom(pool)
+  for keep = math.min(#recent, #pool - 1), 0, -1 do
+    local ok = {}
+    for _, s in ipairs(pool) do
+      local fresh = true
+      for i = 1, keep do if recent[i] == s then fresh = false end end
+      if fresh then ok[#ok + 1] = s end
+    end
+    if #ok > 0 then return ok[rand(1, #ok)] end
+  end
+  return pool[rand(1, #pool)]
+end
 
 local function load(name, mode)
   local ok, s = pcall(love.audio.newSource, "assets/music/" .. name .. ".ogg", mode or "stream")
@@ -35,22 +67,25 @@ end
 -- own three, and the Arena (a mashup) any of the eight.
 -- and four more for Craft: "_i" Frostpeak Vigil (A minor), "_j" Caravan of Sands (D phrygian),
 -- "_k" The Elven Watch (F lydian), "_l" Siege of Ironhold (C minor)
-M.SUITES = { "", "_b", "_c", "_d", "_e", "_f", "_g", "_h", "_i", "_j", "_k", "_l" }
+M.SUITES = { "", "_b", "_c", "_d", "_e", "_f", "_g", "_h", "_i", "_j", "_k", "_l", "_p", "_q", "_r" }
 -- War is Hell (Commander of Heroes) has its own three, and only those: "_m" No Man's Land,
 -- "_n" Iron Rain, "_o" The Long Night
-M.POOLS = { rts = { "", "_b", "_c", "_d", "_e" }, craft = { "_f", "_g", "_h", "_i", "_j", "_k", "_l" }, wih = { "_m", "_n", "_o" } }
-M.LOOPS_PER_SUITE = 2
+-- and three for Annihilation in a rock / prog vein: "_p" Thunder Run (F# minor, drums),
+-- "_q" Steel Sky (B minor, lead guitar), "_r" Glass Mountain (E lydian, 7/8, prog)
+M.POOLS = { rts = { "", "_b", "_c", "_d", "_e", "_p", "_q", "_r" }, craft = { "_f", "_g", "_h", "_i", "_j", "_k", "_l" }, wih = { "_m", "_n", "_o" } }
+M.LOOPS_PER_SUITE = 1   -- during a match, each suite plays through once, then the next one comes in
 M.NAMES = { [""] = "Annihilation", _b = "Iron Tide", _c = "Ashfall", _d = "Overdrive", _e = "Last Light",
   _f = "Banners of Dawn", _g = "Drums of the Warband", _h = "Moonlit Grove",
   _i = "Frostpeak Vigil", _j = "Caravan of Sands", _k = "The Elven Watch", _l = "Siege of Ironhold",
-  _m = "No Man's Land", _n = "Iron Rain", _o = "The Long Night" }
+  _m = "No Man's Land", _n = "Iron Rain", _o = "The Long Night",
+  _p = "Thunder Run", _q = "Steel Sky", _r = "Glass Mountain" }
 M.changedAt = nil   -- love.timer time of the last soundtrack change (for the "Music:" label)   -- during a match, move on to another suite after this many loops
 
 -- a shuffled order of all suites, starting with `first`
 function M.playlist(first, pool)
   local rest = {}
   for _, s in ipairs(pool or M.SUITES) do if s ~= first then rest[#rest + 1] = s end end
-  for i = #rest, 2, -1 do local j = love.math.random(i); rest[i], rest[j] = rest[j], rest[i] end
+  for i = #rest, 2, -1 do local j = rand(1, i); rest[i], rest[j] = rest[j], rest[i] end
   table.insert(rest, 1, first)
   return rest
 end
@@ -59,13 +94,11 @@ end
 function M.match(mode)
   local pool = M.POOLS[mode] or M.SUITES
   -- start on a different soundtrack than the one that was just playing
-  local first
-  for _ = 1, 8 do
-    first = pool[love.math.random(#pool)]
-    if first ~= M.suite then break end
-  end
+  if M.suite then heard(M.suite) end
+  local first = pickFrom(pool)
   M.queue = M.playlist(first, pool)
   M.qi = 1
+  M.fresh = true
   M.rotate = true
   M.start(M.queue[1])
 end
@@ -78,6 +111,7 @@ function M.start(suite)
     stems = {}
     playing = false
     M.suite = suite
+    heard(suite)
   end
   if not stems.ambient then
     for _, k in ipairs({ "ambient", "tension", "combat" }) do
@@ -92,7 +126,11 @@ function M.start(suite)
   local off = 0
   if stems.ambient then
     local ok, dur = pcall(function() return stems.ambient:getDuration() end)
-    if ok and dur and dur > 8 then off = love.math.random() * (dur - 4) end
+    if ok and dur and dur > 8 then off = rand() * (dur - 4) end
+    -- in a match the suite plays through once from here, so don't start it right at the end
+    -- (the match's first suite joins somewhere in its first third; the ones after start at the top)
+    if M.rotate and ok and dur and dur > 8 then off = M.fresh and rand() * dur * 0.35 or 0 end
+    M.fresh = nil
   end
   lastTell, loops = off, 0
   for _, s in pairs(stems) do s:seek(off); s:play() end
@@ -138,7 +176,9 @@ function M.update(dt, level)
     local t = stems.ambient:tell()
     if t < lastTell - 1 then loops = loops + 1 end
     lastTell = t
-    if loops >= M.LOOPS_PER_SUITE and not swapping then swapping = true end
+    local ok, dur = pcall(function() return stems.ambient:getDuration() end)
+    local nearEnd = ok and dur and loops >= M.LOOPS_PER_SUITE - 1 and t > dur - 2.6
+    if (loops >= M.LOOPS_PER_SUITE or nearEnd) and not swapping then swapping = true end
   end
   if swapping then
     swap = swap - dt / 2.5
@@ -216,12 +256,7 @@ function M.menu(mode)
   if not playing then
     M.reset()
     -- a different soundtrack from the one that just played
-    local pick
-    for _ = 1, 8 do
-      pick = pool[love.math.random(#pool)]
-      if pick ~= M.suite then break end
-    end
-    M.start(pick)
+    M.start(pickFrom(pool))
   end
   M.heat, M.floor = 0, 0
 end
