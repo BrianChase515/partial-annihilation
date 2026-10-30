@@ -5,7 +5,7 @@
 local C = {}
 
 -- Commander XP = metal value of everything he personally destroys (cumulative per level)
-C.THRESHOLDS = { 300, 820, 1650, 2850, 4500, 7000, 10500, 15500, 22500, 32500 }
+C.THRESHOLDS = { 300, 820, 1650, 2850, 4500, 9000, 16000, 26000, 40000, 60000 }
 C.MAX_LEVEL = 10
 C.NUKE_LEVEL = 5
 C.NUKE_RADIUS = 280

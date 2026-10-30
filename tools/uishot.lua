@@ -503,6 +503,27 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_SCOREBOARD") then
+    -- the scoreboard's Commander rows: level, progress bar (red toward a nuke level), nuke badge
+    game = startFn({ size = 96, water = 0.2, seed = 5, autotest = true, enemies = 3 })
+    game.ais = {}
+    local w = game.world
+    local CMD = require("src.commander")
+    local function lv(t, L, frac)
+      local c = w.teams[t] and w.teams[t].commander
+      if not c then return end
+      if L > 0 then w:commanderXP(c, CMD.THRESHOLDS[L]) end
+      local lo, hi = CMD.THRESHOLDS[L] or 0, CMD.THRESHOLDS[L + 1]
+      w:commanderXP(c, (hi - lo) * frac)
+    end
+    lv(1, 5, 0.4); lv(2, 7, 0.3)
+    for _ = 1, 60 do w:update(1 / 30) end
+    local c1 = w.teams[1].commander
+    w:launchNuke(c1, 10, 10)
+    for _ = 1, 4 do frame() end
+    pending = "uishot_scoreboard.png"
+    return
+  end
   if os.getenv("PA_NUKES") then
     -- Commander past level 5: one more nuke per level, stored; firing uses the recharging one first
     game = startFn({ size = 96, water = 0.3, seed = 5, autotest = true })

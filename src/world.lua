@@ -801,6 +801,7 @@ function W:commanderXP(e, amount)
   e.cxp = (e.cxp or 0) + amount
   while (e.clevel or 0) < CMD.MAX_LEVEL and e.cxp >= CMD.THRESHOLDS[(e.clevel or 0) + 1] * ((self.rtsTune and self.rtsTune.cthr) or 1) do
     e.clevel = (e.clevel or 0) + 1
+    if os.getenv("PA_CMDXP") then print(string.format("CMDXP t=%d team %d -> L%d (xp %d, last gain %d, nuking %s)", self.time, e.team, e.clevel, e.cxp, amount, tostring(self.nuking or false))) end
     self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 1.2, size = 46 }
     MODS.onCommanderLevel(self, e)
     self.cmdLvlAt = self.cmdLvlAt or {}
@@ -912,6 +913,7 @@ function W:detonate(n)
       if d <= R + (o.def.building and o.def.radius * 0.5 or 0) then victims[#victims + 1] = o end
     end
   end)
+  self.nuking = true
   for _, o in ipairs(victims) do
     if o.alive then
       if o.def.building then
@@ -925,6 +927,7 @@ function W:detonate(n)
       end
     end
   end
+  self.nuking = nil
   if self.onDetonate then self.onDetonate(n) end
 end
 

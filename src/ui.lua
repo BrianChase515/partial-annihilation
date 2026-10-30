@@ -353,7 +353,7 @@ function UI.drawLeaderboard(game)
     if a.ally ~= b.ally then return a.ally < b.ally end
     return a.team < b.team
   end)
-  local bw, rh = UI.SCORE_W, 24
+  local bw, rh = UI.SCORE_W, 28
   local x, y = w - bw - 10, UI.TOP_H + 8
   local seps = 0
   for i = 2, #rows do if rows[i].ally ~= rows[i - 1].ally then seps = seps + 1 end end
@@ -395,10 +395,39 @@ function UI.drawLeaderboard(game)
       elseif d == 1 then lg.setColor(1, 0.7, 0.3)
       elseif d == 0 then lg.setColor(1, 1, 1, 0.9)
       else lg.setColor(0.6, 0.65, 0.7) end
-      lg.print("L" .. L, x + 128, yy + 2)
+      lg.print("L" .. L, x + 124, yy + 2)
+      if c.alive and not world.heroes then
+        -- how close he is to his next level: a thin bar under the row, red when that level is a nuke
+        local frac, _, isMax = R.cmdXP(c)
+        local bx0, bwid, by0 = x + 30, bw - 40, yy + 20
+        lg.setColor(1, 1, 1, 0.12)
+        lg.rectangle("fill", bx0, by0, bwid, 3)
+        if not isMax then
+          if L + 1 >= 5 then lg.setColor(1, 0.35, 0.25, 0.95) else lg.setColor(0.55, 0.75, 1, 0.8) end
+          lg.rectangle("fill", bx0, by0, bwid * frac, 3)
+        end
+        -- the nuke: a small trefoil badge - pulsing red when one is ready, grey while recharging
+        if c.nukeReady then
+          local n = world:nukesReady(c)
+          local ix, iy = x + 150, yy + 10
+          if n > 0 then
+            local pulse = 0.55 + 0.45 * math.sin(love.timer.getTime() * 7)
+            lg.setColor(1, 0.3, 0.15, pulse)
+          else lg.setColor(0.55, 0.55, 0.55, 0.8) end
+          lg.circle("fill", ix, iy, 6)
+          lg.setColor(0.1, 0.05, 0.02)
+          for k = 0, 2 do
+            local a0 = -math.pi / 2 + k * 2 * math.pi / 3
+            lg.arc("fill", ix, iy, 5, a0 - 0.45, a0 + 0.45)
+          end
+          lg.setColor(n > 0 and 1 or 0.55, n > 0 and 0.3 or 0.55, n > 0 and 0.15 or 0.55)
+          lg.circle("fill", ix, iy, 1.6)
+          if n > 1 then lg.setColor(1, 0.85, 0.4); lg.print(tostring(n), ix + 5, yy - 2, 0, 0.7, 0.7) end
+        end
+      end
     end
     lg.setColor(1, 1, 1, r.dead and 0.4 or 1)
-    lg.print(U.fmt(r.pts), x + 160, yy + 2)
+    lg.print(U.fmt(r.pts), x + 164, yy + 2)
     if r.mult > 1 then
       local pulse = 0.6 + 0.4 * math.sin(love.timer.getTime() * 8)
       lg.setColor(1, 0.6, 0.2, pulse)
