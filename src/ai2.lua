@@ -722,7 +722,7 @@ function AI2:goForTheKill()
           w:query(e.x, e.y, 420, function(t) if t.alive and (t.key == "turret" or t.key == "basetower") and t.team == e.team and t.built >= 1 then towers = towers + 1 end end)
           local net = dps * (1 - 0.08 * towers) - regen
           local ttk = net > 0 and e.hp / net or 999
-          if ttk > 12 then
+          if ttk > (self.pressing and 30 or 12) then
             worth = false
             if w.time - (self.notWorthNoted or -99) > 30 then
               self.notWorthNoted = w.time

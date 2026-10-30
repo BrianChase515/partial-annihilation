@@ -1641,7 +1641,25 @@ function AI:thinkArmy()
   end
   local waveSize = math.min(40, self.diff.waveBase + self.waves * self.diff.waveGrow)
   local t = world.time
+  -- far ahead late in the game: press the advantage. Whatever has gathered at home goes out
+  -- every 45 seconds instead of waiting for a full wave, so a won game actually ends
+  if t > 600 and t - (self.pressCheck or -99) > 10 then
+    self.pressCheck = t
+    local mine, theirs = 0, 0
+    for _, e in ipairs(world.entities) do
+      if e.alive and not e.def.building and e.def.weapon and e.key ~= "commander" and e.built >= 1 then
+        local v = (e.def.cost and e.def.cost.metal) or 50
+        if e.team == self.team then mine = mine + v elseif self:isHostile(e.team) then theirs = theirs + v end
+      end
+    end
+    local was = self.pressing
+    self.pressing = mine > 2 * math.max(theirs, 400)
+    if self.pressing and not was then
+      Tel.note(world, "wave", self.team, string.format("far ahead (army %d vs %d): presses the advantage - everything goes forward", mine, theirs))
+    end
+  end
   local launch = #home >= waveSize
+  if self.pressing and #home >= 4 and t - self.lastWave > 45 then launch = true end
   -- don't wait forever when the army is big but slow to grow
   if not launch and #home >= math.max(5, waveSize * 0.6) and t - self.lastWave > 240 then launch = true end
   if launch and t > (self.diff.firstWave or 200) then
