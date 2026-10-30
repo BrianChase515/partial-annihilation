@@ -595,6 +595,7 @@ function W:issue(e, order, queue)
     e.chase = nil
   end
   e.orders[#e.orders + 1] = order
+  e.holdGround = nil -- (any new order releases a unit holding its ground)
 end
 
 -- how fast a Commander repairs where he stands right now, under fire (the AI weighs this)
@@ -1062,9 +1063,13 @@ function W:gainXP(e, amount)
   -- its splash would otherwise make Generals of a whole battery in a minute)
   if self.mods and self.mods.squads then amount = amount * (e.key == "artillery" and 0.2 or 0.35) end
   if self.rtsTune and (e.def.domain == "sea" or e.def.domain == "sub") then amount = amount * (self.rtsTune.shipXp or 1) end
+  -- (Annihilation) towers sit on every kill near them, so a ring of them would rank up off
+  -- anything fed to it: half the experience, at most level 3, never a General
+  local cap = W.MAX_LEVEL
+  if self.rtsTune and e.def.building then amount, cap = amount * 0.5, 3 end
   e.xp = (e.xp or 0) + amount
   local L = e.level or 0
-  while L < W.MAX_LEVEL and e.xp >= self:xpForLevel(e, L + 1) do
+  while L < cap and e.xp >= self:xpForLevel(e, L + 1) do
     L = L + 1
     local oldMax = e.maxhp
     e.maxhp = math.floor(e.def.hp * (1 + 0.10 * L) * (e.hpMul or 1))
@@ -1080,7 +1085,7 @@ function W:gainXP(e, amount)
     self.effects[#self.effects + 1] = { kind = "levelup", x = e.x, y = e.y, t = 0, life = 0.9, size = e.def.radius + 10 }
     if self.onLevel then self.onLevel(e) end
   end
-  if L >= W.MAX_LEVEL and not e.general and not self.arena and not e.summon then self:promoteGeneral(e) end
+  if L >= W.MAX_LEVEL and not e.general and not self.arena and not e.summon and not e.def.building then self:promoteGeneral(e) end
 end
 
 ---------------------------------------------------------------------------
@@ -1438,7 +1443,7 @@ function W:damage(o, amount, attacker)
   end
   self.teams[o.team].lastAttacked = self.time
   self.teams[o.team].lastAttackX, self.teams[o.team].lastAttackY = o.x, o.y
-  if attacker and attacker.alive and not o.def.building and #o.orders == 0 and o.def.weapon and not o.retaliate and not o.disarmed then
+  if attacker and attacker.alive and not o.def.building and #o.orders == 0 and o.def.weapon and not o.retaliate and not o.disarmed and not o.holdGround then
     o.retaliate = attacker
   end
   if m then
@@ -1826,7 +1831,7 @@ function W:updateUnit(e, dt)
   -- the anti-air mount fires on its own, whatever the main guns or the orders are doing
   if e.def.aaWeapon then self:updateAA(e, dt) end
 
-  if self:updateKite(e, dt, o) then
+  if not (e.holdGround and not o) and self:updateKite(e, dt, o) then
     -- stepping back: keep shooting what we were fighting (or whatever is in range)
     local t = (o and o.type == "attack" and o.target) or e.chase or e.kite.threat
     self:updateWeapon(e, dt, t)
@@ -1835,7 +1840,15 @@ function W:updateUnit(e, dt)
 
   if not o then
     -- idle: retaliate / defend area, then return home
-    if e.def.weapon then
+    if e.holdGround and e.def.weapon then
+      -- holding ground: shoot whatever comes into range, never chase; if shoved off the spot,
+      -- step back onto it
+      e.chase = nil
+      if U.dist2(e.x, e.y, e.homeX, e.homeY) > 40 * 40 then
+        if not e.path then self:setDest(e, e.homeX, e.homeY) end
+        if self:followPath(e, dt, 20) then e.path = nil end
+      end
+    elseif e.def.weapon then
       local t = e.chase
       if t and (not t.alive or U.dist(e.homeX, e.homeY, t.x, t.y) > self:lookOf(e) + 220 or (t.smoked and not self:canTarget(e, t))) then t = nil end
       if not t and e.retaliate and e.retaliate.alive and self:canTarget(e, e.retaliate) then t = e.retaliate end

@@ -37,6 +37,7 @@ function AI2.new(world, team, level, profileKey)
   setmetatable(self, AI2)
   self.diff.level = level or 5
   self.version = 2
+  self.isV2 = true
   self.rng = love.math.newRandomGenerator(os.time() + team * 7919 + math.floor(love.math.random() * 1e6))
   -- read the map first (terrain isn't hidden, only units): it decides which personalities fit
   self:readMap()
@@ -1129,8 +1130,42 @@ function AI2:pickTarget(domain)
       if myArmy < full * 1.3 then s = s * (1 - 0.75 * siegeSense) end
     end
     opts[#opts + 1] = { key = string.format("b%d_%d", math.floor(c.x / 400), math.floor(c.y / 400)),
-      label = (c.fac > 0 and "their base" or (c.eco > 0 and "an expansion" or "buildings")) .. string.format(" (%d)", c.n),
+      label = (c.fac > 0 and "hit their base" or (c.eco > 0 and "an expansion" or "buildings")) .. string.format(" (%d)", c.n),
       score = s, x = c.x, y = c.y }
+  end
+  -- their economy where the towers don't reach: extractors and solar with no tower covering
+  -- them. Against a base ringed with towers this is the better plan - starve it instead of
+  -- feeding the towers
+  local towers, turtleDef = {}, 0
+  for _, b in ipairs(buildings) do
+    if b.def.weapon then towers[#towers + 1] = b; turtleDef = turtleDef + value(b) end
+  end
+  local exposed = {}
+  for _, b in ipairs(buildings) do
+    if b.key == "mex" or b.key == "solar" or b.key == "tidal" then
+      local covered = false
+      for _, tw in ipairs(towers) do
+        local r = (tw.def.weapon.range or 300) + 60
+        if U.dist2(b.x, b.y, tw.x, tw.y) < r * r then covered = true; break end
+      end
+      if not covered then exposed[#exposed + 1] = b end
+    end
+  end
+  if #exposed > 0 then
+    -- the biggest group of exposed economy
+    local bestG, bestN
+    for _, b in ipairs(exposed) do
+      local gx, gy, n = 0, 0, 0
+      for _, b2 in ipairs(exposed) do
+        if U.dist2(b.x, b.y, b2.x, b2.y) < 500 * 500 then gx, gy, n = gx + b2.x, gy + b2.y, n + 1 end
+      end
+      if not bestN or n > bestN then bestG, bestN = { x = gx / n, y = gy / n }, n end
+    end
+    local guard = defOf(bestG.x, bestG.y)
+    local d = U.dist(self.baseX, self.baseY, bestG.x, bestG.y)
+    local s = 0.42 * (0.5 + 0.5 * P.raid) * (0.6 + 0.1 * math.min(6, bestN)) / (1 + guard / 700)
+      * (1 - 0.3 * d / diag) * (1 + math.min(1, turtleDef / 1500) * 0.6)
+    opts[#opts + 1] = { key = "eco", label = string.format("raid their economy (%d unguarded)", bestN), score = s, x = bestG.x, y = bestG.y }
   end
   -- their army in the field, if it's where we can hit it
   local ax, ay, an, av = 0, 0, 0, 0
@@ -1139,7 +1174,7 @@ function AI2:pickTarget(domain)
   end
   if an >= 4 then
     ax, ay = ax / an, ay / an
-    opts[#opts + 1] = { key = "army", label = string.format("their army (%d)", an), x = ax, y = ay,
+    opts[#opts + 1] = { key = "army", label = string.format("wear down their army (%d)", an), x = ax, y = ay,
       score = 0.45 * P.aggression * (P.risk ^ 0.7) * (1 - 0.3 * U.dist(self.baseX, self.baseY, ax, ay) / diag) }
   end
   -- the centre itself, when the map is about the centre
@@ -1161,7 +1196,7 @@ function AI2:pickTarget(domain)
       -- at his drop pod he repairs under fire: a worse target than his economy
       local _, home = w:commanderRegenUnderFire(e)
       if home then s = s * 0.55 end
-      opts[#opts + 1] = { key = "cmd", label = "their Commander", score = s, x = e.x, y = e.y }
+      opts[#opts + 1] = { key = "cmd", label = "all out for their Commander", score = s, x = e.x, y = e.y }
     end
   end
   local o, ch = B.commit(self.tgtState, opts, self.level, self.rng, w.time, { reconsider = 60, minHold = 20, margin = 1.3 })

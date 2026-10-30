@@ -503,6 +503,162 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_HOLD") then
+    for _, mode in ipairs({ "stop", "hold" }) do
+      game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
+      game.ais = {}
+      local w = game.world
+      w.noFog = true
+      local map = w.map
+      local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+      local tx, ty = map:tileAt(cx, cy)
+      local nx, ny = map:nearestTile(tx, ty, function(a2, b2) return map:passable("land", a2, b2) and not map.blocked[b2 * map.w + a2] end, 30)
+      local x0, y0 = map:center(nx, ny)
+      local tanks = {}
+      for k = 1, 4 do tanks[k] = w:spawn("tank", 1, x0 + (k - 2.5) * 30, y0) end
+      w:update(1 / 30)
+      game.selected = {}
+      for _, u in ipairs(tanks) do game.selected[u] = true end
+      if mode == "hold" then game:holdGround() else game:stop() end
+      local art = w:spawn("artillery", 2, x0, y0 - 420)
+      local t = 0
+      while t < 15 do w:update(1 / 30); t = t + 1 / 30 end
+      local moved = 0
+      for _, u in ipairs(tanks) do moved = math.max(moved, U.dist(u.x, u.y, x0, y0)) end
+      local foe = w:spawn("tank", 2, x0 + 250, y0)
+      foe.holdGround = true
+      local p0 = {}
+      for k, u in ipairs(tanks) do p0[k] = { u.x, u.y } end
+      t = 0
+      while t < 25 and foe.alive do w:update(1 / 30); t = t + 1 / 30 end
+      local chased = 0
+      for k, u in ipairs(tanks) do chased = math.max(chased, U.dist(u.x, u.y, p0[k][1], p0[k][2])) end
+      print(string.format("HOLD   enemy tank parked just outside their range: the group moved %d px toward it", math.floor(chased)))
+      local alive, hp = 0, 0
+      for _, u in ipairs(tanks) do if u.alive then alive = alive + 1; hp = hp + u.hp end end
+      print(string.format("HOLD   debug: tanks alive %d (hp %d), foe hp %d at %d px, art hp %d, tank0 hold %s orders %d", alive, hp, foe.hp, math.floor(U.dist(foe.x, foe.y, tanks[1].x, tanks[1].y)), art.hp, tostring(tanks[1].holdGround), #tanks[1].orders))
+      print(string.format("HOLD %s: under artillery fire for 15s the group moved up to %d px; enemy tank in range %s; artillery %s",
+        mode, math.floor(moved), foe.alive and "survived" or string.format("killed in %.1fs", t), art.alive and "alive" or "killed"))
+    end
+    return
+  end
+  if os.getenv("PA_BOMBERS") then
+    -- v2 vs v2 at level 5; at 6:00 side 1 gets N bombers and sends them at the enemy Commander
+    local N = tonumber(os.getenv("PA_BOMBERS")) or 14
+    for _, sd in ipairs({ 3, 7, 11, 19, 23, 29 }) do
+      game = startFn({ size = 112, water = 0.3, seed = sd, autotest = true, level = 5, level1 = 5, profile = "Random",
+        profile1 = "Random", aiV2Teams = { [1] = true, [2] = true } })
+      local w = game.world
+      local t = 0
+      while t < 360 and not w.over do game:update(1 / 30); t = t + 1 / 30 end
+      local ec = w.teams[2].commander
+      if w.over or not ec.alive then print("BOMBERS seed " .. sd .. ": game over before 6:00"); goto nextseed end
+      do
+        local tm = w.teams[1]
+        local bs = {}
+        for k = 1, N do bs[k] = w:spawn("bomber", 1, tm.startX + (k % 4) * 20, tm.startY + math.floor(k / 4) * 20) end
+        local flakNear, aaTowers = 0, 0
+        for _, e in ipairs(w.entities) do
+          if e.alive and e.team == 2 and U.dist2(e.x, e.y, ec.x, ec.y) < 600 * 600 then
+            if e.key == "flak" then flakNear = flakNear + 1 elseif e.def.aaWeapon then aaTowers = aaTowers + 1 end
+          end
+        end
+        local hp0 = ec.hp
+        local t0 = t
+        while t < t0 + 90 and ec.alive do
+          for _, b in ipairs(bs) do
+            if b.alive and (not b.orders[1] or b.orders[1].type ~= "attack") then w:issue(b, { type = "attack", target = ec }) end
+          end
+          game:update(1 / 30); t = t + 1 / 30
+        end
+        local left = 0
+        for _, b in ipairs(bs) do if b.alive then left = left + 1 end end
+        print(string.format("BOMBERS seed %d: Commander %s (%d%% -> %s), bombers left %d of %d; near him at the start: %d flak, %d towers",
+          sd, ec.alive and "survives" or string.format("killed in %ds", math.floor(t - t0)), math.floor(hp0 / ec.maxhp * 100),
+          ec.alive and (math.floor(ec.hp / ec.maxhp * 100) .. "%") or "dead", left, N, flakNear, aaTowers))
+      end
+      ::nextseed::
+    end
+    return
+  end
+  if os.getenv("PA_FEED") then
+    -- one tower, 40 tanks walked into it one at a time: how far does it rank up?
+    game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local map = w.map
+    local tm = w.teams[1]
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    local tx, ty = map:tileAt(cx, cy)
+    local nx, ny = map:nearestTile(tx, ty, function(a2, b2) return map:passable("land", a2, b2) and not map.blocked[b2 * map.w + a2] and not map.deposit[map:idx(a2, b2)] end, 30)
+    local tw = w:spawn("turret", 1, (nx + 0.5) * w.T, (ny + 0.5) * w.T, 1)
+    w:rebuildGrid()
+    for k = 1, 40 do
+      local u = w:spawn("tank", 2, tw.x + 330, tw.y)
+      w:issue(u, { type = "attack", target = tw })
+      local t = 0
+      while u.alive and tw.alive and t < 30 do w:update(1 / 30); t = t + 1 / 30 end
+      tw.hp = tw.maxhp
+      if k % 10 == 0 then print(string.format("FEED after %d tanks: tower level %d%s", k, tw.level or 0, tw.general and " (General)" or "")) end
+    end
+    return
+  end
+  if os.getenv("PA_TURTLE") then
+    -- a turtle: 10 Defense Towers ringed round the start (no army) against a level-5 v2 AI
+    local seeds = { 3, 7, 11 }
+    for _, sd in ipairs(seeds) do
+      game = startFn({ size = 112, water = 0.3, seed = sd, autotest = true, level = 5, level1 = 5, profile = "Random",
+        profile1 = "Turtle", aiV2Teams = { [1] = true, [2] = true } })
+      local w = game.world
+      local tm = w.teams[1]
+      local map = w.map
+      local placed = 0
+      for k = 0, 40 do
+        if placed >= 10 then break end
+        local a = k * 2.399
+        local r = 220 + (k % 3) * 70
+        local tx, ty = map:tileAt(tm.startX + math.cos(a) * r, tm.startY + math.sin(a) * r)
+        if w:canPlace("turret", tx, ty, 1, "land") then w:spawn("turret", 1, (tx + 0.5) * w.T, (ty + 0.5) * w.T, 1); placed = placed + 1 end
+      end
+      w:rebuildGrid()
+      local t = 0
+      local towerKills = 0
+      local lostV, byTower = 0, 0
+      local oldKill = w.kill
+      w.kill = function(self2, o, attacker)
+        if o.alive and o.team == 2 and not o.def.building and o.def.cost and o.key ~= "builder" then
+          lostV = lostV + o.def.cost.metal
+          if attacker and attacker.def and attacker.def.building then byTower = byTower + o.def.cost.metal end
+        end
+        return oldKill(self2, o, attacker)
+      end
+      while t < 840 and not w.over do game:update(1 / 30); t = t + 1 / 30 end
+      local lv, n, gen, alive = 0, 0, 0, 0
+      for _, e in ipairs(w.entities) do
+        if e.team == 1 and e.def.building and e.def.weapon and e.key ~= "basetower" then
+          n = n + 1
+          if e.alive then alive = alive + 1; lv = lv + (e.level or 0) end
+          if e.general then gen = gen + 1 end
+        end
+      end
+      local lost = lostV
+      local plans = {}
+      for _, nt in ipairs(w.tel.notes) do
+        if nt.team == 2 and (nt.kind == "target" or (nt.kind == "wave" and nt.text:find("spent"))) then
+          local k = nt.kind == "wave" and "fallback" or (nt.text:match("%*([%a ]+)") or "?")
+          plans[k] = (plans[k] or 0) + 1
+        end
+      end
+      local pl = {}
+      for k, n in pairs(plans) do pl[#pl + 1] = k:gsub("%s+$", "") .. " x" .. n end
+      table.sort(pl)
+      print("TURTLE   plans: " .. table.concat(pl, ", ") .. string.format("; units lost to towers %d of %d metal", byTower, lostV))
+      print(string.format("TURTLE seed %d: %d of %d towers standing after %ds, avg level %.1f, generals %d; AI lost ~%d metal of units; commander %s",
+        sd, alive, n, math.floor(t), alive > 0 and lv / alive or 0, gen, lost, tm.commander.alive and "alive" or "dead"))
+    end
+    return
+  end
   if os.getenv("PA_DENY") then
     -- Arena: right-click your own creep. Above 35% the hero waits on it (no repair, no guard);
     -- below 35% he takes the last hit

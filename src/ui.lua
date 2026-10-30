@@ -1610,7 +1610,7 @@ end
 local ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
-  { "hold", "Hold", "D", "Hold fire: selected units stop shooting while you hold D (or until you click again), so you can time the killing shot." },
+  { "hold", "Hold", "D", "Hold ground: selected units stop where they are and fire at anything in range, but never chase or move toward attackers. Any new order releases them." },
   { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet. Constructors: drag a circle to make a repair zone - they stay and fix everything of yours inside it." },
   { "flee", "Flee", "F", "Retreat to your flag at +25% speed - or, with no flag set, back to the plant that built each unit. Weapons stay OFF until fully repaired." },
   { "fleecmd", "To Cmdr", "Shift+F", "Retreat to the Commander (+25% speed, weapons off until repaired)." },
@@ -1695,6 +1695,7 @@ function UI.orderButtons(game)
   local cohText = {
     flee = { "Flee", "Pull the selection back to your HQ (or your flag, if planted) at +25% speed. Weapons stay off until repaired - the HQ heals fast." },
     cmd = { "Squad", "C: with several squads selected, the next one becomes ACTIVE (gold - Q / W fire its skills). Otherwise: jump to the next squad." },
+    hold = { "Hold", "Hold fire: selected squads stop shooting while you hold D (or until you click again)." },
   }
   for _, o in ipairs(ORDERS) do
     if game.world.squads then
@@ -1731,6 +1732,11 @@ function UI.drawOrders(game)
     if b.action == "follow" and game.follow then active = true end
     if b.action == "help" and game.showHelp then active = true end
     if b.action == "hold" and game.holdingFire then active = true end
+    if b.action == "hold" and game.world.rtsTune then
+      local any = false
+      for _, e in ipairs(game:selectedMobile()) do if e.holdGround then any = true end end
+      active = any
+    end
     local a = b.on and 1 or 0.35
     if active then lg.setColor(0.18, 0.4, 0.28, a)
     elseif hv and b.on then lg.setColor(0.22, 0.3, 0.4, a)
@@ -1888,7 +1894,7 @@ Orders (hold Shift to queue)
   P then click .............. patrol
   Hold G + click ............ group move (everyone keeps the slowest unit's pace)
   S ......................... stop
-  Hold D .................... hold fire (selected units stop shooting until you let go)
+  D ......................... hold ground: stop, fire at anything in range, never chase (any order releases)
   F ......................... retreat to your flag (+25% speed, weapons OFF until fully repaired; can't be cancelled)
   Shift+F ................... retreat to the Commander
   Ctrl+F .................... plant the retreat flag at the mouse
@@ -1945,7 +1951,7 @@ Jungle (Treeline / Battlefield maps): neutral camps give XP (they only fight bac
 Your Commander
   Right-click ............... move / attack        A then click ... attack-move
   S ......................... stop                 F .............. flee home (+50% speed, can't be cancelled)
-  Hold D .................... hold fire, to time last hits.  Right-click your own creep under 35% health: DENY it
+  Hold D .................... hold fire, to time last hits.  Right-click your own creep: shoot it (DENY it)
   Creeps level up as a side (up to 5) from enemy creeps they kill - a deny keeps that kill from the enemy.
   The CREEPS panel (right) shows each side's creep level, the bar to the next, and its denies.
   Q W E ..................... your skills, cast at the mouse (or click the button, then the map)

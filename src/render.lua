@@ -514,6 +514,14 @@ end
 
 function R.drawHealth(e, show)
   local d = e.def
+  if e.holdGround and e.alive then
+    -- holding ground: a small gold anchor bar under the unit
+    local lg0 = love.graphics
+    lg0.setColor(1, 0.82, 0.3, 0.95)
+    lg0.setLineWidth(3)
+    lg0.line(e.x - 7, e.y + d.radius + 6, e.x + 7, e.y + d.radius + 6)
+    lg0.setLineWidth(1)
+  end
   local frac = e.hp / e.maxhp
   if not show and frac > 0.995 then return end
   local w = d.building and d.w * D.TILE * 0.8 or math.max(22, d.radius * 2.4)

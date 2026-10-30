@@ -893,6 +893,7 @@ function G:orderAction(action, shift)
     return self:useSkill(slot)
   end
   if action == "home" then return self:goHome() end
+  if action == "hold" and self.world.rtsTune then return self:holdGround() end
   if action == "hold" then
     self.holdToggle = not self.holdToggle
     self:notice(self.holdToggle and "Holding fire (click Hold again or press D to release)" or "Weapons free", 1.5)
@@ -929,6 +930,7 @@ end
 -- Hold fire: while D is held (or the Hold button is on), your selected units - in the
 -- Arena, your Commander - don't shoot, so you can time the killing shot
 function G:updateHoldFire()
+  if self.world.rtsTune then self.holdingFire = false; return end -- (Annihilation: D holds ground instead)
   local on = self.holdToggle or (not self.naming and love.keyboard.isDown("d"))
   local want = {}
   if on then
@@ -1020,6 +1022,21 @@ function G:selfDestruct()
   self.selected = {}
   VOICE.say("self_destruct")
   self:notice(#list == 1 and "Self-destructed" or (#list .. " self-destructed"), 1.2)
+end
+
+-- Annihilation, D: the selection holds its ground - stops where it stands, shoots anything in
+-- range, never chases or walks toward whatever shoots it. Any new order releases it.
+function G:holdGround()
+  local n = 0
+  for _, u in ipairs(self:selectedMobile()) do
+    if u.def.weapon and not self.world:isFleeing(u) then
+      u.orders, u.path, u.chase, u.kite = {}, nil, nil, nil
+      u.homeX, u.homeY = u.x, u.y
+      u.holdGround = true
+      n = n + 1
+    end
+  end
+  if n > 0 then self:notice(string.format("%d unit%s holding ground: they fire at anything in range but won't move. Any order releases them.", n, n == 1 and "" or "s"), 2) end
 end
 
 function G:stop()
@@ -2174,6 +2191,7 @@ function G:keypressed(key)
     self:pickUpgrade(key == "z" and 1 or 2)
     return
   end
+  if key == "d" and self.world.rtsTune and not self.naming then self:holdGround(); return end
   if key == "d" and self.holdToggle then self.holdToggle = false end
   if self.world.squads and (key == "q" or key == "w") then self:squadSkill(key == "q" and 1 or 2); return end
   if self.craft then

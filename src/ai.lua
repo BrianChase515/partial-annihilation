@@ -1628,10 +1628,27 @@ function AI:thinkArmy()
     if #u.orders == 0 and u.key ~= "scout" and not (self.alienSquad and self.alienSquad[u]) then
       local dom = (u.def.domain == "sea" or u.def.domain == "sub") and "sea" or u.def.domain
       local tx, ty = self:pickTarget(dom)
+      local fell = false
+      -- (v2) what's left of a wave doesn't walk into the guns one at a time: if what's ahead
+      -- clearly outguns the survivors around it, they fall back to the staging point and join the
+      -- next wave (level 5 doesn't always notice; from 7 it nearly always does)
+      if tx and self.isV2 and dom == "land" and self.rng:random() < math.min(1, 0.55 + 0.1 * ((self.level or 5) - 5)) then
+        local mineNear = self:strengthNear(u.x, u.y, 450, false)
+        local theirsAt = self:strengthNear(tx, ty, 500, true)
+        if theirsAt > mineNear * 1.4 + 200 then
+          self.wave[u] = nil
+          world:issue(u, { type = "move", x = self.stageX + self.rng:random(-120, 120), y = self.stageY + self.rng:random(-120, 120) })
+          if world.time - (self.fallNoted or -99) > 30 then
+            self.fallNoted = world.time
+            Tel.note(world, "wave", self.team, "the wave is spent against what's there: survivors fall back to join the next one")
+          end
+          tx, fell = nil, true
+        end
+      end
       if tx then
         local j = dom == "sea" and 20 or 60
         world:issue(u, { type = "amove", x = tx + self.rng:random(-j, j), y = ty + self.rng:random(-j, j) })
-      else
+      elseif not fell then
         self.wave[u] = nil -- nothing reachable: go home
         world:issue(u, { type = "move", x = u.homeX, y = u.homeY })
       end
