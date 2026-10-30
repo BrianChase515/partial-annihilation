@@ -492,7 +492,7 @@ function W:placeDropTowers(t, x, y, n)
         for dx = -r, r do
           if not done and (math.abs(dx) == r or math.abs(dy) == r) and self:canPlace("turret", tx0 + dx, ty0 + dy, t, "land")
             and not map.deposit[map:idx(tx0 + dx, ty0 + dy)] then
-            self:spawn("turret", t, (tx0 + dx + 0.5) * T, (ty0 + dy + 0.5) * T, 1)
+            self:spawn("basetower", t, (tx0 + dx + 0.5) * T, (ty0 + dy + 0.5) * T, 1)
             done = true
           end
         end

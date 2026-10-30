@@ -337,6 +337,18 @@ D.units = {
     cost = { metal = 95, energy = 750, work = 78 },
     desc = "Defensive tower: a gun for land units and ships, and a flak mount for aircraft. Hits Commanders 2.5x as hard: a Commander needs support to take a base with towers, and a hurt one is safe under its own.",
   },
+  basetower = {
+    -- (Annihilation) the two towers the drop pod sets down at the start point: a better tower
+    -- than you can build, so a Commander who has to run home early isn't simply chased down
+    -- and killed there - the first retreat shouldn't end the game. Not buildable.
+    name = "Garrison Tower", short = "G", domain = "building", building = true,
+    w = 1, h = 1, place = "land", hp = 2400, sight = 440,
+    weapon = { damage = 42, range = 370, reload = 0.5, speed = 700, targets = { land = true, sea = true } },
+    aaWeapon = { damage = 34, range = 390, reload = 0.5, speed = 950, splash = 40, targets = { air = true } },
+    antiCommander = true,
+    cost = { metal = 150, energy = 1000, work = 1 },
+    desc = "Set down by the drop pod at your start point: tougher, longer-ranged and harder-hitting than a Defense Tower, with a flak mount. It can't be built - it's there so a Commander who flees home early has somewhere safe to stand.",
+  },
   aaturret = {
     -- (retired: the Defense Tower does both now. Kept so older saves and tools still load)
     name = "AA Tower", short = "A", domain = "building", building = true,

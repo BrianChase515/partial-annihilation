@@ -719,7 +719,7 @@ function AI2:goForTheKill()
             dps = dps + wpn.damage * (1 + 0.15 * (u.level or 0)) / wpn.reload
           end
           local towers = 0
-          w:query(e.x, e.y, 420, function(t) if t.alive and t.key == "turret" and t.team == e.team and t.built >= 1 then towers = towers + 1 end end)
+          w:query(e.x, e.y, 420, function(t) if t.alive and (t.key == "turret" or t.key == "basetower") and t.team == e.team and t.built >= 1 then towers = towers + 1 end end)
           local net = dps * (1 - 0.08 * towers) - regen
           local ttk = net > 0 and e.hp / net or 999
           if ttk > 12 then

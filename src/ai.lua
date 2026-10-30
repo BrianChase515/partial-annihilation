@@ -719,7 +719,7 @@ function AI:thinkEconomy()
   local yards = self:countPlanned("shipyard")
   local mexes = self:countPlanned("mex")
   local solars = self:countPlanned("solar")
-  local turrets = self:countPlanned("turret")
+  local turrets = self:countPlanned("turret") + #self:mine(function(e) return e.key == "basetower" end)
   local aas = self:countPlanned("aaturret")
   local storages = self:countPlanned("storage")
   local factories = landfacs + airfacs + yards
@@ -896,7 +896,7 @@ function AI:fortSite(key, bx, by)
   local world = self.world
   local map = world.map
   if self.fortWhere == "outpost" then
-    local towers = self:mine(function(e) return e.key == "turret" or e.key == "aaturret" end)
+    local towers = self:mine(function(e) return e.key == "turret" or e.key == "aaturret" or e.key == "basetower" end)
     local best, bd
     for _, m in ipairs(self:mine(function(e) return e.key == "mex" and e.built >= 1 end)) do
       local d = U.dist(m.x, m.y, self.baseX, self.baseY)

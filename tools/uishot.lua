@@ -503,6 +503,48 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_GARRISON") then
+    -- a hurt Commander home at his drop point, an enemy Commander and 4 tanks on his heels:
+    -- the two Garrison Towers vs two ordinary Defense Towers in the same spots
+    for _, kind in ipairs({ "turret", "basetower" }) do
+      local res = {}
+      for trial = 1, 6 do
+        game = startFn({ size = 96, water = 0.2, seed = 4 + trial, autotest = true })
+        game.ais = {}
+        local w = game.world
+        w.noFog = true
+        local tm = w.teams[1]
+        local c = tm.commander
+        local spots = {}
+        for _, e in ipairs(w.entities) do
+          if e.alive and e.team == 1 and e.key == "basetower" then spots[#spots + 1] = { e.x, e.y }; e.alive = false end
+        end
+        for _, sp in ipairs(spots) do w:spawn(kind, 1, sp[1], sp[2], 1) end
+        w:rebuildGrid()
+        c.hp = c.maxhp * 0.45
+        local ec = w.teams[2].commander
+        local map = w.map
+        local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+        local nx0, ny0 = U.norm(cx - tm.startX, cy - tm.startY)
+        local tx, ty = map:tileAt(tm.startX + nx0 * 520, tm.startY + ny0 * 520)
+        local fx, fy = map:nearestTile(tx, ty, function(a2, b2) return map:passable("land", a2, b2) and not map.blocked[b2 * map.w + a2] end, 20)
+        local ax, ay = map:center(fx, fy)
+        ec.x, ec.y = ax, ay
+        c.x, c.y = tm.startX + nx0 * 60, tm.startY + ny0 * 60
+        local tanks = {}
+        for k = 1, 4 do tanks[k] = w:spawn("tank", 2, ax + 20 * (k - 2), ay + 20 * (k % 2)); w:issue(tanks[k], { type = "amove", x = c.x, y = c.y }) end
+        w:issue(ec, { type = "amove", x = c.x, y = c.y })
+        local t = 0
+        while t < 60 and c.alive do w:update(1 / 30); t = t + 1 / 30 end
+        local tl = 0
+        for _, u in ipairs(tanks) do if u.alive then tl = tl + 1 end end
+        res[#res + 1] = string.format("%s (enemy cmd %d%%, tanks left %d)", c.alive and ("lives " .. math.floor(c.hp / c.maxhp * 100) .. "%") or string.format("dies at %.0fs", t),
+          ec.alive and math.floor(ec.hp / ec.maxhp * 100) or 0, tl)
+      end
+      print("GARRISON " .. kind .. ": " .. table.concat(res, "  |  "))
+    end
+    return
+  end
   if os.getenv("PA_SCOREBOARD") then
     -- the scoreboard's Commander rows: level, progress bar (red toward a nuke level), nuke badge
     game = startFn({ size = 96, water = 0.2, seed = 5, autotest = true, enemies = 3 })

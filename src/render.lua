@@ -143,10 +143,17 @@ function R.drawEntity(e, cam, selected)
         end
       end
       -- the picture first, so a turret's barrel draws on top of it
-      local drewIcon = zoom >= 0.3 and ICONS.has(e.key) and e.key ~= "powercore"
+      local iconKey = e.key == "basetower" and "turret" or e.key
+      local drewIcon = zoom >= 0.3 and ICONS.has(iconKey) and e.key ~= "powercore"
       if drewIcon then
         lg.setColor(1, 1, 1, 0.9)
-        ICONS.draw(e.key, x, y, math.min(d.w, d.h) * D.TILE * (d.weapon and 0.6 or 0.7))
+        ICONS.draw(iconKey, x, y, math.min(d.w, d.h) * D.TILE * (d.weapon and 0.6 or 0.7))
+      end
+      if e.key == "basetower" then
+        -- the Garrison Tower: a gold frame, like the Commander's, so it reads as his guard
+        lg.setColor(1, 0.85, 0.3, 0.95)
+        lg.setLineWidth(2.5)
+        lg.rectangle("line", x - w / 2 - 3, y - h / 2 - 3, w + 6, h + 6, 4)
       end
       if d.weapon then
         local a = e.angle or 0
