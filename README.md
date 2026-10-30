@@ -148,7 +148,7 @@ Each Commander arrives in a drop pod. The wreck stays where he landed, and that'
 
 ### Towers stop Commanders
 
-Every side starts with two **Garrison Towers** at its drop point (gold-framed): better than any tower you can build - tougher, with longer range (370 against 300) and harder-hitting guns and flak - so a Commander who has to flee home early has somewhere to stand, and the first retreat doesn't end the game. They can't be rebuilt. A base that loses them - or a player who leads the enemy home - is still fair game.
+Every side starts with two **Garrison Towers** at its drop point (gold-framed): better than any tower you can build - tougher, with longer range (350 against 300) and harder-hitting guns and flak - so a Commander who has to flee home early has somewhere to stand, and the first retreat doesn't end the game. They can't be rebuilt. A base that loses them - or a player who leads the enemy home - is still fair game.
 
 Fights start early and in the open, but walking your Commander into a defended base isn't free: Defense Towers hit Commanders 2.5x as hard. A Commander needs support to crack a base with towers, and a hurt Commander (or units that fled home) is safe under its own. Towers are cheap (95 metal), carry a flak mount as well (one tower covers a base from tanks and aircraft alike) and outrange scouts, tanks and the Commander - so an unguarded extractor is still a scout's dinner, and guarding one is a choice.
 

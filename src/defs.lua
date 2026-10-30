@@ -342,9 +342,9 @@ D.units = {
     -- than you can build, so a Commander who has to run home early isn't simply chased down
     -- and killed there - the first retreat shouldn't end the game. Not buildable.
     name = "Garrison Tower", short = "G", domain = "building", building = true,
-    w = 1, h = 1, place = "land", hp = 2400, sight = 440,
-    weapon = { damage = 42, range = 370, reload = 0.5, speed = 700, targets = { land = true, sea = true } },
-    aaWeapon = { damage = 34, range = 390, reload = 0.5, speed = 950, splash = 40, targets = { air = true } },
+    w = 1, h = 1, place = "land", hp = 2000, sight = 420,
+    weapon = { damage = 38, range = 350, reload = 0.5, speed = 700, targets = { land = true, sea = true } },
+    aaWeapon = { damage = 32, range = 370, reload = 0.55, speed = 950, splash = 38, targets = { air = true } },
     antiCommander = true,
     cost = { metal = 150, energy = 1000, work = 1 },
     desc = "Set down by the drop pod at your start point: tougher, longer-ranged and harder-hitting than a Defense Tower, with a flak mount. It can't be built - it's there so a Commander who flees home early has somewhere safe to stand.",
