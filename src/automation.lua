@@ -29,8 +29,8 @@ A.RULES = {
 }
 A.JOBS = {
   repair = { label = "Repair", desc = "Fix damaged units and buildings near it (costs resources)." },
-  expand = { label = "Expand", desc = "Claim the nearest free metal deposit (skips ones with enemies near)." },
-  power = { label = "Power", desc = "Energy running low: build a solar collector at home." },
+  expand = { label = "Expand", desc = "Claim the nearest free metal deposit by the walk there (Sea Constructors: offshore). Skips ones with enemies near." },
+  power = { label = "Power", desc = "Energy running low: build a solar collector at home (Sea Constructors: a tidal generator)." },
 }
 A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin = 2, repair = false, expand = false, power = false,
   idleOrder = "repair,expand,power" }
@@ -162,8 +162,11 @@ function A.doJob.expand(game, w, team, u)
   local best, bd
   -- the closest by the walk, not as the crow flies: a deposit just across the water can be the
   -- longest trip on the map
+  -- (a Sea Constructor claims offshore metal, by the sailing distance)
+  local sea = u.key == "seabuilder"
+  local layer = sea and "sea" or "land"
   local utx, uty = map:tileAt(u.x, u.y)
-  local walk = map:walkDistances("land", utx, uty, math.floor(2400 / w.T))
+  local walk = map:walkDistances(layer, utx, uty, math.floor(2400 / w.T))
   local function walkTo(tx, ty)
     local m
     for dy = -1, 1 do for dx = -1, 1 do
@@ -173,7 +176,7 @@ function A.doJob.expand(game, w, team, u)
     return m
   end
   for _, dp in ipairs(map.deposits) do
-    if not dp.sea and not taken[dp.y * map.w + dp.x] and w:canPlace("mex", dp.x, dp.y, team, "land") then
+    if (dp.sea and true or false) == sea and not taken[dp.y * map.w + dp.x] and w:canPlace("mex", dp.x, dp.y, team, layer) then
       local x, y = map:center(dp.x, dp.y)
       local wd = walkTo(dp.x, dp.y)
       local d = wd and (wd * w.T) ^ 2 or nil
@@ -193,20 +196,24 @@ end
 function A.doJob.power(game, w, team, u)
   local tm = w.teams[team]
   if not (tm.energy < tm.eStore * 0.3 or (tm.stalled and (tm.eRatio or 1) < 0.95)) then return end
-  -- one solar at a time
+  -- (a Sea Constructor builds tidal generators, on the water near where it is)
+  local sea = u.key == "seabuilder"
+  local key, layer = sea and "tidal" or "solar", sea and "sea" or "land"
+  -- one at a time
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == team then
-      if e.key == "solar" and (e.built or 1) < 1 then return end
-      for _, o in ipairs(e.orders or {}) do if o.type == "build" and o.key == "solar" then return end end
+      if (e.key == "solar" or e.key == "tidal") and (e.built or 1) < 1 then return end
+      for _, o in ipairs(e.orders or {}) do if o.type == "build" and (o.key == "solar" or o.key == "tidal") then return end end
     end
   end
   local map = w.map
   local sx, sy = map:tileAt(tm.startX, tm.startY)
-  for r = 3, 16 do
+  if sea then sx, sy = map:tileAt(u.x, u.y) end
+  for r = sea and 1 or 3, 16 do
     for dy = -r, r do
       for dx = -r, r do
-        if (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace("solar", sx + dx, sy + dy, team, "land") then
-          w:issue(u, { type = "build", key = "solar", tx = sx + dx, ty = sy + dy })
+        if (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace(key, sx + dx, sy + dy, team, layer) then
+          w:issue(u, { type = "build", key = key, tx = sx + dx, ty = sy + dy })
           return true
         end
       end
@@ -290,7 +297,7 @@ function A.update(game, dt)
         w:issue(u, { type = "amove", x = tx + math.random(-60, 60), y = ty + math.random(-60, 60) })
       end
       -- 4. idle constructors: the first job (in the player's order) that has something to do
-      if slow and u.key == "builder" and #u.orders == 0 and (v.repair or v.expand or v.power) then
+      if slow and (u.key == "builder" or u.key == "seabuilder") and #u.orders == 0 and (v.repair or v.expand or v.power) then
         for _, job in ipairs(A.jobOrder()) do
           if v[job] and A.doJob[job](game, w, team, u) then break end
         end

@@ -1035,7 +1035,9 @@ function W:repairZones()
   end
   local healers = {}
   for _, e in ipairs(self.entities) do
-    if e.alive and e.built >= 1 and (e.key == "commander" or e.def.factory) then healers[#healers + 1] = e end
+    -- (Annihilation: only finished plants and shipyards repair - the Commander doesn't, unless
+    -- he has the Repair Aura)
+    if e.alive and e.built >= 1 and ((e.key == "commander" and not self.rtsTune) or e.def.factory) then healers[#healers + 1] = e end
   end
   for _, u in ipairs(self.entities) do
     if u.alive and not u.def.building and u.hp < u.maxhp and self.time - (u.lastHit or -99) > 4

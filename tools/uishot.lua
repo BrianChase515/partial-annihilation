@@ -503,6 +503,62 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_SEAAUTO") then
+    -- a Sea Constructor with Auto expand/power on; and repair: unfinished plant vs finished, Commander
+    local A = require("src.automation")
+    A.v.expand, A.v.power, A.v.repair = true, true, false
+    game = startFn({ size = 112, water = 0.4, seed = 7, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local map = w.map
+    local tm = w.teams[1]
+    local sx, sy
+    for r = 2, 40 do
+      for _ = 1, 40 do
+        local tx, ty = math.floor(tm.startX / w.T) + math.random(-r, r), math.floor(tm.startY / w.T) + math.random(-r, r)
+        if map:passable("sea", tx, ty) then sx, sy = map:center(tx, ty); break end
+      end
+      if sx then break end
+    end
+    local sb = w:spawn("seabuilder", 1, sx, sy)
+    game.opts.autotest = false
+    for _ = 1, 30 do game:update(1 / 30) end
+    local o = sb.orders[1]
+    local isSea
+    for _, dp in ipairs(map.deposits) do if o and o.tx == dp.x and o.ty == dp.y then isSea = dp.sea and true or false end end
+    print("SEAAUTO expand: " .. tostring(o and o.type) .. " " .. tostring(o and o.key) .. " - an offshore deposit? " .. tostring(isSea) .. "; terrain there " .. tostring(o and map.terrain[o.ty * map.w + o.tx]))
+    sb.orders = {}
+    A.v.expand = false
+    tm.energy = 0
+    A.timer = 0
+    for _ = 1, 30 do game:update(1 / 30) end
+    o = sb.orders[1]
+    print("SEAAUTO power (energy empty): " .. tostring(o and o.type) .. " " .. tostring(o and o.key))
+    game.opts.autotest = true
+    A.v.power = false
+    -- repair: a hurt tank by an unfinished plant, one by a finished plant, one by the Commander
+    local c = tm.commander
+    local function hurt(x, y) local u = w:spawn("tank", 1, x, y); u.hp = u.maxhp * 0.5; u.lastHit = -99; return u end
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    local function spot(dx)
+      local tx, ty = map:tileAt(cx + dx, cy)
+      local nx, ny = map:nearestTile(tx, ty, function(a2, b2) return w:canPlace("landfac", a2, b2, 1, "land") end, 30)
+      return nx, ny
+    end
+    local ax, ay = spot(-600)
+    local unfinished = w:spawn("landfac", 1, (ax + 1) * w.T, (ay + 1) * w.T, 0.3)
+    local bx, by = spot(600)
+    local done = w:spawn("landfac", 1, (bx + 1) * w.T, (by + 1) * w.T, 1)
+    w:rebuildGrid()
+    local u1 = hurt(unfinished.x + 120, unfinished.y)
+    local u2 = hurt(done.x + 120, done.y)
+    local u3 = hurt(c.x + 80, c.y)
+    local m0 = tm.metal
+    for _ = 1, 30 * 10 do w:update(1 / 30) end
+    print(string.format("SEAAUTO repair after 10s: by an unfinished plant %d%%, by a finished plant %d%%, by the Commander %d%%",
+      u1.hp / u1.maxhp * 100, u2.hp / u2.maxhp * 100, u3.hp / u3.maxhp * 100))
+    return
+  end
   if os.getenv("PA_WALKEXP") then
     -- builders standing by the shore: does Auto's expand pick the closest deposit by the walk?
     local A = require("src.automation")

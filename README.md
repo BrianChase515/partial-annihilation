@@ -113,7 +113,7 @@ The result screen names the personality you faced; the match log has its map rea
 
 ### Fight early, decide late
 
-Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up and a level-5 unit becomes a named General (towers rank up at half speed, stop at level 3 and never become Generals, so a ring of them can't snowball off whatever walks in) - each rank gives +10% health, +10% damage and +5% fire rate, but ranking up doesn't repair a unit and Generals don't patch themselves up in the field: fleeing home to repair is how veterans stay alive. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
+Annihilation is tuned for about 12 minutes on a medium map with some water (less on small dry maps, more on big wet ones), with the first fighting before 2:30. The economy is rich (extractors +2.4 metal, solar +21 energy), and units and buildings are twice as tough as their base numbers (the Commander 1.5x), so fights last long enough to retreat, reinforce and decide. Veterans rank up and a level-5 unit becomes a named General (towers rank up at half speed, stop at level 3 and never become Generals, so a ring of them can't snowball off whatever walks in) - each rank gives +10% health, +10% damage and +5% fire rate, but ranking up doesn't repair a unit and Generals don't patch themselves up in the field: fleeing home to repair is how veterans stay alive. Finished plants and shipyards repair your units near them once they're out of the fight (the Commander doesn't, unless he has the Repair Aura), and every repair costs resources - half the unit's price for a full repair, out of your income as it heals - so patching up a whole army grinds down an economy that isn't ready for it. The Commander learns from his own kills and from what his army kills near him (within 600), so leading from the front is how he reaches level 5 and the nuke - about every other game.
 
 ### Priority orders, packed bases, nothing left half-built
 
@@ -132,9 +132,10 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
 - **Repaired units rejoin** the fight where they fled from once they're whole again. (A unit that fled somewhere nothing can repair it gets its guns back after 8 seconds.)
 - **Keep constructors**: below the minimum, a vehicle plant builds one next, without interrupting what it's making (and Repeat won't copy it).
 - **When a constructor is idle** - never overriding an order you gave, and never the Commander - it does the first of these jobs that's switched on and has work, in the order you drag them into:
-  - **Repair** damaged units and buildings near it (repairs cost resources: 30% of the price for a full repair)
+  - **Repair** damaged units and buildings near it
   - **Expand**: claim the nearest free metal deposit - nearest by the walk there, so a deposit just across water doesn't win - skipping any with enemies next to it
   - **Power**: when energy runs low, build a solar collector at home (one at a time)
+  - Sea Constructors take the same jobs on the water: Expand claims the nearest offshore deposit (by sailing distance), Power builds a tidal generator nearby, and Repair fixes ships
 
 The button turns green while any of them is on. Annihilation only.
 
