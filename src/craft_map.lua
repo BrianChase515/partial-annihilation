@@ -25,10 +25,100 @@ function CM.generate(opts)
     local list = { "horseshoe", "classic", "temple", "isles", "glade", "wild" }
     t = list[love.math.newRandomGenerator(opts.seed or os.time()):random(#list)]
   end
-  if t == "horseshoe" then return CM.horseshoe(opts) end
-  if t == "classic" then opts.classic = true; return CM.horseshoe(opts) end
-  if t == "cross" then return CM.quad(opts) end
-  return CM.carved(opts, t)
+  local m, sym
+  if t == "horseshoe" then m, sym = CM.horseshoe(opts), "mirror"
+  elseif t == "classic" then opts.classic = true; m, sym = CM.horseshoe(opts), "mirror"
+  elseif t == "cross" then return CM.quad(opts)
+  else m, sym = CM.carved(opts, t), "rotate" end
+  CM.addCamps(m, opts, t, sym)
+  return m
+end
+
+-- More creep camps: most maps were built with three (two small, one big in the middle), which
+-- left long quiet stretches between fights. "plenty" (the default) adds small and medium camps
+-- on open ground along the routes and by the expansions, always in the same places on a given
+-- map; "random" adds as many, placed differently every game; "classic" keeps the designed ones.
+-- Every extra camp has a twin on the other side (mirrored or rotated, like the map itself), so
+-- neither player gets more to hunt.
+CM.CAMP_TARGET = 11
+function CM.addCamps(self, opts, template, sym)
+  local mode = opts.camps or "plenty"
+  if mode == "classic" or #self.camps >= CM.CAMP_TARGET - 1 then return end
+  local w, h = self.w, self.h
+  local terrain = self.terrain
+  local function twin(x, y)
+    if sym == "mirror" then return w - 1 - x, y end
+    return w - 1 - x, h - 1 - y
+  end
+  -- fixed per map for "plenty"; this game's seed for "random"
+  local hseed = 0
+  for i = 1, #template do hseed = hseed * 31 + template:byte(i) end
+  local rng = love.math.newRandomGenerator(mode == "random" and ((self.seed or 1) + 977) or (hseed % 1000003 + 11))
+  local function openAround(x, y, r)
+    local open, tot = 0, 0
+    for yy = y - r, y + r do for xx = x - r, x + r do
+      tot = tot + 1
+      local t = terrain[yy * w + xx]
+      if t == M.LAND or t == M.HILL then open = open + 1 end
+    end end
+    return open / tot
+  end
+  local campGap = 11
+  local function farFrom(x, y)
+    for _, hl in ipairs(self.halls or {}) do if U.dist(x, y, hl.x + 2, hl.y + 2) < 17 then return false end end
+    for _, mn in ipairs(self.mines or {}) do if U.dist(x, y, mn.x + 1, mn.y + 1) < 7 then return false end end
+    for _, cp in ipairs(self.camps) do if U.dist(x, y, cp.x, cp.y) < campGap then return false end end
+    return true
+  end
+  local want = math.ceil((CM.CAMP_TARGET - #self.camps) / 2)
+  local added = 0
+  -- strict first (wide clearings, well spread); on cramped maps (lots of water) a second,
+  -- looser pass fills in so every map still gets its share
+  for pass, need in ipairs({ 0.7, 0.5 }) do
+  if pass == 2 then campGap = 9 end
+  -- candidates: open ground (a clearing, not deep forest or water), clear of bases, mines and camps
+  local cands = {}
+  for y = 7, h - 8, 2 do
+    for x = 7, w - 8, 2 do
+      if openAround(x, y, 3) >= need and farFrom(x, y) then
+        local tx, ty = twin(x, y)
+        if U.dist(x, y, tx, ty) >= 11 and openAround(tx, ty, 3) >= need and farFrom(tx, ty) then cands[#cands + 1] = { x, y } end
+      end
+    end
+  end
+  while added < want and #cands > 0 do
+    -- spread them out: pick among the candidates furthest from every camp so far
+    local scored = {}
+    for i, c in ipairs(cands) do
+      local d = 1e9
+      for _, cp in ipairs(self.camps) do d = math.min(d, U.dist(c[1], c[2], cp.x, cp.y)) end
+      scored[#scored + 1] = { i = i, d = d + rng:random() * 6 }
+    end
+    table.sort(scored, function(a, b) return a.d > b.d end)
+    local pickI = scored[rng:random(math.min(3, #scored))].i
+    local c = table.remove(cands, pickI)
+    local x, y = c[1], c[2]
+    if farFrom(x, y) then
+      local tx, ty = twin(x, y)
+      if farFrom(tx, ty) then
+        -- nearer a base: small; out in the middle ground: medium
+        local dmin = 1e9
+        for _, hl in ipairs(self.halls or {}) do dmin = math.min(dmin, U.dist(x, y, hl.x + 2, hl.y + 2)) end
+        local kind = dmin < 26 and "small" or "medium"
+        for _, p in ipairs({ { x, y }, { tx, ty } }) do
+          self.camps[#self.camps + 1] = { x = p[1], y = p[2], kind = kind, extra = true }
+          -- a small clearing for it (trees only; never water)
+          for yy = p[2] - 2, p[2] + 2 do for xx = p[1] - 2, p[1] + 2 do
+            local i = yy * w + xx
+            if terrain[i] == 4 then terrain[i] = M.LAND; if self.wood then self.wood[i] = nil end end
+          end end
+        end
+        added = added + 1
+      end
+    end
+  end
+  end
+  if added > 0 then self:labelComponents() end
 end
 
 function CM.horseshoe(opts)

@@ -368,10 +368,15 @@ function Menu:craftRects()
     local col, row = (i - 1) % 4, math.floor((i - 1) / 4)
     r[#r + 1] = { x = x0 + col * 130, y = y + 184 + row * 38, w = 126, h = 34, label = "Random (1v1)", cfield = "map", value = 0, active = CS.map == 0, small = true }
   end
+  -- creep camps: the designed ones plus more (fixed spots, or new ones every game), or just the designed ones
+  for i, o in ipairs({ { "Plenty", "plenty" }, { "Plenty, random spots", "random" }, { "Classic (few)", "classic" } }) do
+    r[#r + 1] = { x = x0 + (i - 1) * 174, y = y + 262, w = 170, h = 32, label = o[1], cfield = "camps", value = o[2],
+      active = (CS.camps or "plenty") == o[2], rowLabel = i == 1 and "Creep camps" or nil, small = true, campHover = o[2] }
+  end
   r[#r + 1] = { x = x0, y = y + 138, w = 32, h = 34, label = "-", kind = "clvdown", rowLabel = "Difficulty" }
   r[#r + 1] = { x = x0 + 36, y = y + 138, w = 160, h = 34, label = CS.level .. "  " .. LEVEL_NAMES[CS.level], kind = "lvlabel", clevel = true }
   r[#r + 1] = { x = x0 + 200, y = y + 138, w = 32, h = 34, label = "+", kind = "clvup" }
-  local by = y + 348
+  local by = y + 388
   self.craftStartY = by
   r[#r + 1] = { x = x0, y = by, w = 520, h = 54, label = "START", action = "start" }
   r[#r + 1] = { x = x0, y = by + 62, w = 520, h = 30, label = "How to play  (F1)", action = "help", small = true, link = true }
@@ -387,7 +392,7 @@ function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
   local CMAPS = require("src.craft_map").TEMPLATES
   local twoV = CS.map > 0 and CMAPS[CS.map].players == 4
   lg.printf((twoV and "2v2 with a computer ally (your race) against two enemies (the enemy race). " or "1v1. ") ..
-    "Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 262, 520)
+    "Mine gold, chop wood, mind your food and upkeep, climb three tiers, and bring heroes.", x0, y + 302, 520)
   lg.setFont(R.font(14))
   lg.setColor(0.75, 0.8, 0.65)
   local desc
@@ -411,7 +416,16 @@ function Menu:drawCraftInfo(x0, y, w, h, hoverRace, hoverHero)
   else
     desc = "Destroy every enemy building. Hover a race or hero to read about it."
   end
-  lg.printf(desc, x0, y + 296, 520)
+  lg.printf(desc, x0, y + 336, 520)
+  -- far right: a picture of the map (hovered, or the one picked)
+  do
+    local MT = require("src.mapthumb")
+    local mi = self.hoverMap or CS.map
+    local size = math.min(210, w - (x0 + 905) - 16)
+    if size >= 120 and mi and mi > 0 then
+      MT.draw(MT.craft(CMAPS[mi][1], CS.camps or "plenty"), x0 + 905, y - 8, size, CMAPS[mi][2])
+    end
+  end
   -- right column: the race you picked
   local rc = CS.race > 0 and D.CRAFT.races[CS.race]
   local px = x0 + 580
@@ -1067,6 +1081,19 @@ function Menu:drawArenaInfo(x0, y, w, h, hoverClass, hoverTmpl)
     desc = (tm and tm[3] and (tm[3] .. "  ") or "") .. "Destroy the enemy Core. Hover a class to read about it."
   end
   lg.printf(desc, x0, (self.arenaStartY and self.arenaStartY - 48) or (ty + 4 * 46 + 4), 520)
+  -- far right: a picture of the map (hovered, or the one picked), built as the match would be
+  do
+    local size = math.min(210, w - (x0 + 905) - 16)
+    local ti = hoverTmpl or self.arena.template or 1
+    if size >= 120 and ATEMPLATES[ti] then
+      local ok, o = pcall(self.options, self)
+      if ok and o then
+        o.template = ATEMPLATES[ti][1]
+        local MT = require("src.mapthumb")
+        MT.draw(MT.arena(o, o.template .. ":" .. tostring(o.size) .. ":" .. #(o.players or {})), x0 + 905, y - 8, size, ATEMPLATES[ti][2])
+      end
+    end
+  end
   -- arena high scores and online board
   self.arenaScores = self.arenaScores or require("src.scores").load("arena")
   local hy = y + 5 * 34 + 30
@@ -1319,7 +1346,7 @@ function Menu:options()
         { ally = 1, level = CS.level, race = myRace }, { ally = 2, level = CS.level, race = enemy } }
     end
     return { mode = "craft", size = 88, menuMode = "craft", craftSetup = CS, arenaSetup = self.arena,
-      template = CS.map > 0 and CMAPS[CS.map][1] or "random",
+      template = CS.map > 0 and CMAPS[CS.map][1] or "random", camps = CS.camps or "plenty",
       players = players,
       sizeI = self.size, waterI = self.water, slots = self.slots, mods = {} }
   end

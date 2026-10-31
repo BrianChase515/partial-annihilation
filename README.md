@@ -37,8 +37,15 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Shallow Isles:** islands joined by shallow fords around a lake, with the rich mine on a small middle island.
   - **Serpent Glade:** one long road winding through deep forest past pocket expansions, plus a narrow hunters' trail.
   - **Horseshoe Classic:** a smaller, quicker Horseshoe with only three gold mines: yours, theirs, and the rich one across the contested beach.
-  - **Wildlands:** creep-heavy, with eleven camps guarding every expansion and the roads between them.
+  - **Wildlands:** creep-heavy, with camps guarding every expansion and the roads between them.
   - **Crossroads (2v2):** you and a computer ally against two enemies. Each team is one race, and heroes can repeat across players.
+- **Map previews.** The title screen shows a small picture of the chosen (or hovered) map, for Craft and for the Arena: terrain, bases, gold mines, creep camps, and in the Arena the lanes, towers, shrines and boss pits.
+- **Creep camps everywhere.** Every map has about eleven camps (nine on Crossroads), so there is always something for your heroes to hunt between army fights. The **Creep camps** option on the title screen picks:
+  - **Plenty** (default): the extra camps sit in the same places every time you play that map.
+  - **Plenty, random spots:** the same number, placed somewhere new each game.
+  - **Classic (few):** only the camps the map was designed with.
+  Extra camps go on open ground away from bases and mines, and always come in pairs (one on each side, mirrored or rotated like the map), so the map's layout and fairness never change. Camps nearer a base are small; out in the middle ground they're medium.
+- **The computer creeps too.** Its hero and army go camp-hunting when that is the better use of their time, mostly early on and while the hero is low level.
 - **Melee matters.** Swords, axes and cavalry have to reach their target; ranged units and towers can hit flyers; siege wrecks buildings; casters heal, slow and bloodlust on their own.
 - **A computer opponent (difficulty 1-10)** that works its economy, creeps with its heroes, expands, techs up and attacks. Levels 8-10 also mine 10-30% faster.
 - **Its own soundtrack**: seven fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove, Frostpeak Vigil, Caravan of Sands, The Elven Watch, Siege of Ironhold). Annihilation has its own eight; the Arena mixes the orchestral and fantasy suites.

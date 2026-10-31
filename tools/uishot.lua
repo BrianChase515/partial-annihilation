@@ -504,6 +504,25 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_CAMPS") then
+    for _, t in ipairs({ "horseshoe", "classic", "temple", "isles", "glade", "wild", "cross" }) do
+      local CM = require("src.craft_map")
+      local m = CM.generate({ template = t, seed = 7 })
+      local kinds = {}
+      for _, cp in ipairs(m.camps) do kinds[cp.kind] = (kinds[cp.kind] or 0) + 1 end
+      local l = {} for k, n in pairs(kinds) do l[#l + 1] = n .. " " .. k end
+      table.sort(l)
+      print(string.format("CAMPS %-10s %2d camps (%s), %d mines, map %dx%d", t, #m.camps, table.concat(l, ", "), #m.mines, m.w, m.h))
+    end
+    for _, sd in ipairs({ 31, 47, 63, 5, 9, 12 }) do
+      for _, sz in ipairs({ 72, 96, 112 }) do
+        local m = require("src.craft_map").generate({ seed = sd, size = sz, players = { {}, {} } })
+        io.write(string.format("CAMPS seed %d size %d %s: %d   ", sd, sz, m.template, #m.camps))
+      end
+      print()
+    end
+    return
+  end
   if os.getenv("PA_CRAFTL5") then
     -- Craft AI, level 5 vs level 5: workers, halls, hero level and army at 3 / 6 / 10 minutes,
     -- and when the first fight happens
@@ -524,7 +543,13 @@ local function script(mode, secs)
           end
         end
         local h = w.teams[team].commander
-        return string.format("%dw %dh L%d a%d", wk, halls, h and h.clevel or 0, army)
+        local cleared = 0
+        for _, cp in ipairs(w.craft.camps) do
+          local any = false
+          for _, u in ipairs(cp.units) do if u.alive then any = true end end
+          if not any then cleared = cleared + 1 end
+        end
+        return string.format("%dw %dh L%d a%d", wk, halls, h and h.clevel or 0, army) .. (team == 2 and string.format(" [camps %d/%d cleared]", cleared, #w.craft.camps) or "")
       end
       while t < 600 and not w.over do
         game:update(1 / 30); t = t + 1 / 30
