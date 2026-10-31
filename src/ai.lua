@@ -301,6 +301,12 @@ function AI:bestNukeTarget()
   end
   local best, bx, by
   local step = math.max(1, math.floor(#cands / 120))
+  -- their Commanders: what defends him is worth more - the nuke is how a siege gets in
+  local cmds = {}
+  for t2 = 1, world.np do
+    local c = world.teams[t2].commander
+    if c and c.alive and self:isHostile(t2) then cmds[#cmds + 1] = c end
+  end
   for i = 1, #cands, step do
     local p = cands[i]
     local score = 0
@@ -308,6 +314,10 @@ function AI:bestNukeTarget()
       if o.alive and o.key ~= "commander" and U.dist2(p.x, p.y, o.x, o.y) < R * R then
         local v = cost(o) * (o.def.building and 1 or 0.5)
         if o.def.factory then v = v + 300 end
+        if o.def.building and o.def.weapon then v = v * 2 end -- towers: the wall in the way
+        for _, c in ipairs(cmds) do
+          if U.dist2(o.x, o.y, c.x, c.y) < 700 * 700 then v = v * 1.5; break end
+        end
         if self:isHostile(o.team) then score = score + v
         else score = score - v * 2.5 end
       end
@@ -356,6 +366,10 @@ function AI:thinkCommander()
     if x and score >= (style == "aggressive" and 350 or 600) then
       world:launchNuke(c, x, y)
       self.nextNuke = world.time + 25
+      -- and follow it in: as it lands, everything gathered at home goes for the gap it made
+      local CMD = require("src.commander")
+      self.nukePush = { x = x, y = y, at = world.time + U.dist(c.x, c.y, x, y) / CMD.NUKE_SPEED }
+      Tel.note(world, "nuke", self.team, string.format("nukes their %s and sends the army in behind it", score > 0 and "defences" or "base"))
     end
   end
 
@@ -1700,6 +1714,12 @@ function AI:thinkArmy()
     end
   end
   local launch = #home >= waveSize
+  -- a nuke just landed: go now, into the hole it left
+  local np = self.nukePush
+  if np and not np.done and t >= np.at then
+    np.done, np.untilT = true, t + 60
+    if #home >= 3 then launch = true end
+  end
   if self.pressing and #home >= 4 and t - self.lastWave > 45 then launch = true end
   -- don't wait forever when the army is big but slow to grow
   if not launch and #home >= math.max(5, waveSize * 0.6) and t - self.lastWave > 240 then launch = true end

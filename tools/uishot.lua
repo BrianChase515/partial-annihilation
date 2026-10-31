@@ -503,6 +503,23 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_STALE") then
+    -- the matchup that stalls: Turtle vs Warlord, level 5, up to 25 minutes
+    for _, sd in ipairs({ 3, 7, 11, 19 }) do
+      game = startFn({ size = 112, water = 0.3, seed = sd, autotest = true, level = 5, level1 = 5,
+        profile = "Warlord", profile1 = "Turtle", aiV2Teams = { [1] = true, [2] = true } })
+      local w = game.world
+      local t = 0
+      while t < 1500 and not w.over do game:update(1 / 30); t = t + 1 / 30 end
+      local nukes = {}
+      for _, nt in ipairs(w.tel.notes) do if nt.kind == "nuke" then nukes[#nukes + 1] = string.format("T%d@%d:%02d", nt.team, math.floor(nt.t / 60), math.floor(nt.t % 60)) end end
+      local lv = {}
+      for t2 = 1, 2 do local c = w.teams[t2].commander; lv[t2] = c and c.clevel or 0 end
+      print(string.format("STALE seed %d: %s at %d:%02d; Commander levels T1 (Turtle) %d, T2 (Warlord) %d; nukes %s", sd,
+        w.over and "decided" or "NO WINNER", math.floor(t / 60), math.floor(t % 60), lv[1], lv[2], #nukes > 0 and table.concat(nukes, " ") or "none"))
+    end
+    return
+  end
   if os.getenv("PA_RAIDS") then
     -- level-5 v2 games, 10 minutes: what do scouts kill, and does anyone win early off it?
     local tb, te, tl, packs = 0, 0, 0, 0

@@ -1067,6 +1067,9 @@ end
 function AI2:pickTarget(domain)
   if domain == "sea" then return AI.pickTarget(self, domain) end
   local w = self.world
+  -- for a minute after our nuke lands, its crater is the target
+  local np = self.nukePush
+  if np and np.done and w.time < np.untilT then return np.x + self.rng:random(-60, 60), np.y + self.rng:random(-60, 60) end
   if self.tgtPick and w.time - self.tgtPick.t < 1.5 then return self.tgtPick.x, self.tgtPick.y end
   local P = self.p.w
   local units, buildings = self:enemyUnits()

@@ -366,7 +366,7 @@ require("src.craft_defs")(D)
 -- Commander has to come with support to crack a defended base - and a hurt Commander, or units
 -- that fled home, are safe under their towers. Other buildings don't shoot; towers are cheap.
 D.TOWER_VS_COMMANDER = 2.5
--- what Scouts raid: they hit these twice as hard in Annihilation (see W:damage)
+-- what Scouts raid: they hit these 1.75x as hard in Annihilation (see W:damage)
 D.RAID_TARGETS = { builder = true, seabuilder = true, mex = true, solar = true, tidal = true }
 
 -- Annihilation only: health multipliers for units, buildings and the Commander (Commander of
