@@ -6,13 +6,13 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.28.14"
+D.VERSION = "0.28.15"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 -- each mode's own maturity (the package keeps one version for updates and score seasons)
 D.MODE_VERSIONS = {
-  rts = { "0.10", "Rich economy, Power Core tower, Defense Towers, a real navy; tuned for ~12-minute games." },
+  rts = { "1.0", "Ready: rich economy, Power Core tower, Defense and Garrison Towers, a real navy, Auto standing orders, nukes from level 5 up; tuned for ~12-minute games." },
   arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
   craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
   coh = { "0.4", "Squads, leader skills, capture points and tickets - and War is Hell. Still being balanced." },

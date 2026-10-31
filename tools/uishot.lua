@@ -22,6 +22,7 @@ local function script(mode, secs)
       for _, r in ipairs(menu:rects()) do if r.gametype == os.getenv("PA_GAME") then menu:mousepressed(r.x + 2, r.y + 2, 1) end end
     end
     if os.getenv("PA_MAPI") then menu.craft.map = tonumber(os.getenv("PA_MAPI")) end
+    if os.getenv("PA_FAKEMUSIC") then local M = require("src.music"); M.suite, M.muted = os.getenv("PA_FAKEMUSIC"), false end
     if os.getenv("PA_LEGACY") then
       for _, r in ipairs(menu:rects()) do if r.action == "legacyai" then menu:mousepressed(r.x + 4, r.y + 4, 1) end end
     end

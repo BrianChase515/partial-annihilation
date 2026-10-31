@@ -1001,8 +1001,10 @@ function Menu:draw()
     end
   end
   lg.setColor(0.4, 0.45, 0.52)
-  lg.print("v" .. D.VERSION .. "  (" .. (D.MODE_NAMES[self.mode] or "") .. " " .. ((D.MODE_VERSIONS[self.mode] or {})[1] or "") .. ")", 12, h - 24)
-  UI.drawMusicLabel(80, h - 24, false, true)
+  local ver = "v" .. D.VERSION .. "  (" .. (D.MODE_NAMES[self.mode] or "") .. " " .. ((D.MODE_VERSIONS[self.mode] or {})[1] or "") .. ")"
+  lg.print(ver, 12, h - 24)
+  -- the music label after it, wherever the version text ends (it used to overlap it)
+  UI.drawMusicLabel(12 + lg.getFont():getWidth(ver) + 22, h - 24, false, true)
   lg.setFont(R.font(13))
   lg.setColor(0.5, 0.56, 0.64)
   local tip = self.mode == "arena"
