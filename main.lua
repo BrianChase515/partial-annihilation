@@ -278,6 +278,23 @@ local function runAutotest()
         print(string.format("[%4ds] T%d %s tier%d gold %d (+%d/min) wood %d (+%d/min) food %d/%d workers %d (g%d w%d) | heroes %s | %s",
           world.time, t, tm.race, tm.tier, tm.gold, tm.goldRate or 0, tm.wood, tm.woodRate or 0, tm.foodUsed or 0, tm.foodCap or 0,
           workers, gold, wood, table.concat(heroes, ", "), table.concat(ks, " ")))
+        -- (PA_FINISHDBG: what the AI is doing when the other side is down to its last buildings)
+        local ai = game.ais[t]
+        if os.getenv("PA_FINISHDBG") and ai and ai.armyUnits then
+          local bl = {}
+          for _, e in ipairs(world.entities) do
+            if e.alive and e.def.building and e.team and e.team > 0 and world:hostile(e.team, t) then bl[#bl + 1] = string.format("%s@%d,%d", e.key, e.x, e.y) end
+          end
+          if #bl <= 8 then
+            local cx, cy, n = 0, 0, 0
+            for _, u in ipairs(ai:armyUnits()) do cx, cy, n = cx + u.x, cy + u.y, n + 1 end
+            local tgt = n > 0 and ai:attackTarget(cx / n, cy / n)
+            local ords = {}
+            for _, u in ipairs(ai:armyUnits()) do local o = u.orders[1]; ords[#ords + 1] = o and (o.type .. (o.x and string.format("@%d,%d", o.x, o.y) or "")) or "idle" end
+            print(string.format("        FINISHDBG T%d mode %s posture %s army %d at %d,%d target %s | left: %s | orders: %s", t, tostring(ai.mode), tostring(ai.posture), n,
+              n > 0 and cx / n or 0, n > 0 and cy / n or 0, tgt and (tgt.key .. string.format("@%d,%d", tgt.x, tgt.y)) or "none", table.concat(bl, " "), table.concat(ords, ", ")))
+          end
+        end
       end
       io.stdout:flush()
     elseif world.arena and world.time >= nextReport then

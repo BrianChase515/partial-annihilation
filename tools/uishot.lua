@@ -504,6 +504,84 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_LASTBLDS") then
+    -- the enemy is down to a few buildings tucked away in far corners: does the AI find and
+    -- flatten every one of them?
+    for _, sd in ipairs({ 3, 4, 5 }) do
+      game = startFn({ mode = "craft", size = 96, seed = sd, autotest = true,
+        players = { { ally = 1, level = 5, race = "warband" }, { ally = 2, level = 5, race = "vanguard" } } })
+      local w = game.world
+      for _ = 1, 30 * 240 do game:update(1 / 30) end
+      -- wipe team 2 except three farms in odd places
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 2 then e.hp = 0; e.alive = false end end
+      local W, H = w.map.w * w.T, w.map.h * w.T
+      local spots = { { 0.08, 0.92 }, { 0.92, 0.08 }, { 0.5, 0.06 } }
+      local placed = {}
+      for _, sp in ipairs(spots) do
+        -- nearest placeable spot
+        local tx0, ty0 = math.floor(sp[1] * w.map.w), math.floor(sp[2] * w.map.h)
+        local ok
+        for r = 0, 12 do
+          for dy = -r, r do for dx = -r, r do
+            if not ok and w:canPlace("v_farm", tx0 + dx, ty0 + dy, 2) then ok = { tx0 + dx, ty0 + dy } end
+          end end
+          if ok then break end
+        end
+        if ok then
+          local b = w:spawn("v_farm", 2, (ok[1] + 1) * w.T, (ok[2] + 1) * w.T)
+          b.built = 1
+          placed[#placed + 1] = b
+        end
+      end
+      -- and give team 1 a small army
+      local tm = w.teams[1]
+      for k = 1, 6 do w:spawn("grunt", 1, tm.startX + k * 20, tm.startY + 120) end
+      local t = 0
+      while t < 360 and not w.over do game:update(1 / 30); t = t + 1 / 30 end
+      local left = 0
+      for _, b in ipairs(placed) do if b.alive then left = left + 1 end end
+      print(string.format("LASTBLDS seed %d: %d farms placed, %d left, %s after %d:%02d", sd, #placed, left, w.over and "GAME OVER" or "not over",
+        math.floor(t / 60), math.floor(t % 60)))
+      for _, nt in ipairs(w.tel.notes) do if nt.kind == "finish" then print(string.format("LASTBLDS   [%d:%02d] T%d %s", math.floor(nt.t / 60), math.floor(nt.t % 60), nt.team, nt.text)) end end
+    end
+    return
+  end
+  if os.getenv("PA_FINISH") then
+    -- a lopsided Craft game: does the winner finish off the last buildings?
+    local sd = tonumber(os.getenv("PA_FINISH")) or 5
+    game = startFn({ mode = "craft", size = 88, seed = sd, autotest = true,
+      players = { { ally = 1, level = 5, race = "warband", class = "spiritcaller" }, { ally = 2, level = 5, race = "vanguard", class = "warden" } } })
+    local w = game.world
+    local t = 0
+    while t < 1500 and not w.over do
+      game:update(1 / 30); t = t + 1 / 30
+      if t > 600 and math.floor(t * 30) % (30 * 60) == 0 then
+        for team = 1, 2 do
+          local ai = game.ais[team]
+          local bl, fighters = {}, 0
+          for _, e in ipairs(w.entities) do
+            if e.alive and e.team == 3 - team and e.def.building then bl[#bl + 1] = string.format("%s@%d,%d", e.key, e.x, e.y) end
+            if e.alive and e.team == team and not e.def.building and not e.def.worker and e.def.weapon then fighters = fighters + 1 end
+          end
+          if #bl <= 6 then
+            local tg = ai and ai.target
+            print(string.format("FINISH [%d:%02d] T%d mode %s posture %s fighters %d; enemy buildings left: %s", math.floor(t / 60), math.floor(t % 60), team,
+              tostring(ai and ai.mode), tostring(ai and ai.posture), fighters, table.concat(bl, " ")))
+            if ai then
+              local cx, cy, n = 0, 0, 0
+              for _, u in ipairs(ai:armyUnits()) do cx, cy, n = cx + u.x, cy + u.y, n + 1 end
+              if n > 0 then
+                local tgt = ai:attackTarget(cx / n, cy / n)
+                print(string.format("FINISH        army at %d,%d -> target %s %s", cx / n, cy / n, tostring(tgt and tgt.key), tgt and string.format("@%d,%d", tgt.x, tgt.y) or ""))
+              end
+            end
+          end
+        end
+      end
+    end
+    print(string.format("FINISH seed %d: %s at %d:%02d", sd, w.over and "over" or "NOT over", math.floor(t / 60), math.floor(t % 60)))
+    return
+  end
   if os.getenv("PA_SPIRIT") then
     -- a level-5 hero with a full kit, run by the AI's skill logic, against footmen and riflemen:
     -- how many it kills in 40 seconds and how much health it keeps (Spiritcaller vs others)

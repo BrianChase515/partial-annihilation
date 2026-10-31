@@ -713,6 +713,10 @@ function AI:army(tm)
     -- workers fight back in a pinch against a small raid (they're cheap to replace later)
     return
   end
+  -- 1b. finish it: once they have no army and no hero standing (or no hall and no workers),
+  -- the game is only over when every building of theirs is down. Skip the creeping and the
+  -- waiting and go and knock the rest flat, building by building, with direct attack orders
+  if self:finishOff(fighters) then return end
   local food = 0
   for _, u in ipairs(fighters) do food = food + (u.key == "commander" and 4 or (u.def.cost.food or 0)) end
   local cx, cy = 0, 0
@@ -832,6 +836,75 @@ function AI:army(tm)
       w:issue(u, { type = "amove", x = hx + self.rng:random(-90, 90), y = hy + self.rng:random(-90, 90) })
     end
   end
+end
+
+-- the enemy is beaten but not finished: every fighter goes for the nearest of their buildings
+-- (skipping one the army hasn't managed to scratch for a while - something in the way)
+function AI:finishOff(fighters)
+  local w = self.world
+  local t = w.time
+  local army, heroes, workers, halls = 0, 0, 0, 0
+  local blds = {}
+  for _, o in ipairs(w.entities) do
+    if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) then
+      if o.def.building then
+        blds[#blds + 1] = o
+        if o.def.hall then halls = halls + 1 end
+      elseif o.key == "commander" then heroes = heroes + 1
+      elseif o.def.worker then workers = workers + 1
+      elseif o.def.weapon then army = army + 1 end
+    end
+  end
+  if #blds == 0 or t < 240 then self.finishing = nil; return false end
+  local beaten = (army == 0 and heroes == 0) or (halls == 0 and workers == 0 and army <= 2)
+  if not beaten then self.finishing = nil; return false end
+  if not self.finishing then
+    self.finishing = { skip = {} }
+    Tel.note(w, "finish", self.team, string.format("they're beaten: knocking down their last %d building%s", #blds, #blds == 1 and "" or "s"))
+  end
+  local F = self.finishing
+  self.mode = "attack"
+  -- the main body's middle
+  local cx, cy = 0, 0
+  for _, u in ipairs(fighters) do cx, cy = cx + u.x, cy + u.y end
+  cx, cy = cx / #fighters, cy / #fighters
+  -- watchdog: the target hasn't lost health in 45 seconds - try another one for a minute
+  local tg = F.target
+  if tg and tg.alive then
+    if tg.hp < (F.hp or 1e9) - 1 then F.hp, F.since = tg.hp, t end
+    -- (still walking there doesn't count)
+    if U.dist(cx, cy, tg.x, tg.y) > 500 then F.since = t end
+    if t - (F.since or t) > 45 then
+      F.skip[tg] = t + 60
+      Tel.note(w, "finish", self.team, string.format("can't get at their %s - trying another building", tg.def.name or tg.key))
+      tg = nil
+    end
+  else tg = nil end
+  if not tg then
+    local bd
+    for _, b in ipairs(blds) do
+      if not (F.skip[b] and F.skip[b] > t) then
+        local d = U.dist(cx, cy, b.x, b.y)
+        if b.def.weapon then d = d * 0.8 end -- towers first: they're shooting back
+        if not bd or d < bd then tg, bd = b, d end
+      end
+    end
+    if not tg then F.skip = {}; tg = blds[1] end
+    F.target, F.hp, F.since = tg, tg.hp, t
+  end
+  for _, u in ipairs(fighters) do
+    local o = u.orders[1]
+    -- (anything fighting back nearby gets dealt with first)
+    local foe = self:enemyNear(u.x, u.y, 300)
+    if foe then
+      if not (o and o.type == "attack" and o.target and o.target.alive) then w:issue(u, { type = "attack", target = foe }) end
+    elseif w:canTarget(u, tg) then
+      if not (o and o.type == "attack" and o.target == tg) then w:issue(u, { type = "attack", target = tg }) end
+    elseif not (o and o.type == "amove" and U.dist(o.x, o.y, tg.x, tg.y) < 200) then
+      w:issue(u, { type = "amove", x = tg.x, y = tg.y })
+    end
+  end
+  return true
 end
 
 function AI:rallyPoint()
