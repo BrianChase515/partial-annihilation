@@ -200,7 +200,7 @@ end
 CU.ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
-  { "hold", "Hold", "D", "Hold fire while D is held (or click to toggle)." },
+  { "hold", "Hold", "D", "Hold ground: the selected units fire at anything in range but won't move (no chasing, no kiting). Any new order releases them." },
   { "guard", "Guard", "U", "Guard: click one of your units (a worker heading out, your hero) - the selected fighters follow it and fight anything that comes near it. Right-clicking a friendly unit does the same." },
   { "patrol", "Patrol", "P", "Patrol back and forth to a spot." },
   { "flee", "Flee", "F", "Selected units retreat to your flag (+25% speed, weapons off until healed). A hero flees to your hall at +50%." },
@@ -304,7 +304,7 @@ Heroes
 Melee units (swords, axes, cavalry) must reach their target; ranged units and towers hit from afar and can
 shoot flyers. Siege (Mortars, Demolishers) wrecks buildings. Casters heal, slow or bloodlust on their own.
 
-  Right-click = move / attack / gather.  A = attack-move,  hold G + click = group move,  S = stop,  hold D = hold fire,  Ctrl+A = army
+  Right-click = move / attack / gather.  A = attack-move,  hold G + click = group move,  S = stop,  D = hold ground,  Ctrl+A = army
   Ctrl+1..9 groups, 1..9 recall.  Space = last attack.  Esc = menu,  F3 = pause,  + / - = game speed
 ]]
 

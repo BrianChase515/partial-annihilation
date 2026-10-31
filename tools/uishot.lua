@@ -504,6 +504,33 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_CRAFTHOLD") then
+    -- Craft: riflemen told to hold ground while grunts charge them - do they stay put?
+    for _, hold in ipairs({ false, true }) do
+      game = startFn({ mode = "craft", size = 96, seed = 8,
+        players = { { ally = 1, level = 5, human = true, race = "vanguard" }, { ally = 2, level = 5, race = "warband" } } })
+      game.ais = {}
+      local w = game.world
+      local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+      local mine = {}
+      for k = 1, 4 do mine[k] = w:spawn("rifleman", 1, cx, cy + (k - 2.5) * 40) end
+      for k = 1, 3 do local g = w:spawn("grunt", 2, cx + 420, cy + (k - 2) * 50); w:issue(g, { type = "amove", x = cx, y = cy }) end
+      local r = w:spawn("headhunter", 2, cx + 520, cy); w:issue(r, { type = "amove", x = cx, y = cy })
+      w:update(1 / 30)
+      game.selected = {}
+      for _, u in ipairs(mine) do game.selected[u] = true end
+      if hold then game:orderAction("hold") end
+      local far = 0
+      for _ = 1, 30 * 20 do
+        game:update(1 / 30)
+        for i, u in ipairs(mine) do if u.alive then far = math.max(far, U.dist(u.x, u.y, cx, cy + (i - 2.5) * 40)) end end
+      end
+      local alive = 0
+      for _, u in ipairs(mine) do if u.alive then alive = alive + 1 end end
+      print(string.format("CRAFTHOLD %s: furthest any rifleman moved from its spot %d px, %d of 4 alive", hold and "HOLD" or "no hold", far, alive))
+    end
+    return
+  end
   if os.getenv("PA_LASTBLDS") then
     -- the enemy is down to a few buildings tucked away in far corners: does the AI find and
     -- flatten every one of them?

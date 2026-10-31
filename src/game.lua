@@ -901,7 +901,7 @@ function G:orderAction(action, shift)
     return self:useSkill(slot)
   end
   if action == "home" then return self:goHome() end
-  if action == "hold" and (self.world.rtsTune or self.world.squads) then return self:holdGround() end
+  if action == "hold" and (self.world.rtsTune or self.world.squads or self.craft) then return self:holdGround() end
   if action == "hold" then
     self.holdToggle = not self.holdToggle
     self:notice(self.holdToggle and "Holding fire (click Hold again or press D to release)" or "Weapons free", 1.5)
@@ -940,7 +940,7 @@ end
 -- Hold fire: while D is held (or the Hold button is on), your selected units - in the
 -- Arena, your Commander - don't shoot, so you can time the killing shot
 function G:updateHoldFire()
-  if self.world.rtsTune or self.world.squads then self.holdingFire = false; return end -- (Annihilation, Commander of Heroes: D holds ground instead)
+  if self.world.rtsTune or self.world.squads or self.craft then self.holdingFire = false; return end -- (Annihilation, Commander of Heroes, Craft: D holds ground instead)
   local on = self.holdToggle or (not self.naming and love.keyboard.isDown("d"))
   local want = {}
   if on then
@@ -2246,7 +2246,7 @@ function G:keypressed(key)
     self:pickUpgrade(key == "z" and 1 or 2)
     return
   end
-  if key == "d" and (self.world.rtsTune or self.world.squads) and not self.naming then self:holdGround(); return end
+  if key == "d" and (self.world.rtsTune or self.world.squads or self.craft) and not self.naming then self:holdGround(); return end
   if key == "d" and self.holdToggle then self.holdToggle = false end
   if self.world.squads and (key == "q" or key == "w") then self:squadSkill(key == "q" and 1 or 2); return end
   if self.craft then
