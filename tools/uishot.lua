@@ -503,6 +503,68 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_SHIPFLEE") then
+    -- a shipyard, a patrol boat at 25% with Auto flee on, an enemy destroyer nearby: where does
+    -- it go, does it stay, and does the yard heal it?
+    local A = require("src.automation")
+    A.v.flee, A.v.fleePct, A.v.rejoin = true, 30, os.getenv("PA_REJOIN") == "1"
+    for _, sd in ipairs({ 7, 11, 19 }) do
+      game = startFn({ size = 112, water = 0.4, seed = sd, autotest = true })
+      game.ais = {}
+      local w = game.world
+      w.noFog = true
+      local map = w.map
+      local tm = w.teams[1]
+      -- a shipyard on the water nearest the start
+      local sx, sy = map:tileAt(tm.startX, tm.startY)
+      local yx, yy = map:nearestTile(sx, sy, function(a2, b2) return w:canPlace("shipyard", a2, b2, 1, "sea") end, 60)
+      if not yx then print("SHIPFLEE seed " .. sd .. ": no yard spot"); goto nexts end
+      do
+        local yard = w:spawn("shipyard", 1, (yx + 1.5) * w.T, (yy + 1.5) * w.T, 1)
+        w:rebuildGrid()
+        -- the boat, out on the water some way off
+        local bx, by
+        for r = 12, 40 do
+          for _ = 1, 30 do
+            local tx, ty = yx + math.random(-r, r), yy + math.random(-r, r)
+            if map:passable("sea", tx, ty) and map:canReach("sea", (yx + 1.5) * w.T, (yy + 1.5) * w.T, (tx + 0.5) * w.T, (ty + 0.5) * w.T, 60) then bx, by = map:center(tx, ty); break end
+          end
+          if bx then break end
+        end
+        local boat = w:spawn("boat", 1, bx, by)
+        boat.bornFrom = yard
+        boat.hp = boat.maxhp * 0.6
+        local foe = w:spawn("destroyer", 2, bx + 150, by)
+        game.opts.autotest = false
+        local t, fledAt, minD, arrived, healed0 = 0, nil, 1e9, nil, nil
+        local log = {}
+        while t < 120 and boat.alive do
+          game:update(1 / 30); t = t + 1 / 30
+          local o = boat.orders[1]
+          local d = U.dist(boat.x, boat.y, yard.x, yard.y)
+          minD = math.min(minD, d)
+          if not fledAt and o and o.type == "retreat" then fledAt = t; log[#log + 1] = string.format("flees at %d%% (%.0fs)", boat.hp / boat.maxhp * 100, t) end
+          if fledAt and not arrived and not (o and o.type == "retreat") then arrived = t; healed0 = boat.hp; log[#log + 1] = string.format("retreat over at %.0fs, %d px from the yard, %s", t, d, boat.disarmed and "guns off" or "guns ON") end
+          if arrived and math.floor(t) % 10 == 0 and math.floor(t) ~= (log.lastT or -1) then
+            log.lastT = math.floor(t)
+            log[#log + 1] = string.format("t%d: %d px from yard, hp %d%%, %s, order %s", math.floor(t), d, boat.hp / boat.maxhp * 100, boat.disarmed and "off" or "on", o and o.type or "idle")
+          end
+          if foe.alive and t > 15 then foe.alive = false end
+        end
+        -- the boat was in control group 1: recalling it now must leave it out while it repairs
+        game.groups = game.groups or {}
+        game.groups[1] = { boat }
+        boat.hp = boat.maxhp * 0.2
+        boat.disarmed = true
+        game:keypressed("1")
+        log[#log + 1] = "group 1 recalled while repairing: boat selected? " .. tostring(game.selected[boat] == true)
+        game.opts.autotest = true
+        print("SHIPFLEE seed " .. sd .. ": " .. table.concat(log, "; ") .. string.format("  [closest %d px; yard heals within 380 of its centre]", minD))
+      end
+      ::nexts::
+    end
+    return
+  end
   if os.getenv("PA_STUCK") then
     -- the player's map: 16 tanks scattered around the centre's mountains all flee home together
     local tot, home = 0, 0

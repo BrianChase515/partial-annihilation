@@ -2163,10 +2163,20 @@ function G:keypressed(key)
     else
       local g = self.groups[n]
       if g then
-        local alive = {}
-        for _, e in ipairs(g) do if e.alive then alive[#alive + 1] = e end end
+        local alive, pick, resting = {}, {}, 0
+        for _, e in ipairs(g) do
+          if e.alive then
+            alive[#alive + 1] = e
+            -- (units fleeing or powered down for repairs stay in the group but out of the
+            -- selection, so the group's next order doesn't drag them back into the fight
+            -- unarmed and unrepaired - they come back with it once they're whole)
+            if not e.def.building and e.def.weapon and (e.disarmed or self.world:isFleeing(e)) then resting = resting + 1
+            else pick[#pick + 1] = e end
+          end
+        end
         self.groups[n] = alive
-        self:select(alive)
+        self:select(pick)
+        if resting > 0 then self:notice(string.format("Group %d: %d repairing (left out until they're whole)", n, resting), 1.5) end
         local now = love.timer.getTime()
         if self.lastGroupTap.n == n and now - self.lastGroupTap.t < 0.4 and #alive > 0 then
           local cx, cy = 0, 0
