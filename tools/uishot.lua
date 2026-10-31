@@ -504,6 +504,85 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_AUTOSKILL") then
+    -- Auto-cast: heroes / squads Q W E R isn't pointed at use their skills; the one it is, doesn't
+    local A = require("src.automation")
+    local ARENA = require("src.arena")
+    local real = ARENA.useSkill
+    local casts = {}
+    ARENA.useSkill = function(w2, c, slot, ...)
+      local ok = real(w2, c, slot, ...)
+      if ok ~= false and c.team == 1 then casts[c] = (casts[c] or 0) + 1 end
+      return ok
+    end
+    for _, sel in ipairs({ false, true }) do
+      game = startFn({ mode = "craft", size = 96, seed = 31,
+        players = { { ally = 1, level = 0, human = true, race = "warband", class = "spiritcaller" }, { ally = 2, level = 6, race = "vanguard" } } })
+      game.ais = {}
+      local w = game.world
+      local h = w.teams[1].commander
+      -- give him a full kit
+      h.skills[2] = { key = "rushclaw", readyAt = 0 }
+      h.skills[3] = { key = "gorilla", readyAt = 0 }
+      h.skills[4] = { key = "avatar", readyAt = 0 }
+      h.x, h.y = h.x + 500, h.y
+      h.orders = {}
+      for k = 1, 5 do w:spawn("footman", 2, h.x + 160 + k * 18, h.y + (k - 3) * 30) end
+      game.selected = sel and { [h] = true } or {}
+      casts = {}
+      local stances = {}
+      for _ = 1, 30 * 12 do
+        game:update(1 / 30)
+        if h.stance then stances[h.stance] = true end
+      end
+      local l = {} for k in pairs(stances) do l[#l + 1] = k end
+      print(string.format("AUTOSKILL Craft, hero %s: %d casts, stances used: %s, auto? %s", sel and "SELECTED (manual)" or "not selected", casts[h] or 0, table.concat(l, ","), tostring(A.heroIsAuto(game, h))))
+      if not sel then
+        game.selected = {}
+        frame(); frame()
+        pending = "uishot_autoskill.png"
+        frame(); frame()
+      end
+    end
+    ARENA.useSkill = real
+    -- Commander of Heroes
+    local S = require("src.squads")
+    local realCast = S.cast
+    local sc = {}
+    S.cast = function(w2, sq, slot, ...)
+      local ok = realCast(w2, sq, slot, ...)
+      if ok and sq.team == 1 then sc[sq] = (sc[sq] or 0) + 1 end
+      return ok
+    end
+    for _, sel in ipairs({ false, true }) do
+      game = startFn({ mode = "rts", coh = true, size = 96, water = 0.15, seed = 5, mods = { squads = true },
+        cohMode = "conquest", squadSetup = S.randomSquads(love.math.newRandomGenerator(3), 3), enemySquads = "own",
+        players = { { ally = 1, level = 5 }, { ally = 2, level = 6 } } })
+      game.players[1].human = true
+      game.ais = {}
+      local w = game.world
+      local sq = S.squadsOf(w, 1)[1]
+      local esq = S.squadsOf(w, 2)[1]
+      -- bring the enemy squad next to ours
+      local L = sq.leader
+      for _, u in ipairs(esq.members) do if u.alive then u.x, u.y = L.x + 300 + (u.x - esq.leader.x), L.y + (u.y - esq.leader.y) end end
+      for _ = 1, 3 do game:update(1 / 30) end
+      game.selected = {}
+      if sel then for _, u in ipairs(sq.members) do if u.alive then game.selected[u] = true end end; game.activeSq = sq end
+      sc = {}
+      for _ = 1, 30 * 15 do game:update(1 / 30) end
+      local keys = {}
+      for _, s2 in ipairs(sq.skills) do keys[#keys + 1] = s2.key end
+      print(string.format("AUTOSKILL CoH, squad %s (%s, skills %s): %d casts, auto? %s", sq.type, sel and "SELECTED (manual)" or "not selected", table.concat(keys, "/"), sc[sq] or 0, tostring(A.squadIsAuto(game, sq))))
+      if not sel then
+        frame(); frame()
+        pending = "uishot_autoskill_coh.png"
+        frame(); frame()
+      end
+    end
+    S.cast = realCast
+    return
+  end
   if os.getenv("PA_HERONOBUILD") then
     -- Commander Craft: the hero must not help build or repair; a worker still does
     game = startFn({ mode = "craft", size = 96, seed = 31, autotest = true,

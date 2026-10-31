@@ -326,7 +326,8 @@ local function shortName(name)
   local words = {}
   for wd in name:gmatch("%S+") do words[#words + 1] = wd end
   local pick = words[#words] or name
-  if #words >= 2 and #words[#words] <= 3 then pick = words[1] end
+  -- ("Jaguar Stance" is Jaguar, not Stance)
+  if #words >= 2 and (#words[#words] <= 3 or words[#words] == "Stance") then pick = words[1] end
   if #pick > 7 then pick = pick:sub(1, 6) .. "." end
   return pick
 end
@@ -377,6 +378,15 @@ function CU.drawHeroBar(game)
     lg.setFont(font(12))
     lg.setColor(h.alive and 1 or 0.6, h.alive and 1 or 0.6, h.alive and 1 or 0.6)
     lg.print(cls and cls.name or h.class, tx, ry + 3)
+    -- Auto is casting this one's skills (it isn't the hero Q W E R controls)
+    if h.alive and require("src.automation").heroIsAuto(game, h) then
+      local nw = font(12):getWidth(cls and cls.name or h.class)
+      lg.setFont(font(10))
+      lg.setColor(0.25, 0.75, 0.95, 0.25)
+      lg.rectangle("fill", tx + nw + 6, ry + 4, font(10):getWidth("AUTO") + 8, 13, 3)
+      lg.setColor(0.55, 0.88, 1)
+      lg.print("AUTO", tx + nw + 10, ry + 4)
+    end
     local status, sc
     if not h.alive then status, sc = h.respawnAt and string.format("rises in %ds", math.max(0, math.ceil(h.respawnAt - now))) or "fallen", { 1, 0.45, 0.4 }
     elseif h.offers and #h.offers > 0 then status, sc = "CARD! Z / X", { 1, 0.85, 0.35 }
@@ -433,6 +443,14 @@ function CU.drawHeroBar(game)
       lg.setColor(hov and 1 or 0.4, hov and 1 or 0.48, hov and 1 or 0.58, def and 0.9 or 0.4)
       lg.setLineWidth(1)
       lg.rectangle("line", sx + 0.5, sy + 0.5, tw - 1, th - 1, 4)
+      -- the stance he's in now
+      local inStance = def and h.stance and (sk.key == h.stance or (sk.key == "eaglestance" and h.stance == "eagle") or h.stance == "avatar" and def.tags[1] == "stance")
+      if inStance then
+        lg.setColor(1, 0.85, 0.35, 0.95)
+        lg.setLineWidth(2)
+        lg.rectangle("line", sx + 1, sy + 1, tw - 2, th - 2, 4)
+        lg.setLineWidth(1)
+      end
       lg.setFont(font(10))
       if def then
         local name = shortName(def.name)

@@ -39,6 +39,8 @@ function HeroBrain:nearestEnemyStructure(c)
   return best, bd
 end
 
+AI.HeroBrain = HeroBrain
+
 local COMP = {
   vanguard = { { "footman", 3 }, { "rifleman", 2.8 }, { "knight", 3, 3 }, { "cleric", 1, 2, 3 }, { "magus", 0.8, 2, 2 },
     { "mortar", 0.9, 2, 3 }, { "gryphon", 1.4, 3 } },

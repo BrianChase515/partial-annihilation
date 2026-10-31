@@ -40,7 +40,9 @@ A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin
   sqflee = false, sqFleePct = 40, sqrejoin = false,
   -- Commander Craft: farms by rule, idle workers by job
   farm = false, farmAt = 4, farmPull = false, farmCrew = 1, farmFrom = "wood",
-  gather = false, crepair = false, craftOrder = "crepair,gather" }
+  gather = false, crepair = false, craftOrder = "crepair,gather",
+  -- Craft and Commander of Heroes: skills of the heroes / squads you aren't controlling
+  heroAuto = true }
 
 -- Commander Craft rules: when to put up a farm, and who builds it
 A.CRAFT_RULES = {
@@ -50,6 +52,7 @@ A.CRAFT_RULES = {
     value = "farmCrew", min = 1, max = 4, step = 1, unit = " workers" },
   { key = "farmFromRow", label = "Pull workers from", desc = "Where the farm crew comes from when no one is idle.", noToggle = true,
     value = "farmFrom", choices = { "wood", "gold", "either" }, unit = "" },
+  { key = "heroAuto", label = "Auto-cast hero skills", desc = "Heroes Q W E R isn't controlling right now use their skills on their own, with the computer's judgement (as sharp as this match's difficulty). Their row in the hero bar says AUTO." },
 }
 
 -- Commander of Heroes rules: a squad falls back as one
@@ -57,6 +60,7 @@ A.SQ_RULES = {
   { key = "sqflee", label = "Squads flee when hurt", desc = "A squad whose health drops below this falls back to the HQ (or your flag) as one, weapons off until healed, and leaves your selection.",
     value = "sqFleePct", min = 10, max = 70, step = 5, unit = "% health" },
   { key = "sqrejoin", label = "Healed squads rejoin", desc = "A squad that fled goes back to where it fled from once every member is whole." },
+  { key = "heroAuto", label = "Auto-cast squad skills", desc = "Squads Q / W isn't controlling right now use their skills on their own, with the computer's judgement (as sharp as this match's difficulty). Their row in the squad list says AUTO." },
 }
 -- what each mode offers: rules, the idle-worker jobs (in a draggable order), and the wording
 A.MODES = {
@@ -279,12 +283,13 @@ function A.summary()
   if A.mode == "coh" then
     if A.v.sqflee then parts[#parts + 1] = "squads flee at " .. A.v.sqFleePct .. "%" end
     if A.v.sqrejoin then parts[#parts + 1] = "rejoin" end
+    if A.v.heroAuto then parts[#parts + 1] = "auto skills" end
     return table.concat(parts, ", ")
   elseif A.mode == "craft" then
     local jobs = {}
     for _, j in ipairs(A.jobOrder()) do if A.v[j] then jobs[#jobs + 1] = A.JOBS[j].label:lower() end end
     local f = A.v.farm and string.format("farms at %d food left%s, ", A.v.farmAt, A.v.farmPull and (" (crew " .. A.v.farmCrew .. ")") or "") or ""
-    return f .. "idle workers: " .. table.concat(jobs, " > ")
+    return f .. "idle workers: " .. table.concat(jobs, " > ") .. (A.v.heroAuto and ", auto hero skills" or "")
   end
   if A.v.flee then parts[#parts + 1] = "flee at " .. A.v.fleePct .. "%" end
   if A.v.rejoin then parts[#parts + 1] = "rejoin" end
@@ -296,7 +301,8 @@ function A.summary()
 end
 
 function A.update(game, dt)
-  if not A.anyOn() or not A.applies(game) then return end
+  A.updateHeroSkills(game, dt)
+  if not A.applies(game) or not A.anyOn() then return end
   if not game.autoAnnounced then
     game.autoAnnounced = true
     if game.notice then
@@ -790,6 +796,106 @@ function A.updateCraft(game, dt)
     if u.alive and u.team == team and u.def.worker and u.built >= 1 and #u.orders == 0 then
       for _, job in ipairs(order) do
         if A.v[job] and A.craftJob[job] and A.craftJob[job](game, w, team, u) then break end
+      end
+    end
+  end
+end
+
+-- Auto-cast: heroes (Craft) and squads (Commander of Heroes) that Q W E R isn't pointed at use
+-- their skills the way the computer's would, as sharp as the toughest opponent in this match.
+-- The one you're controlling is always yours.
+function A.matchLevel(game)
+  local lv = 0
+  for i, p in ipairs(game.players or {}) do
+    if not p.human and game.world:hostile(i, game.playerTeam or 1) then lv = math.max(lv, p.level or 5) end
+  end
+  return lv > 0 and lv or 5
+end
+
+-- the hero Q W E R casts for (only while a hero is selected); every other hero of yours is auto
+function A.manualHero(game)
+  local any = false
+  for e in pairs(game.selected or {}) do if e.alive and e.key == "commander" and e.team == 1 then any = true; break end end
+  if not any then return nil end
+  return require("src.craft_game").activeHero(game)
+end
+function A.heroIsAuto(game, h)
+  return A.v.heroAuto and h and h.alive and h ~= A.manualHero(game)
+end
+function A.manualSquad(game)
+  if not game.activeSquad then return nil end
+  local any = false
+  for e in pairs(game.selected or {}) do if e.alive and e.squad then any = true; break end end
+  return any and game:activeSquad() or nil
+end
+function A.squadIsAuto(game, sq)
+  return A.v.heroAuto and sq ~= A.manualSquad(game)
+end
+
+function A.updateHeroSkills(game, dt)
+  if not A.v.heroAuto then return end
+  local w = game.world
+  if not w or w.over or game.watching or game.outOver then return end
+  if not (w.squads or game.craft) then return end
+  A.hsTimer = (A.hsTimer or 0) - dt
+  if A.hsTimer > 0 then return end
+  A.hsTimer = 0.4
+  local team = game.playerTeam or w.playerTeam or 1
+  local L = A.matchLevel(game)
+  if w.squads then
+    local S = require("src.squads")
+    local brain = game.autoSquadBrain
+    if not brain or brain.level ~= L then
+      brain = setmetatable({ world = w, team = team, level = L, rng = love.math.newRandomGenerator((w.map.seed or 1) + 4242),
+        skillUse = 0.25 + 0.075 * L, retreatAt = 0.25 + 0.025 * L }, S.AI)
+      game.autoSquadBrain = brain
+    end
+    local manual = A.manualSquad(game)
+    for _, sq in ipairs(S.squadsOf(w, team)) do
+      local Ld = sq.leader
+      if sq ~= manual and Ld and Ld.alive then
+        local hp, maxhp, fleeing = 0, 0, false
+        for _, u in ipairs(sq.members) do
+          if u.alive then hp, maxhp = hp + u.hp, maxhp + u.maxhp; if w:isFleeing(u) then fleeing = true end end
+        end
+        local foe, fd
+        for _, o in ipairs(w.entities) do
+          if o.alive and o.team and o.team > 0 and w:hostile(o.team, team) and (o.def.weapon or o.key == "hq")
+            and not (o.smoked and U.dist(Ld.x, Ld.y, o.x, o.y) > 90) then
+            local d = U.dist(Ld.x, Ld.y, o.x, o.y)
+            if w:isVisible(o) and (not fd or d < fd) then foe, fd = o, d end
+          end
+        end
+        local fighting = foe and fd < 520
+        local healing = sq.healing
+        sq.healing = fleeing or nil
+        brain:useSkills(sq, foe, fd, fighting, maxhp > 0 and hp / maxhp or 0, nil)
+        sq.healing = healing
+      end
+    end
+  else
+    local C = require("src.craft")
+    local CAI = require("src.craft_ai")
+    local brain = game.autoHeroBrain
+    if not brain or brain.level ~= L then
+      brain = setmetatable({ world = w, team = team, level = L, rng = love.math.newRandomGenerator((w.map.seed or 1) + 4243),
+        skillChance = 0.25 + 0.07 * L }, CAI.HeroBrain)
+      game.autoHeroBrain = brain
+    end
+    local manual = A.manualHero(game)
+    for _, h in ipairs(C.heroesOf(w, team, false)) do
+      if h ~= manual then
+        local foe, n, eh = nil, 0, nil
+        for _, o in ipairs(w.entities) do
+          -- (creeps only once they're fighting: never wake a sleeping camp by walking past it)
+          local awake = o.team ~= 0 or (o.retaliate and o.retaliate.alive) or (o.orders[1] and o.orders[1].type == "attack")
+          if o.alive and o.team and not o.dormant and not o.neutral and awake and w:hostile(o.team, team) and not o.def.building and (o.def.weapon or o.key == "commander") then
+            local d = U.dist(h.x, h.y, o.x, o.y)
+            if d < 600 then n = n + 1; foe = foe or o end
+            if o.key == "commander" and d < 650 then eh = o end
+          end
+        end
+        if foe or eh then brain:useSkills(h, eh, n >= 4 or eh ~= nil) end
       end
     end
   end

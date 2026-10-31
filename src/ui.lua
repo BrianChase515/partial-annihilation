@@ -515,6 +515,15 @@ function UI.drawSquadPanel(game)
     if inc > 0 then nm = nm .. string.format("  +%d coming", inc) end
     if not up and sq.respawnAt then nm = nm .. string.format("  leader %ds", math.max(0, math.ceil(sq.respawnAt - t))) end
     lg.print(nm, x + 10, ry + 2)
+    -- Auto is casting this squad's skills (it isn't the one Q / W controls)
+    if up and require("src.automation").squadIsAuto(game, sq) then
+      local ax = x + bw - 14 - font(10):getWidth("AUTO")
+      lg.setFont(font(10))
+      lg.setColor(0.25, 0.75, 0.95, 0.25)
+      lg.rectangle("fill", ax - 4, ry + 3, font(10):getWidth("AUTO") + 8, 13, 3)
+      lg.setColor(0.55, 0.88, 1)
+      lg.print("AUTO", ax, ry + 3)
+    end
     local frac = max > 0 and hp / max or 0
     lg.setColor(0.12, 0.14, 0.18)
     lg.rectangle("fill", x + 10, ry + 19, bw - 20, 6, 2)

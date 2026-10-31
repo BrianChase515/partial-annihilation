@@ -39,6 +39,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Horseshoe Classic:** a smaller, quicker Horseshoe with only three gold mines: yours, theirs, and the rich one across the contested beach.
   - **Wildlands:** creep-heavy, with camps guarding every expansion and the roads between them.
   - **Crossroads (2v2):** you and a computer ally against two enemies. Each team is one race, and heroes can repeat across players.
+- **Auto-cast hero skills** (Auto panel, on by default). Every hero Q W E R isn't controlling right now uses its skills on its own, with the computer's judgement at this match's difficulty; its row in the hero bar says **AUTO**. Select a hero to take its skills back. Commander of Heroes has the same rule for squads. Spiritcaller stance buttons show the animal (Jaguar, Gorilla...) and the stance you're in is outlined in gold.
 - **Only workers build.** Heroes can't help construct or repair buildings; right-clicking your own building with a hero just walks it there.
 - **Map previews.** The title screen shows a small picture of the chosen (or hovered) map, for Craft and for the Arena: terrain, bases, gold mines, creep camps, and in the Arena the lanes, towers, shrines and boss pits.
 - **Creep camps everywhere.** Every map has about eleven camps (nine on Crossroads), so there is always something for your heroes to hunt between army fights. The **Creep camps** option on the title screen picks:
