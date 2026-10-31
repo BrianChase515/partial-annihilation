@@ -504,6 +504,25 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_CORESCAN") then
+    -- how often does a map end up with no Power Core spot in the middle (all mountain there)?
+    local Map = require("src.map")
+    local none, rocky, n = 0, 0, tonumber(os.getenv("PA_CORESCAN")) or 150
+    for sd = 1, n do
+      game = startFn({ size = 128, water = 0.31, seed = 1793400000 + sd * 7919, autotest = true })
+      local w = game.world
+      local map = w.map
+      if not map.coreNode then none = none + 1 end
+      local cxT, cyT, r, rock, tot = math.floor(map.w / 2), math.floor(map.h / 2), 10, 0, 0
+      for y = cyT - r, cyT + r do for x = cxT - r, cxT + r do
+        tot = tot + 1
+        if map.terrain[y * map.w + x] == Map.ROCK then rock = rock + 1 end
+      end end
+      if rock / tot > 0.5 then rocky = rocky + 1 end
+    end
+    print(string.format("CORESCAN %d medium maps: %d had no Power Core spot, %d were mostly mountain in the middle", n, none, rocky))
+    return
+  end
   if os.getenv("PA_SHIPFLEE") then
     -- a shipyard, a patrol boat at 25% with Auto flee on, an enemy destroyer nearby: where does
     -- it go, does it stay, and does the yard heal it?
