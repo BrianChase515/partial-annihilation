@@ -688,8 +688,19 @@ function C.update(w, dt)
         -- pop out on the hall side of the mine
         local drop = C.nearestDropoff(w, e.team, m.x, m.y, "gold")
         if drop then
+          -- (on open ground: toward a hall that sits diagonally from the mine, a fixed distance out
+          -- used to land inside the mine's corner, where the worker could never move again)
           local dx, dy = U.norm(drop.x - m.x, drop.y - m.y)
-          e.x, e.y = m.x + dx * (m.def.w * w.T * 0.5 + 14), m.y + dy * (m.def.w * w.T * 0.5 + 14)
+          local k = (m.def.w * w.T * 0.5) / math.max(math.abs(dx), math.abs(dy), 0.01)
+          local px, py = m.x + dx * (k + 14), m.y + dy * (k + 14)
+          local map = w.map
+          local tx, ty = map:tileAt(px, py)
+          local nx, ny = map:nearestTile(tx, ty, function(a, b) return map:passable("land", a, b) end, 4)
+          if nx then
+            local cx, cy = map:center(nx, ny)
+            if nx ~= tx or ny ~= ty then px, py = cx, cy end
+          end
+          e.x, e.y = px, py
         end
       end
       if got > 0 then e.carry = { kind = "gold", amount = got } end

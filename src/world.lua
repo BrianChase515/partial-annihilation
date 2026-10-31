@@ -768,7 +768,11 @@ function W:tryMove(e, mx, my)
   if self.passFriendly and e.team then map.passFor = self.ally[e.team] end
   local nx, ny = e.x + mx, e.y + my
   local tx, ty = map:tileAt(nx, ny)
-  if map:passable(layer, tx, ty) then
+  -- standing inside a blocked tile (popped out of a mine onto its corner, or a building went up
+  -- around it): let it walk out rather than freeze there forever
+  local cx0, cy0 = map:tileAt(e.x, e.y)
+  local stuckIn = not map:passable(layer, cx0, cy0)
+  if map:passable(layer, tx, ty) or (stuckIn and tx == cx0 and ty == cy0) then
     e.x, e.y = nx, ny
   else
     -- slide along axes

@@ -504,6 +504,66 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_CRAFTL5") then
+    -- Craft AI, level 5 vs level 5: workers, halls, hero level and army at 3 / 6 / 10 minutes,
+    -- and when the first fight happens
+    local L = tonumber(os.getenv("PA_CRAFTL5")) or 5
+    for _, sd in ipairs({ 31, 47, 63 }) do
+      game = startFn({ mode = "craft", size = 96, seed = sd, autotest = true,
+        players = { { ally = 1, level = L, race = "vanguard" }, { ally = 2, level = L, race = "warband" } } })
+      local w = game.world
+      local t, snaps = 0, {}
+      local first
+      local function snap(team)
+        local wk, halls, army = 0, 0, 0
+        for _, e in ipairs(w.entities) do
+          if e.alive and e.team == team then
+            if e.def.worker then wk = wk + 1
+            elseif e.def.hall and e.built >= 1 then halls = halls + 1
+            elseif not e.def.building and e.def.weapon and e.key ~= "commander" and not e.owner and e.def.cost then army = army + (e.def.cost.food or 0) end
+          end
+        end
+        local h = w.teams[team].commander
+        return string.format("%dw %dh L%d a%d", wk, halls, h and h.clevel or 0, army)
+      end
+      while t < 600 and not w.over do
+        game:update(1 / 30); t = t + 1 / 30
+        if not first and w.tel and w.tel.firstContact then first = w.tel.firstContact end
+        for _, m in ipairs({ 180, 360, 599 }) do
+          if not snaps[m] and t >= m then snaps[m] = snap(1) .. " / " .. snap(2) end
+        end
+      end
+      if os.getenv("PA_CRAFTDBG") then
+        for team = 1, 2 do
+          local tm = w.teams[team]
+          local ks = {}
+          for _, e in ipairs(w.entities) do if e.alive and e.team == team then ks[e.key] = (ks[e.key] or 0) + 1 end end
+          local l = {} for k, n in pairs(ks) do l[#l + 1] = k .. " " .. n end
+          table.sort(l)
+          local ai = game.ais[team]
+          local C = require("src.craft")
+          local wst = {}
+          for _, e in ipairs(w.entities) do
+            if e.alive and e.team == team and e.def.worker then
+              local o = e.orders[1]
+              local k = not o and "idle" or (o.type .. "/" .. tostring(o.kind or o.key))
+              if e.inMine then k = "IN MINE" end
+              if e.carry then k = k .. "+carry" .. e.carry.kind end
+              if o and o.kind == "gold" and o.target then k = k .. string.format("@%dpx", U.dist(e.x, e.y, o.target.x, o.target.y)) end
+              wst[#wst + 1] = k
+            end
+          end
+          print("CRAFTL5   T" .. team .. " workers: " .. table.concat(wst, ", "))
+          print(string.format("CRAFTL5   T%d gold %d wood %d food %d/%d tier %d mode %s: %s", team, tm.gold or 0, tm.wood or 0, tm.foodUsed or 0, tm.foodCap or 0, tm.tier or 0,
+            tostring(ai and ai.mode), table.concat(l, ", ")))
+        end
+      end
+      print(string.format("CRAFTL5 seed %d L%d: 3:00 %s | 6:00 %s | 10:00 %s | first fight %s%s", sd, L, snaps[180] or "-", snaps[360] or "-", snaps[599] or "-",
+        first and string.format("%d:%02d", math.floor(first / 60), math.floor(first % 60)) or "none",
+        w.over and string.format(" (over at %d:%02d)", math.floor(t / 60), math.floor(t % 60)) or ""))
+    end
+    return
+  end
   if os.getenv("PA_GOLDLINE") then
     -- a second hall's gold line, with a friendly unit parked in three places and 5 or 8 workers:
     -- gold per minute, and any worker frozen (not moving for 10 s, not inside the mine)
