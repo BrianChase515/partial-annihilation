@@ -578,6 +578,77 @@ local function script(mode, secs)
     end
     return
   end
+  if os.getenv("PA_TURTLECRAFT") then
+    -- the AI's army is wiped while the enemy's is still standing: does it (sometimes) dig in?
+    local stats = {}
+    for _, sd in ipairs({ 31, 47, 63, 71 }) do
+      game = startFn({ mode = "craft", size = 96, seed = sd, autotest = true,
+        players = { { ally = 1, level = 5, race = "vanguard" }, { ally = 2, level = 5, race = "warband" } } })
+      local w = game.world
+      for _ = 1, 30 * 300 do game:update(1 / 30) end
+      -- wipe team 2's army (the hero too), boost team 1's
+      local ai = game.ais[2]
+      for _, u in ipairs(ai:armyUnits()) do if u.key ~= "commander" then u.hp = 0; u.alive = false end end
+      local tm1 = w.teams[1]
+      for k = 1, 8 do w:spawn("footman", 1, tm1.startX + k * 20, tm1.startY + 150) end
+      ai.nextPosture = 0
+      local postures, towers0 = {}, 0
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 2 and e.key == "w_tower" then towers0 = towers0 + 1 end end
+      for i = 1, 30 * 90 do
+        game:update(1 / 30)
+        if ai.posture then postures[ai.posture] = (postures[ai.posture] or 0) + 1 end
+        if sd == 71 and i % (30 * 15) == 0 then
+          local n = #ai:armyUnits()
+          print(string.format("TURTLECRAFT   dbg t=%d mode %s posture %s units %d nextPosture %.0f hall %s", w.time, tostring(ai.mode), tostring(ai.posture), n, ai.nextPosture or -1, tostring(ai:hall() ~= nil)))
+        end
+      end
+      local towers = 0
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 2 and e.key == "w_tower" then towers = towers + 1 end end
+      local l = {} for k, n in pairs(postures) do l[#l + 1] = string.format("%s %d%%", k, n * 100 / (30 * 90)) end
+      table.sort(l)
+      print(string.format("TURTLECRAFT seed %d: over 90 s after losing its army: %s; towers %d -> %d", sd, table.concat(l, ", "), towers0, towers))
+      for _, nt in ipairs(w.tel.notes) do if nt.team == 2 and nt.t > 300 and (nt.kind == "posture" or nt.kind == "defend" or nt.kind == "hero") then print(string.format("TURTLECRAFT   [%d:%02d] %s: %s", math.floor(nt.t / 60), math.floor(nt.t % 60), nt.kind, nt.text)) end end
+    end
+    return
+  end
+  if os.getenv("PA_LONG") then
+    -- a full Craft game, AI vs AI: what each side is doing every two minutes
+    local sd = tonumber(os.getenv("PA_LONG")) or 30
+    game = startFn({ mode = "craft", size = 88, seed = sd, autotest = true,
+      players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
+    local w = game.world
+    local t = 0
+    while t < 1200 and not w.over do
+      game:update(1 / 30); t = t + 1 / 30
+      if math.floor(t * 30) % (30 * 120) == 0 then
+        for team = 1, 2 do
+          local ai = game.ais[team]
+          local wk, halls, army, towers = 0, 0, 0, 0
+          for _, e in ipairs(w.entities) do
+            if e.alive and e.team == team then
+              if e.def.worker then wk = wk + 1 elseif e.def.hall then halls = halls + 1
+              elseif e.def.building and e.def.weapon then towers = towers + 1
+              elseif not e.def.building and e.def.weapon then army = army + ((e.def.cost and e.def.cost.food) or 4) end
+            end
+          end
+          local tm = w.teams[team]
+          print(string.format("LONG [%2d:00] T%d %2dw %dh %dt army %2d food %d/%d gold %d wood %d | mode %s posture %s", t / 60, team, wk, halls, towers, army, tm.foodUsed or 0, tm.foodCap or 0, tm.gold, tm.wood, tostring(ai.mode), tostring(ai.posture)))
+        end
+      end
+    end
+    local kinds = {}
+    for _, nt in ipairs(w.tel.notes) do
+      if nt.t > 480 then
+        local k = nt.kind .. ":" .. (nt.text or ""):gsub("%d+%.%d+", "#"):gsub("%(%d+%)", ""):sub(1, 50)
+        kinds[k] = (kinds[k] or 0) + 1
+      end
+    end
+    local l = {} for k, n in pairs(kinds) do l[#l + 1] = { k, n } end
+    table.sort(l, function(a, b) return a[2] > b[2] end)
+    for i = 1, math.min(18, #l) do print(string.format("LONG note x%d %s", l[i][2], l[i][1])) end
+    print(string.format("LONG seed %d %s at %d:%02d", sd, w.over and "over" or "NOT over", math.floor(t / 60), math.floor(t % 60)))
+    return
+  end
   if os.getenv("PA_LASTBLDS") then
     -- the enemy is down to a few buildings tucked away in far corners: does the AI find and
     -- flatten every one of them?
@@ -818,6 +889,24 @@ local function script(mode, secs)
     local b0 = farm.built
     for i = 1, 300 do game:update(1 / 30) end
     print(string.format("HERONOBUILD worker assist: %s, built %.2f -> %.2f", wk.orders[1] and wk.orders[1].type or "done", b0, farm.built))
+    return
+  end
+  if os.getenv("PA_MINEGUARD") then
+    for _, t in ipairs({ "horseshoe", "classic", "temple", "isles", "glade", "wild" }) do
+      for _, mode in ipairs({ "classic", "plenty" }) do
+        local m = require("src.craft_map").generate({ template = t, seed = 7, camps = mode })
+        local free, guardedBy = 0, {}
+        for _, mn in ipairs(m.mines) do
+          local mx, my = (mn.x + 1) * 32, (mn.y + 1) * 32
+          local g = false
+          for _, cp in ipairs(m.camps) do
+            if U.dist(mx, my, (cp.x + 0.5) * 32, (cp.y + 0.5) * 32) < 520 then g = true; guardedBy[#guardedBy + 1] = cp.extra and "extra" or "designed" end
+          end
+          if not g then free = free + 1 end
+        end
+        print(string.format("MINEGUARD %-10s %-8s %d mines, %d unguarded; guards: %s", t, mode, #m.mines, free, table.concat(guardedBy, ",")))
+      end
+    end
     return
   end
   if os.getenv("PA_CAMPS") then

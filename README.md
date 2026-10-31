@@ -40,6 +40,13 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Wildlands:** creep-heavy, with camps guarding every expansion and the roads between them.
   - **Crossroads (2v2):** you and a computer ally against two enemies. Each team is one race, and heroes can repeat across players.
 - **Auto-cast hero skills** (Auto panel, on by default). Every hero Q W E R isn't controlling right now uses its skills on its own, with the computer's judgement at this match's difficulty; its row in the hero bar says **AUTO**. Select a hero to take its skills back. Commander of Heroes has the same rule for squads. Spiritcaller stance buttons show the animal (Jaguar, Gorilla...) and the stance you're in is outlined in gold.
+- **A tougher computer at level 5**, tuned on real games:
+  - **Workers like a player's:** about 13 by 3:00 and 20 on two mines by 10:00. Wood piling up no longer shrinks the workforce, and a raided economy rebuilds its workers before teching up.
+  - **It expands for real:** around 5-6 minutes it clears the camp guarding its next gold mine on purpose and builds a hall there.
+  - **Its hero respects yours:** it won't take on a hero two or more levels above it without an army, and it gets out sooner against a stronger one.
+  - **Workers run from raids** the army can't stop in time, and come back after.
+  - **It creeps with a real army,** not the hero and a grunt.
+  - **A new posture, dig in:** with its army beaten and yours still standing, it may build up to four towers at home and keep its army behind them until it's the stronger side again. Like the other postures (creep, mass up, strike, raid), it picks the best option only some of the time.
 - **Extra heroes:** a hero from the altar starts at about half your best hero's level (level 5 -> level 2) instead of nearly catching up. Right-click your hero with the altar selected and new or risen heroes walk out to join him.
 - **Cards:** the level-up card says whose it is ("Your Elementalist (level 3)", with his portrait). The Auto panel's **Auto-pick hero cards** (on by default) chooses cards for the heroes you aren't playing, the way the computer would; your main hero's cards stay yours.
 - **Hold (D) holds ground**, like Annihilation: the selected units fire at anything in range but never move, chase or kite. Any new order releases them.

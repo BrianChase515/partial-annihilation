@@ -58,9 +58,9 @@ function AI.params(L)
   return {
     think = math.max(0.3, 1.6 - 0.13 * L),
     act = math.min(1, 0.35 + 0.08 * L),
-    workers = ({ -6, -5, -3, -1, 1, 2, 3, 3, 4, 4 })[L],
+    workers = ({ -5, -4, -2, 0, 3, 4, 5, 5, 6, 6 })[L], -- (level 5: about what a casual player keeps - 13-14 on one mine, ~20 on two)
     tier2At = 420 - 24 * L, tier3At = 900 - 45 * L,
-    expandAt = 440 - 24 * L,
+    expandAt = 420 - 24 * L,
     attackFood = L <= 3 and (10 + 2 * L) or (20 + L),
     smart = L >= 4, attackRatio = 1.7 - 0.05 * L,
     towers = L >= 6 and 2 or (L >= 4 and 1 or 0),
@@ -314,8 +314,15 @@ function AI:economy(tm)
   end
   local woodWant = 2 + (tm.tier or 1) + math.min(1, #halls - 1)
   if not self.P.legacy then woodWant = 4 + 2 * ((tm.tier or 1) - 1) + 2 * math.max(0, #halls - 1) end
-  if tm.wood > 700 then woodWant = 1 elseif tm.wood > 400 then woodWant = math.min(woodWant, 3) end
+  if self.P.legacy then
+    if tm.wood > 700 then woodWant = 1 elseif tm.wood > 400 then woodWant = math.min(woodWant, 3) end
+  else
+    -- wood piling up means gold is short, not that we have too many workers: shift a couple
+    -- over, but never shrink the workforce (that was how a raided AI ended up on 8 workers)
+    if tm.wood > 1500 then woodWant = math.max(3, woodWant - 2) elseif tm.wood > 900 then woodWant = math.max(3, woodWant - 1) end
+  end
   local goal = math.max(4, 5 * #myMines + woodWant + 1 + self.P.workers)
+  self.workerGoal, self.workerCount = goal, #workers
   if hall and #workers < goal and self.rng:random() < self.P.act then
     for _, h in ipairs(halls) do
       if #h.queue == 0 and #workers + self:count(self.race.worker, true) - #workers < goal then self:queue(h, self.race.worker) end
@@ -407,6 +414,11 @@ function AI:buildings(tm)
   if (tm.foodCap or 0) < D.CRAFT.FOOD_CAP and spare < 3 + prod * 3 and farmsBuilding + self:pendingBuild(r.farm) < farmLimit then
     if self:build(r.farm, hx, hy, 4, 13) then return end
   end
+  -- 1b. dug in: up to four towers between the hall and the mine
+  if self.posture == "turtle" and have(r.tower) < 4 and tm.gold >= D.units[r.tower].cost.gold then
+    local m = C.nearestMine(w, hx, hy)
+    if self:build(r.tower, m and (m.x + hx) / 2 or hx, m and (m.y + hy) / 2 or hy, 2, 8) then return end
+  end
   -- 2. expand: the closest free mine whose guards are dead, once the main runs low or on schedule
   local exp = self:expansionMine()
   if DBG and math.floor(t) % 60 == 0 and self.lastExpDbg ~= math.floor(t) then
@@ -421,7 +433,11 @@ function AI:buildings(tm)
   self.savingHall = nil
   if exp and halls < 3 and (mainLow or (halls < 2 and t > self.P.expandAt)) and not self:pendingBuildAny(r.hall) then
     local sx, sy = self:hallSpotNear(exp)
-    if sx and self:build(r.hall, sx, sy, 0, 5) then self.expanding = exp; return end
+    if sx and self:build(r.hall, sx, sy, 0, 5) then
+      self.expanding = exp
+      Tel.note(w, "expand", self.team, string.format("expanding to a new gold mine (%d workers)", self.workerCount or 0))
+      return
+    end
     if tm.gold < D.units[r.hall].cost.gold then self.savingHall = true; return end
   end
 
@@ -468,6 +484,36 @@ function AI:pendingBuildAny(key)
     if e.alive and e.team == self.team and e.key == key and e.built < 1 then return true end
   end
   return false
+end
+
+-- the camp guarding the nearest free mine (if a camp is all that stands in the way of expanding)
+function AI:expansionGuard()
+  local w = self.world
+  local base = self:hall()
+  if not base then return nil end
+  local best, bd, camp
+  for _, m in ipairs(w.craft.mines) do
+    if m.alive and m.gold > 1500 then
+      local taken = false
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.def.hall and U.dist(e.x, e.y, m.x, m.y) < 500 then taken = true end
+      end
+      local d = U.dist(base.x, base.y, m.x, m.y)
+      -- (not over on their side of the map)
+      local theirs = false
+      for _, e in ipairs(w.entities) do
+        if e.alive and e.def.hall and e.team and e.team > 0 and w:hostile(e.team, self.team) and U.dist(e.x, e.y, m.x, m.y) < d * 0.8 then theirs = true end
+      end
+      if not taken and not theirs and (not bd or d < bd) then
+        local g
+        for _, cp in ipairs(w.craft.camps) do
+          for _, u in ipairs(cp.units) do if u.alive and U.dist(u.x, u.y, m.x, m.y) < 520 then g = cp end end
+        end
+        best, bd, camp = m, d, g
+      end
+    end
+  end
+  return camp, best
 end
 
 -- mines nobody has a hall at, nearest our base, whose creep camp is cleared
@@ -541,7 +587,11 @@ function AI:production(tm)
   local hall = self:hall()
   -- tier upgrades (they take priority: save for them)
   local saving = false
-  if hall and tm.tier == 1 and t > self.tier2At and self:count(r.barracks) > 0 and #hall.queue == 0 then
+  -- (rebuilding the workforce comes first: the hall can't train workers while it upgrades)
+  local short = not self.P.legacy and (self.workerCount or 99) < (self.workerGoal or 0) - 2
+  if short then
+    -- nothing
+  elseif hall and tm.tier == 1 and t > self.tier2At and self:count(r.barracks) > 0 and #hall.queue == 0 then
     if not self:queue(hall, r.tiers[1]) then saving = true end
   elseif hall and tm.tier == 2 and t > self.tier3At and #hall.queue == 0 and not tm.research[r.tiers[2]] then
     local ok = C.canOrder(w, self.team, r.tiers[2])
@@ -677,7 +727,20 @@ function AI:army(tm)
       burst = kt < 2.5 + 0.35 * self.level and self.rng:random() < 0.35 + 0.07 * self.level
       if burst and w.tel then require("src.telemetry").note(w, "hero", self.team, string.format("%s gets out at %d%%: what's around could kill him in %.1fs", h.def.name, math.floor(h.hp / h.maxhp * 100), kt)) end
     end
-    if (burst or h.hp < h.maxhp * self.P.heroRetreat) and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 then
+    -- a much stronger hero about and not enough of our army with him: don't take him on alone
+    -- (feeding him kills is how a game snowballs); and get out earlier against him
+    local outclassed = false
+    if not self.P.legacy and eh and (eh.clevel or 0) >= (h.clevel or 0) + 2 then
+      local escort = 0
+      for _, u in ipairs(units) do if u ~= h and U.dist(u.x, u.y, h.x, h.y) < 450 then escort = escort + ((u.def.cost and u.def.cost.food) or 4) end end
+      outclassed = escort < 6
+    end
+    local retreatAt = self.P.heroRetreat + ((eh and (eh.clevel or 0) > (h.clevel or 0)) and 0.15 or 0)
+    if outclassed and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 and w.time >= (h.avoidNote or 0) then
+      h.avoidNote = w.time + 20
+      Tel.note(w, "hero", self.team, string.format("%s backs off: their %s is level %d, he's %d, and he's on his own", h.def.name, eh.class or "hero", eh.clevel or 0, h.clevel or 0))
+    end
+    if (burst or outclassed or h.hp < h.maxhp * retreatAt) and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 then
       w:issue(h, { type = "retreat", x = hall.x, y = hall.y + 120 })
       h.aiHealing = true
     end
@@ -690,6 +753,13 @@ function AI:army(tm)
     local o1 = fighters[1] and fighters[1].orders[1]
     print("ARMY", math.floor(t), self.team, self.mode, #units, #fighters, o1 and o1.type, o1 and o1.x and math.floor(o1.x), o1 and o1.y and math.floor(o1.y),
       fighters[1] and math.floor(fighters[1].x), fighters[1] and math.floor(fighters[1].y))
+  end
+  -- (the posture is rethought even with no army in the field or while defending: that's
+  -- exactly when "dig in" matters)
+  if not self.P.legacy then
+    local f0 = 0
+    for _, u in ipairs(fighters) do f0 = f0 + (u.key == "commander" and 4 or ((u.def.cost and u.def.cost.food) or 0)) end
+    self:thinkPosture(fighters, f0)
   end
   if #fighters == 0 then return end
   -- 1. defend: anything hostile near our buildings pulls the whole army back
@@ -705,6 +775,33 @@ function AI:army(tm)
   if threat then
     self.mode = "defend"
     self.target = nil
+    -- workers in the way of a raid our army can't stop in time step back behind the hall
+    if not self.P.legacy then
+      local raid, guard = 0, 0
+      local tx, ty = threat.x, threat.y
+      w:query(tx, ty, 500, function(o)
+        if o.alive and o.team and o.team > 0 and o.def.weapon and not o.def.building and not o.def.worker then
+          local sv = o.hp * (o.def.weapon.damage / o.def.weapon.reload)
+          if w:hostile(o.team, self.team) then raid = raid + sv elseif o.team == self.team then guard = guard + sv end
+        end
+      end)
+      local hall = self:hall()
+      if hall and raid > guard * 1.2 then
+        local dx, dy = U.norm(hall.x - tx, hall.y - ty)
+        for _, e in ipairs(w.entities) do
+          if e.alive and e.team == self.team and e.def.worker and not e.inMine and U.dist(e.x, e.y, tx, ty) < 420 then
+            local o = e.orders[1]
+            if not (o and o.type == "move" and o.flee) then
+              w:issue(e, { type = "move", x = hall.x + dx * 260 + self.rng:random(-60, 60), y = hall.y + dy * 260 + self.rng:random(-60, 60), flee = true })
+            end
+          end
+        end
+        if w.time >= (self.fleeNote or 0) then
+          self.fleeNote = w.time + 30
+          Tel.note(w, "defend", self.team, "workers pull back from a raid the army can't stop")
+        end
+      end
+    end
     for _, u in ipairs(fighters) do
       if not (u.orders[1] and u.orders[1].type == "amove" and U.dist(u.orders[1].x, u.orders[1].y, threat.x, threat.y) < 300) then
         w:issue(u, { type = "amove", x = threat.x, y = threat.y })
@@ -726,6 +823,8 @@ function AI:army(tm)
   -- out of gold income for a minute and a half: stop waiting
   if (tm.goldRate or 1) >= 50 or t < 600 then self.brokeSince = nil else self.brokeSince = self.brokeSince or t end
   local broke = self.brokeSince and t - self.brokeSince > 90
+  -- (decided to dig in: the wave comes home)
+  if self.mode == "attack" and self.posture == "turtle" and not broke then self.mode = "gather" end
   if self.mode == "attack" then
     local near = {}
     for _, o in ipairs(w.entities) do
@@ -783,10 +882,19 @@ function AI:army(tm)
     end
     return
   end
-  -- (the posture: creep, mass up, strike or raid - AI War style, the best only some of the time)
-  if not self.P.legacy then self:thinkPosture(fighters, food) end
+  -- (the posture - creep, mass up, strike, raid or dig in - is thought over above, AI War style:
+  -- the best only some of the time)
   -- 3. creeping: with the hero and a few units, clear camps for experience and the middle mine
-  local camp = self.P.creep and (self.P.legacy or self.posture == "creep" or food < 6) and self:creepTarget(fighters, food)
+  -- (expansion time and a camp guards the mine we want: clearing it is the job, whatever the posture)
+  local clearing = false
+  if not self.P.legacy and self.posture ~= "turtle" and t > self.P.expandAt - 60 and self:count(self.race.hall, true) < 2 then
+    clearing = self:expansionGuard() ~= nil
+  end
+  local camp = self.P.creep and (self.P.legacy or self.posture == "creep" or food < 6 or clearing) and self:creepTarget(fighters, food)
+  if camp and clearing and camp == self:expansionGuard() and (self.clearNote or 0) < t then
+    self.clearNote = t + 60
+    Tel.note(w, "expand", self.team, "clearing the camp at our next gold mine")
+  end
   if camp then
     self.mode = "creep"
     for _, u in ipairs(fighters) do
@@ -797,6 +905,31 @@ function AI:army(tm)
     end
     return
   end
+  -- 3b. dug in: the army waits by the towers (it still defends, above); it comes out only
+  -- when it's clearly the stronger side again
+  if self.posture == "turtle" then
+    local mine, theirs = strength(fighters), 0
+    for _, o in ipairs(w.entities) do
+      if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.worker and not o.def.building then
+        theirs = theirs + o.hp * (o.def.weapon.damage / o.def.weapon.reload)
+      end
+    end
+    if mine < theirs * 1.6 then
+      self.mode = "turtle"
+      local hall = self:hall()
+      local towersAt
+      for _, b2 in ipairs(w.entities) do
+        if b2.alive and b2.team == self.team and b2.key == self.race.tower then towersAt = b2; break end
+      end
+      local hx, hy = (towersAt or hall or fighters[1]).x, (towersAt or hall or fighters[1]).y
+      for _, u in ipairs(fighters) do
+        if U.dist(u.x, u.y, hx, hy) > 260 and #u.orders == 0 then
+          w:issue(u, { type = "amove", x = hx + self.rng:random(-110, 110), y = hy + self.rng:random(-110, 110) })
+        end
+      end
+      return
+    end
+  end
   -- 4. strong enough: attack
   local need = math.min(self.attackFood + math.floor(t / 300) * 4 + 4 * (self.failedWaves or 0), 40)
   if t > 1200 then need = math.min(need, 18) end -- late game: no more turtling
@@ -804,7 +937,7 @@ function AI:army(tm)
   if not self.P.legacy then
     if self.posture == "strike" then need = math.floor(need * 0.65)
     elseif self.posture == "raid" then need = math.min(need, math.max(8, math.floor(self.attackFood * 0.45)))
-    elseif self.posture == "mass" then need = math.floor(need * 1.35) end
+    elseif self.posture == "mass" then need = math.min(40, math.floor(need * 1.35)) end
   end
   -- better players attack when they're actually stronger, not at a fixed army size
   if self.P.smart and food >= (self.P.legacy and 10 or math.max(12, self.attackFood * 0.7) + 3 * (self.failedWaves or 0)) then
@@ -813,7 +946,8 @@ function AI:army(tm)
     for _, o in ipairs(w.entities) do
       if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.worker then
         local s = o.hp * (o.def.weapon.damage / o.def.weapon.reload)
-        if o.def.building then s = s * (self.P.legacy and 0.9 or 1.25) end -- towers fight from where they stand: right where we'd attack
+        -- (towers fight from where they stand: they matter where we'd attack, not across the map)
+        if o.def.building then s = s * (self.P.legacy and 0.9 or 0.6) end
         theirs = theirs + s
       end
     end
@@ -856,6 +990,16 @@ function AI:finishOff(fighters)
     end
   end
   if #blds == 0 or t < 240 then self.finishing = nil; return false end
+  -- (a fallen hero they can raise again at an altar still counts: they're not finished yet)
+  for tt = 1, w.np do
+    if w:hostile(tt, self.team) then
+      for _, o in ipairs(C.heroesOf(w, tt, true)) do
+        if not o.alive and o.respawnAt then
+          for _, b in ipairs(blds) do if b.team == tt and b.def.altar then heroes = heroes + 1; break end end
+        end
+      end
+    end
+  end
   local beaten = (army == 0 and heroes == 0) or (halls == 0 and workers == 0 and army <= 2)
   if not beaten then self.finishing = nil; return false end
   if not self.finishing then
@@ -923,12 +1067,19 @@ end
 
 -- the nearest living creep camp we can take: small ones with the hero early, the
 -- middle one (with its boss) once the army is a real one
+-- the opening minutes: the hero creeps the small camps by our base on his own, as players do
+local function t0Early(w) return w.time < 150 end
+
 function AI:creepTarget(fighters, food)
   local w = self.world
   local heroes = C.heroesOf(w, self.team, false)
   if #heroes == 0 then return nil end
   local h = heroes[1]
   local best, bd
+  -- (a real army goes creeping, not the hero with a grunt: the hero alone loses units to it)
+  local troops = 0
+  for _, u in ipairs(fighters) do if u.key ~= "commander" and u.def.cost then troops = troops + (u.def.cost.food or 0) end end
+  local guard = not self.P.legacy and self:expansionGuard()
   for _, cp in ipairs(w.craft.camps) do
     local hp, alive = 0, 0
     for _, u in ipairs(cp.units) do if u.alive then hp = hp + u.hp; alive = alive + 1 end end
@@ -936,8 +1087,11 @@ function AI:creepTarget(fighters, food)
       local myHp = 0
       -- (a hero's skills and healing make him worth more than his health alone)
       for _, u in ipairs(fighters) do myHp = myHp + u.hp * ((u.key == "commander" and not self.P.legacy) and 1.8 or 1) end
-      if myHp > hp * self.P.creepRatio then
+      local bigCamp = alive >= 4
+      if myHp > hp * self.P.creepRatio and (self.P.legacy or troops >= (bigCamp and 6 or 3) or t0Early(w)) then
         local d = U.dist(h.x, h.y, cp.x, cp.y)
+        -- the camp in the way of our next expansion counts as much nearer
+        if cp == guard then d = d * 0.35 end
         -- the enemy's side of the map is off limits for creeping
         local enemyHall
         for _, e in ipairs(w.entities) do
@@ -978,11 +1132,28 @@ function AI:thinkPosture(fighters, food)
     { key = "creep", label = "creep with the hero", score = camp and (0.55 * P.creep * (hl < 3 and 1.3 or (hl < 5 and 0.8 or 0.4)) * (t < 780 and 1 or 0.5)) or 0 },
     { key = "mass", label = "mass up first", score = 0.45 * P.patience * (1.25 - odds) },
     { key = "strike", label = "strike", score = 0.55 * P.aggression * (0.3 + odds) * (t > 210 and 1 or 0.3) },
+    -- beaten up (army gone, theirs still around): towers at home, the army behind them, let them come
+    -- (a spell, not a way of life: about two and a half minutes, then not again for four)
+    { key = "turtle", label = "dig in behind towers", score = (not self.P.legacy and odds < 0.3 and t > 300 and food < 8 and t >= (self.turtleCool or 0))
+      and (0.5 * (P.patience or 1) * (1.4 - odds) * (theirs > 0 and 1 or 0.3)) or 0 },
     { key = "raid", label = "raid their economy", score = exposed > 0 and (0.45 * P.raid * (0.6 + 0.4 * odds) * (1 + math.min(1, towers / math.max(1, theirs + 1)) * 0.5) * (t > 180 and 1 or 0.3)) or 0 },
   }
   local o, changed = B.commit(self.postState, opts, self.level, self.rng, t, { reconsider = 50, minHold = 20, margin = 1.25 })
   if not o then return end
   self.posture = o.key
+  if o.key == "turtle" then
+    self.turtleSince = self.turtleSince or t
+    if t - self.turtleSince > 150 then
+      -- dug in long enough: come out (mass up and go again) and don't dig in again for a while
+      self.turtleCool, self.turtleSince = t + 240, nil
+      self.posture = "mass"
+      self.postState = {}
+      Tel.note(w, "posture", self.team, "done digging in: building up to strike again")
+      return
+    end
+  else
+    self.turtleSince = nil
+  end
   if changed then Tel.note(w, "posture", self.team, B.explain(opts, o)) end
 end
 
