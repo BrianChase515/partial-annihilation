@@ -504,6 +504,61 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_EXPMINE") then
+    -- Craft: a second Great Hall by another gold mine, five workers on that mine: does gold come in?
+    for _, pass in ipairs({ true, false }) do
+      game = startFn({ mode = "craft", size = 88, seed = tonumber(os.getenv("PA_EXPMINE")) or 31, autotest = true,
+        players = { { human = true, ally = 1, race = "warband", class = "juggernaut" }, { ally = 2, level = 1, race = "vanguard" } } })
+      game.ais = {}
+      local w = game.world
+      w.passFriendly = pass
+      local tm = w.teams[1]
+      local C = require("src.craft")
+      local home
+      for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.hall then home = e end end
+      -- the second-nearest mine
+      local ms = {}
+      for _, m in ipairs(w.craft.mines) do if m.alive and m.gold > 0 then ms[#ms + 1] = m end end
+      table.sort(ms, function(a2, b2) return U.dist2(a2.x, a2.y, home.x, home.y) < U.dist2(b2.x, b2.y, home.x, home.y) end)
+      local mine = ms[2]
+      -- a hall site 4-6 tiles from it, toward home
+      local map = w.map
+      local mx, my = map:tileAt(mine.x, mine.y)
+      local hx, hy
+      for r = 4, 9 do
+        for dy = -r, r do for dx = -r, r do
+          if not hx and (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace("w_hall", mx + dx, my + dy, 1, "land") then hx, hy = mx + dx, my + dy end
+        end end
+        if hx then break end
+      end
+      local d = D.units.w_hall
+      local hall2 = w:spawn("w_hall", 1, (hx + d.w / 2) * w.T, (hy + d.h / 2) * w.T, 1)
+      w:rebuildGrid()
+      -- clear the creep camps round that mine (they'd fight the workers)
+      for _, e in ipairs(w.entities) do if e.alive and e.creepCamp and U.dist(e.x, e.y, mine.x, mine.y) < 700 then e.alive = false end end
+      -- and a footman parked right in the gold line, between the hall and the mine
+      local blk = w:spawn("grunt", 1, (mine.x + hall2.x) / 2, (mine.y + hall2.y) / 2)
+      local ws = {}
+      for k = 1, 5 do
+        local u = w:spawn("peon", 1, hall2.x + k * 14, hall2.y + d.h * w.T / 2 + 30)
+        w:issue(u, { type = "harvest", kind = "gold", target = mine })
+        ws[k] = u
+      end
+      local g0 = tm.goldIn or 0
+      local t = 0
+      while t < 60 do w:update(1 / 30); t = t + 1 / 30 end
+      local states = {}
+      for _, u in ipairs(ws) do
+        local o = u.orders[1]
+        local st = not o and "idle" or (u.inMine and "in the mine" or (u.carry and "carrying" or o.type))
+        states[st] = (states[st] or 0) + 1
+      end
+      local sl = {} for k, n in pairs(states) do sl[#sl + 1] = k .. " x" .. n end
+      print(string.format("EXPMINE pass-through %s: gold in over 60s from the second hall's workers: %d; workers: %s; mine %d px from the hall",
+        pass and "ON" or "off", math.floor((tm.goldIn or 0) - g0), table.concat(sl, ", "), math.floor(U.dist(mine.x, mine.y, hall2.x, hall2.y))))
+    end
+    return
+  end
   if os.getenv("PA_CRAFTPASS") then
     -- Craft: a footman walled in by his own farms walks straight out; an enemy can't walk in
     game = startFn({ mode = "craft", size = 88, seed = 31, autotest = true,

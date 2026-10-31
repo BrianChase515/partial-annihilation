@@ -711,7 +711,7 @@ function W:followPath(e, dt, arriveDist)
   end
   -- the spot is taken: a friendly unit is standing on (or right next to) the destination and
   -- we're as close as we can get - that counts as arriving (rather than shoving at it forever)
-  if last and len < 90 and e.def.domain ~= "air" then
+  if last and len < 90 and e.def.domain ~= "air" and not e.def.worker then
     local taken = false
     self:query(p.x, p.y, 40, function(o)
       if not taken and o ~= e and o.alive and not o.def.building and o.def.domain ~= "air" and o.team and e.team
@@ -728,11 +728,11 @@ function W:followPath(e, dt, arriveDist)
   local step = math.min(len, speed * dt)
   -- a friendly unit standing right in the way: steer round it instead of pushing into it head-on
   -- (on the side it's already leaning to, so it doesn't dither)
-  if e.def.domain ~= "air" then
+  if e.def.domain ~= "air" and not e.def.worker then
     local r1 = e.def.radius
     local bx, by, bd
     self:query(e.x, e.y, r1 + 34, function(o)
-      if o ~= e and o.alive and not o.def.building and o.def.domain ~= "air" and o.team and e.team
+      if o ~= e and o.alive and not o.def.building and o.def.domain ~= "air" and o.team and e.team and not o.def.worker
         and self.ally[o.team] == self.ally[e.team] and self:layerOf(o) == self:layerOf(e) then
         local ox, oy = o.x - e.x, o.y - e.y
         local d = math.sqrt(ox * ox + oy * oy)
@@ -792,8 +792,11 @@ function W:separate(dt)
       local px, py = 0, 0
       self:query(e.x, e.y, r1 + 20, function(o)
         -- (a unit fleeing slips past enemies instead of shoving through them)
+        -- (workers - peons, peasants - pass through friendly units and they through them: one
+        -- unit parked by a mine or a hall can't jam the gold line)
         if o ~= e and o.alive and not o.def.building and (o.def.domain == "air") == air
-          and not ((e.retreating or o.retreating) and o.team and e.team and self.ally[o.team] ~= self.ally[e.team]) then
+          and not ((e.retreating or o.retreating) and o.team and e.team and self.ally[o.team] ~= self.ally[e.team])
+          and not ((e.def.worker or o.def.worker) and o.team and e.team and self.ally[o.team] == self.ally[e.team]) then
           local dx, dy = e.x - o.x, e.y - o.y
           local d2 = dx * dx + dy * dy
           local rr = r1 + o.def.radius
