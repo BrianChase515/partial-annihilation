@@ -233,10 +233,20 @@ local STANCES = {
   centipede = { mul = {}, poison = 70, lifesteal = 0.08 },
 }
 A.STANCES = STANCES
-function A.setStance(w, c, key)
+-- `echo`: the stance just left keeps going for a few more seconds alongside the new one (Spirit
+-- Echo), so dancing between stances pays
+A.ECHO = 4
+function A.setStance(w, c, key, echo, quiet)
   c.stance = key
+  c.stanceEcho = echo
   c.stanceMul, c.stanceChill, c.stancePoison, c.stanceLifesteal, c.stanceRegen = {}, nil, nil, nil, nil
   local list = key == "avatar" and { "jaguar", "gorilla", "eagle", "centipede" } or { key }
+  if echo and echo ~= key and key ~= "avatar" and STANCES[echo] then
+    list[#list + 1] = echo
+    local token = {}
+    c.echoToken = token
+    later(w, A.ECHO, function() if c.alive and c.stance == key and c.echoToken == token then A.setStance(w, c, key, nil, true) end end)
+  end
   for _, k in ipairs(list) do
     local sd = STANCES[k]
     for mk, v in pairs(sd.mul) do c.stanceMul[mk] = (c.stanceMul[mk] or 1) * v end
@@ -245,6 +255,7 @@ function A.setStance(w, c, key)
     if sd.lifesteal then c.stanceLifesteal = sd.lifesteal end
     if sd.regen then c.stanceRegen = sd.regen end
   end
+  if quiet then return end
   local col = ({ jaguar = { 1, 0.75, 0.3 }, gorilla = { 0.7, 0.55, 0.4 }, eagle = { 0.6, 0.85, 1 }, centipede = { 0.5, 1, 0.4 }, avatar = { 1, 0.95, 0.6 } })[key]
   fx(w, "ring", c.x, c.y, 70, 0.6, { color = col })
 end
@@ -274,6 +285,16 @@ local function charm(w, c, o, dur)
 end
 
 local SKILLLOG = os.getenv("PA_SKILLLOG")
+-- a Spiritcaller stance button: switch (the old one echoes), then the stance's burst. During
+-- Spirit Avatar he's in every stance already, so it's just the burst
+local function stanceUse(w, c, key, burst)
+  if c.stance ~= "avatar" then
+    local prev = c.stance
+    A.setStance(w, c, key, prev ~= key and prev or nil)
+  end
+  burst()
+end
+
 A.SKILLS = {
   -- Ranger
   multishot = { name = "Volley", aim = "self", range = 0, cd = 14, tags = { "buff" },
@@ -664,18 +685,46 @@ A.SKILLS = {
     use = function(w, c) summon(w, c, "gargantuan", 1, 30, math.floor((c.clevel or 1) / 2)) end },
 
   -- Spiritcaller (spirit stances: one at a time, each reshapes your attack)
-  jaguar = { name = "Jaguar Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
-    desc = "Stance: attack 35% faster and move 15% faster.",
-    use = function(w, c) if c.stance == "jaguar" then return false end; A.setStance(w, c, "jaguar") end },
-  gorilla = { name = "Gorilla Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
-    desc = "Stance: take 35% less damage and regenerate 1% health per second.",
-    use = function(w, c) if c.stance == "gorilla" then return false end; A.setStance(w, c, "gorilla") end },
-  eaglestance = { name = "Eagle Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
-    desc = "Stance: +25% range, +20% speed, and your shots slow.",
-    use = function(w, c) if c.stance == "eagle" then return false end; A.setStance(w, c, "eagle") end },
-  centipede = { name = "Centipede Stance", aim = "self", range = 0, cd = 3, tags = { "stance" },
-    desc = "Stance: your shots poison, and you heal for 8% of the damage you deal.",
-    use = function(w, c) if c.stance == "centipede" then return false end; A.setStance(w, c, "centipede") end },
+  -- each stance fires something as you enter it (again on the same stance refires it), and the
+  -- one you left lingers for 4 seconds (Spirit Echo)
+  jaguar = { name = "Jaguar Stance", aim = "self", range = 320, cd = 12, tags = { "stance" },
+    desc = "Stance: attack 35% faster, move 15% faster. On entering: pounce on the nearest enemy, and your next 3 attacks hit 50% harder.",
+    use = function(w, c) stanceUse(w, c, "jaguar", function()
+      local best, bd
+      for _, o in ipairs(hostiles(w, c, c.x, c.y, 320)) do
+        local d = U.dist(c.x, c.y, o.x, o.y)
+        if not bd or d < bd then best, bd = o, d end
+      end
+      if best then
+        local dx, dy = U.norm(best.x - c.x, best.y - c.y)
+        dash(w, c, best.x - dx * 40, best.y - dy * 40, 320)
+        if not w:isFleeing(c) then w:issue(c, { type = "attack", target = best }) end
+      end
+      c.pounceHits = 3
+      fx(w, "splash", c.x, c.y, 60, 0.3)
+    end) end },
+  gorilla = { name = "Gorilla Stance", aim = "self", range = 160, cd = 12, tags = { "stance" },
+    desc = "Stance: take 35% less damage, regenerate 1% health a second. On entering: slam the ground - enemies around you are stunned for 1 second, and you get a shield worth 8% of your health for 5 seconds.",
+    use = function(w, c) stanceUse(w, c, "gorilla", function()
+      area(w, c, c.x, c.y, 160, skillDmg(c, 40), { stun = 1 })
+      local sh = c.maxhp * 0.08
+      if (c.absorb or 0) < sh then c.absorb = sh; c.absorbUntil = w.time + 5 end
+      fx(w, "splash", c.x, c.y, 160, 0.4)
+    end) end },
+  eaglestance = { name = "Eagle Stance", aim = "self", range = 320, cd = 12, tags = { "stance" },
+    desc = "Stance: +25% range, +20% speed, your shots slow. On entering: a screech that slows every enemy within 320 for 3 seconds.",
+    use = function(w, c) stanceUse(w, c, "eagle", function()
+      area(w, c, c.x, c.y, 320, 0, { slow = 3 })
+      fx(w, "ring", c.x, c.y, 320, 0.5, { color = { 0.6, 0.85, 1 } })
+    end) end },
+  centipede = { name = "Centipede Stance", aim = "self", range = 200, cd = 12, tags = { "stance" },
+    desc = "Stance: your shots poison, and you heal for 8% of the damage you deal. On entering: a venom cloud where you stand (6 seconds).",
+    use = function(w, c) stanceUse(w, c, "centipede", function()
+      local st = w.hs or w.arena
+      st.zones = st.zones or {}
+      st.zones[#st.zones + 1] = { x = c.x, y = c.y, r = 170, untilT = w.time + 6, team = c.team, kind = "venom", dps = skillDmg(c, 35), src = c }
+      fx(w, "ring", c.x, c.y, 170, 0.5, { color = { 0.5, 1, 0.4 } })
+    end) end },
   rushclaw = { name = "Rushing Claw", aim = "point", range = 340, cd = 9, tags = { "dmg", "move" },
     desc = "Lunge to the target and rake everything around you.",
     use = function(w, c, tx, ty)
@@ -684,11 +733,15 @@ A.SKILLS = {
       fx(w, "splash", c.x, c.y, 110, 0.35)
     end },
   avatar = { name = "Spirit Avatar", aim = "self", range = 0, cd = 60, ult = true, tags = { "buff", "ult" },
-    desc = "ULTIMATE: all four stances at once for 10 seconds.",
+    desc = "ULTIMATE: all four stances at once for 10 seconds; when it ends, every stance is ready again.",
     use = function(w, c)
       local prev = c.stance
       A.setStance(w, c, "avatar")
-      later(w, 10, function() if c.stance == "avatar" then if prev then A.setStance(w, c, prev) else c.stance, c.stanceMul, c.stanceChill, c.stancePoison, c.stanceLifesteal, c.stanceRegen = nil, nil, nil, nil, nil, nil end end end)
+      later(w, 10, function()
+        if c.stance == "avatar" then if prev and prev ~= "avatar" then A.setStance(w, c, prev) else c.stance, c.stanceMul, c.stanceChill, c.stancePoison, c.stanceLifesteal, c.stanceRegen = nil, nil, nil, nil, nil, nil end end
+        -- and every stance comes back at once
+        for _, sk in ipairs(c.skills or {}) do if A.SKILLS[sk.key] and A.SKILLS[sk.key].tags[1] == "stance" then sk.readyAt = math.min(sk.readyAt, w.time) end end
+      end)
     end },
 }
 for k, s in pairs(A.SKILLS) do s.key = k end
@@ -706,7 +759,7 @@ A.PASSIVES = {
   loader   = { name = "Rapid Loader", desc = "Fire 20% faster.", apply = function(w, e) mulMod(e, "rof", 1.2) end },
   treads   = { name = "Overdrive Treads", desc = "+15% movement speed.", apply = function(w, e) mulMod(e, "speed", 1.15) end },
   bounty   = { name = "Bounty Hunter", desc = "+30% experience.", apply = function(w, e) mulMod(e, "xpMul", 1.3) end },
-  breaker  = { name = "Siege Breaker", desc = "+35% damage to towers and the Core.", apply = function(w, e) mulMod(e, "breaker", 1.35) end },
+  breaker  = { name = "Siege Breaker", desc = "+35% damage to towers and the Core.", descArena = "+35% damage to towers and the Core.", descOther = "+35% damage to structures.", apply = function(w, e) mulMod(e, "breaker", 1.35) end },
   lifesteal = { name = "Siphon Rounds", desc = "Heal for 12% of the damage you deal.", apply = function(w, e) e.mods.lifesteal = (e.mods.lifesteal or 0) + 0.12 end },
   secondwind = { name = "Second Wind", desc = "Once per life: survive a killing blow and become invulnerable for 4 seconds.", apply = function(w, e) e.mods.secondWind = true end },
   focus    = { name = "Focus Core", desc = "Skills recharge 20% faster.", apply = function(w, e) mulMod(e, "cdr", 0.8) end },
@@ -766,7 +819,7 @@ A.CLASSES = {
   { key = "hexer", name = "Hexer", tag = "Poisons, ghouls and hexes that turn creeps against their own side.",
     skills = { "plague", "ghouls", "grasp", "sacrifice", "soulharvest" }, ult = "gargantuan", passives = { "toxin", "fetish" },
     base = function(w, e) hpUp(e, 1.0); mulMod(e, "skillDmg", 1.1) end },
-  { key = "spiritcaller", name = "Spiritcaller", tag = "Switches between four spirit stances that reshape every attack.",
+  { key = "spiritcaller", name = "Spiritcaller", tag = "Dances between four spirit stances: each switch fires a burst, and the last one lingers.",
     skills = { "jaguar", "gorilla", "eaglestance", "centipede", "rushclaw" }, ult = "avatar", passives = { "primal", "ferocity" },
     base = function(w, e) hpUp(e, 1.05); mulMod(e, "dmg", 1.05) end },
 }
@@ -1309,6 +1362,15 @@ function A.tickHeroes(w, dt, st)
       local z = st.zones[i]
       if t > z.untilT then table.remove(st.zones, i)
       else
+        if z.kind == "venom" then
+          -- Centipede's cloud: poisons enemies standing in it
+          for _, e in ipairs(w.entities) do
+            if e.alive and not e.def.building and not e.neutral and w:hostile(z.team, e.team) and U.dist(e.x, e.y, z.x, z.y) < z.r then
+              w:damage(e, z.dps * 0.25, z.src and z.src.alive and z.src or nil)
+            end
+          end
+          if math.random() < 0.5 then fx(w, "ring", z.x, z.y, z.r, 0.3, { color = { 0.45, 1, 0.35 } }) end
+        else
         for _, e in ipairs(w.entities) do
           if e.alive and not e.def.building and U.dist(e.x, e.y, z.x, z.y) < z.r then
             if w:hostile(z.team, e.team) then e.slowUntil = math.max(e.slowUntil or 0, t + 0.5)
@@ -1316,6 +1378,7 @@ function A.tickHeroes(w, dt, st)
           end
         end
         if math.random() < 0.5 then fx(w, "ring", z.x, z.y, z.r, 0.3, { color = { 1, 0.95, 0.6 } }) end
+        end
       end
     end
   end

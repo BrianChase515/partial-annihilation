@@ -229,23 +229,33 @@ function AI:useSkills(c, enemyC, danger)
     local sk = c.skills[slot]
     if sk and ARENA.SKILLS[sk.key].tags[1] == "stance" then stances[sk.key] = slot end
   end
-  if next(stances) and c.stance ~= "avatar" then
+  if next(stances) then
+    -- every stance fires a burst on entering (and the one left lingers 4 seconds), so in a fight
+    -- he dances: the burst that fits now, whichever is ready
     local hpf = c.hp / c.maxhp
     local near = enemyC and U.dist(c.x, c.y, enemyC.x, enemyC.y) < 380
     local _, _, crowd = self:clusterTarget(c, 300, 200)
-    local want
-    if (danger or near) and hpf < 0.6 then want = { "gorilla", "centipede", "jaguar", "eaglestance" }
-    elseif near then want = hpf < 0.85 and { "centipede", "jaguar", "gorilla", "eaglestance" } or { "jaguar", "centipede", "eaglestance", "gorilla" }
-    elseif (crowd or 0) >= 3 then want = { "jaguar", "centipede", "eaglestance", "gorilla" }
-    else want = { "eaglestance", "jaguar", "centipede", "gorilla" } end
-    for _, k in ipairs(want) do
+    crowd = crowd or 0
+    local close = #ARENA.hostiles(w, c, c.x, c.y, 320, false)
+    local want, fight
+    if close > 0 or near then
+      fight = true
+      if (danger or near) and hpf < 0.6 then want = { "gorilla", "eaglestance", "centipede", "jaguar" }
+      elseif crowd >= 3 then want = { "centipede", "gorilla", "jaguar", "eaglestance" }
+      elseif near then want = { "jaguar", "eaglestance", "centipede", "gorilla" }
+      else want = { "jaguar", "centipede", "gorilla", "eaglestance" } end
+    elseif c.stance ~= "avatar" then
+      want = hpf < 0.7 and { "gorilla" } or { "eaglestance" }
+    end
+    for _, k in ipairs(want or {}) do
       local slot = stances[k]
-      if slot then
+      if slot and w.time >= c.skills[slot].readyAt then
         local cur = c.stance == "eagle" and "eaglestance" or c.stance
-        if cur ~= k and w.time >= c.skills[slot].readyAt then
+        -- (out of a fight: only switch, don't waste the burst re-entering the same one)
+        if fight or cur ~= k then
           if ARENA.useSkill(w, c, slot, c.x, c.y) then return end
         end
-        break
+        if not fight then break end
       end
     end
   end

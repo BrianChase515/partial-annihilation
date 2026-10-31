@@ -504,6 +504,66 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_SPIRIT") then
+    -- a level-5 hero with a full kit, run by the AI's skill logic, against footmen and riflemen:
+    -- how many it kills in 40 seconds and how much health it keeps (Spiritcaller vs others)
+    local ARENA = require("src.arena")
+    local CAI = require("src.craft_ai")
+    local kits = {
+      spiritcaller = { "jaguar", "gorilla", "centipede", "avatar" },
+      spiritcaller2 = { "jaguar", "rushclaw", "eaglestance", "avatar" },
+      juggernaut = { "leap", "warcry", "whirlwind", "berserk" },
+      ranger = false,
+    }
+    for _, cls in ipairs({ "spiritcaller", "spiritcaller2", "juggernaut" }) do
+      local kills, hpk, casts, trials = 0, 0, {}, 0
+      for trial = 1, 4 do
+        game = startFn({ mode = "craft", size = 96, seed = 40 + trial, autotest = true,
+          players = { { ally = 1, level = 5, race = "warband", class = cls:gsub("%d", "") }, { ally = 2, level = 5, race = "vanguard" } } })
+        game.ais = {}
+        local w = game.world
+        local h = w.teams[1].commander
+        h.clevel = 5
+        h.maxhp = math.floor(h.maxhp * 1.34); h.hp = h.maxhp
+        h.mods.dmg = (h.mods.dmg or 1) * 1.28
+        for i, k in ipairs(kits[cls]) do h.skills[i] = { key = k, readyAt = 0 } end
+        local cx, cy = w.map.w * w.T / 2, w.map.h * w.T / 2
+        h.x, h.y = cx - 120, cy
+        local foes = {}
+        for k = 1, 6 do foes[#foes + 1] = w:spawn("footman", 2, cx + 120 + (k % 2) * 30, cy + (k - 3.5) * 34) end
+        for k = 1, 4 do foes[#foes + 1] = w:spawn("rifleman", 2, cx + 230, cy + (k - 2.5) * 40) end
+        for _, f in ipairs(foes) do w:issue(f, { type = "amove", x = h.x, y = h.y }) end
+        local brain = setmetatable({ world = w, team = 1, level = 7, rng = love.math.newRandomGenerator(trial), skillChance = 0.75 }, CAI.HeroBrain)
+        local real = ARENA.useSkill
+        ARENA.useSkill = function(w2, c, slot, ...)
+          local ok = real(w2, c, slot, ...)
+          if ok ~= false and c == h then local k = c.skills[slot].key; casts[k] = (casts[k] or 0) + 1 end
+          return ok
+        end
+        local t, think = 0, 0
+        while t < 40 and h.alive do
+          game:update(1 / 30); t = t + 1 / 30; think = think - 1 / 30
+          if think <= 0 then
+            think = 0.4
+            local near
+            for _, f in ipairs(foes) do if f.alive and (not near or U.dist(h.x, h.y, f.x, f.y) < U.dist(h.x, h.y, near.x, near.y)) then near = f end end
+            if near then
+              brain:useSkills(h, nil, true)
+              if not h.orders[1] then w:issue(h, { type = "attack", target = near }) end
+            end
+          end
+        end
+        ARENA.useSkill = real
+        local k = 0
+        for _, f in ipairs(foes) do if not f.alive then k = k + 1 end end
+        kills = kills + k; hpk = hpk + (h.alive and h.hp / h.maxhp or 0); trials = trials + 1
+      end
+      local l = {} for k, n in pairs(casts) do l[#l + 1] = k .. " " .. n end
+      table.sort(l)
+      print(string.format("SPIRIT %-13s kills %.1f / 10, health left %d%%   casts: %s", cls, kills / trials, hpk / trials * 100, table.concat(l, ", ")))
+    end
+    return
+  end
   if os.getenv("PA_AUTOSKILL") then
     -- Auto-cast: heroes / squads Q W E R isn't pointed at use their skills; the one it is, doesn't
     local A = require("src.automation")

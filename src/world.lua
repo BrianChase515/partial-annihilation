@@ -1334,6 +1334,8 @@ function W:fire(e, o, wov)
   if self.heroes then
     dmg = dmg * (self:bv(e, "dmg") or 1) * (e.dmgMul or 1)
     if o.def.building and m.breaker then dmg = dmg * m.breaker end
+    -- Jaguar's pounce: the next few attacks hit harder
+    if e.pounceHits and e.pounceHits > 0 then dmg = dmg * 1.5; e.pounceHits = e.pounceHits - 1 end
     if m.crit and math.random() < m.crit then dmg = dmg * 2 end
   end
   local wpn = w

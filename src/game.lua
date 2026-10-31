@@ -40,6 +40,11 @@ function G.new(opts)
   end
   self.arena = opts.mode == "arena"
   self.craft = opts.mode == "craft"
+  -- (card wording: the Arena has a Core; everywhere else it's structures)
+  do
+    local bk = require("src.arena").PASSIVES.breaker
+    bk.desc = self.arena and bk.descArena or bk.descOther
+  end
   self.players = players
   local income = {}
   for i, p in ipairs(players) do
