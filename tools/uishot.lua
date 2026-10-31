@@ -504,6 +504,37 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_GUARD") then
+    -- Guard: 3 tanks guard a constructor, which then walks off; do they keep up?
+    local UI = require("src.ui")
+    game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local tm = w.teams[1]
+    local b = w:spawn("builder", 1, tm.startX + 60, tm.startY)
+    local ts = {}
+    for k = 1, 3 do ts[k] = w:spawn("tank", 1, tm.startX - 80, tm.startY + k * 25) end
+    w:update(1 / 30)
+    game.selected = {}
+    for _, u in ipairs(ts) do game.selected[u] = true end
+    game:orderAction("guard")
+    local sx, sy = game:worldToScreen(b.x, b.y)
+    game.mode = "guard"
+    game:mousepressed(sx, sy, 1)
+    local o = ts[1].orders[1]
+    print("GUARD order: " .. tostring(o and o.type) .. " on " .. tostring(o and o.target and o.target.key))
+    local map = w.map
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    w:issue(b, { type = "move", x = cx, y = cy })
+    for _ = 1, 30 * 25 do w:update(1 / 30) end
+    local far = 0
+    for _, u in ipairs(ts) do far = math.max(far, U.dist(u.x, u.y, b.x, b.y)) end
+    print(string.format("GUARD after the constructor walked %d px: the furthest guard is %d px from it", math.floor(U.dist(b.x, b.y, tm.startX, tm.startY)), math.floor(far)))
+    frame(); frame()
+    pending = "uishot_guard.png"
+    frame(); frame()
+    return
+  end
   if os.getenv("PA_FFAOUT") then
     local UI = require("src.ui")
     -- a 4-way free-for-all: you're knocked out early; results, watch the rest, the real end

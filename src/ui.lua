@@ -1611,6 +1611,7 @@ local ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
   { "hold", "Hold", "D", "Hold ground: selected units stop where they are and fire at anything in range, but never chase or move toward attackers. Any new order releases them." },
+  { "guard", "Guard", "E", "Guard: click one of your units (a constructor heading out to expand, say) - the selected fighters follow it and fight anything that comes near it. Right-clicking a friendly unit does the same." },
   { "patrol", "Patrol", "P", "Patrol: walk back and forth to a spot, fighting what they meet. Constructors: drag a circle to make a repair zone - they stay and fix everything of yours inside it." },
   { "flee", "Flee", "F", "Retreat to your flag at +25% speed - or, with no flag set, back to the plant that built each unit. Weapons stay OFF until fully repaired." },
   { "fleecmd", "To Cmdr", "Shift+F", "Retreat to the Commander (+25% speed, weapons off until repaired)." },
@@ -1684,14 +1685,14 @@ function UI.orderButtons(game)
   for _, e in ipairs(game:selectedList()) do if e.team == 1 then mine = true end end
   local myc = game:myCommander()
   local enabled = {
-    amove = mobile, stop = mobile, patrol = mobile, hold = n > 0, flee = mobile, fleecmd = mobile, flag = true,
+    amove = mobile, stop = mobile, guard = mobile, patrol = mobile, hold = n > 0, flee = mobile, fleecmd = mobile, flag = true,
     destroy = mine, army = true, half = n >= 2, builder = true, cmd = true, follow = n > 0,
     ["repeat"] = #game:selectedFactories() > 0, nuke = myc and game.selected[myc] and myc.nukeReady and true or false, help = true,
   }
   local bw, gap = 66, 4
   local list = {}
   -- Commander of Heroes: no building, no Commander - just the squad orders
-  local cohSkip = { fleecmd = true, destroy = true, half = true, builder = true, ["repeat"] = true, nuke = true }
+  local cohSkip = { guard = true, fleecmd = true, destroy = true, half = true, builder = true, ["repeat"] = true, nuke = true }
   local cohText = {
     flee = { "Flee", "Pull the selection back to your HQ (or your flag, if planted) at +25% speed. Weapons stay off until repaired - the HQ heals fast." },
     cmd = { "Squad", "C: with several squads selected, the next one becomes ACTIVE (gold - Q / W fire its skills). Otherwise: jump to the next squad." },
@@ -1894,6 +1895,7 @@ Orders (hold Shift to queue)
   P then click .............. patrol
   Hold G + click ............ group move (everyone keeps the slowest unit's pace)
   S ......................... stop
+  E then click .............. guard: the selected fighters follow and protect that unit (escort a constructor)
   D ......................... hold ground: stop, fire at anything in range, never chase (any order releases)
   F ......................... retreat to your flag (+25% speed, weapons OFF until fully repaired; can't be cancelled)
   Shift+F ................... retreat to the Commander

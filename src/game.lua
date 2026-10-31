@@ -906,7 +906,9 @@ function G:orderAction(action, shift)
     local c = self:myCommander()
     if c then self:select({ c }) end
   end
-  if action == "amove" or action == "patrol" then
+  if action == "guard" then
+    if #self:selectedMobile() > 0 then self.mode = "guard"; self:notice("Guard: click a unit of yours (a constructor, say) for the selection to follow and protect", 2) end
+  elseif action == "amove" or action == "patrol" then
     if #self:selectedMobile() > 0 then self.mode = action end
   elseif action == "stop" then self:stop()
   elseif action == "flee" then self:retreat("flag"); VOICE.say("retreat")
@@ -1860,6 +1862,25 @@ function G:mousepressed(x, y, button)
       end
       self.mode, self.skillHero = nil, nil
       return
+    elseif self.mode == "guard" then
+      -- the clicked unit of ours: the selection's fighters follow and protect it
+      local world = self.world
+      local target = world:entityAt(wx, wy, function(e) return e.team == 1 and not e.def.building end)
+      if target then
+        local n = 0
+        for _, u in ipairs(self:selectedMobile()) do
+          if u ~= target and u.def.weapon then world:issue(u, { type = "guard", target = target }, shift); n = n + 1 end
+        end
+        if n > 0 then
+          self:notice(string.format("%d unit%s guarding your %s", n, n == 1 and "" or "s", target.def.name), 1.5)
+          world.effects[#world.effects + 1] = { kind = "ping", x = target.x, y = target.y, t = 0, life = 0.5, r = 0.4, g = 1, b = 0.6 }
+        end
+      else
+        self:notice("Guard: click one of your units", 1.2)
+        return
+      end
+      if not shift then self.mode = nil end
+      return
     elseif self.mode == "flag" then
       self.flag = { x = wx, y = wy }
       self:notice("Retreat flag placed", 1.2)
@@ -2271,6 +2292,8 @@ function G:keypressed(key)
     if #self:selectedMobile() > 0 then self.mode = "amove" end
   elseif key == "s" then
     self:stop()
+  elseif key == "e" and not self.arena and not self.craft and not self.world.squads then
+    self:orderAction("guard")
   elseif (key == "delete" or key == "backspace") and not shift then
     self:selfDestruct()
   elseif key == "p" then

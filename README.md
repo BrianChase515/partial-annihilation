@@ -344,7 +344,7 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Game speed | `+` / `-` (0.5x up to 15x; the result never depends on speed) |
 | Restart the same map / Settings | Esc menu: Restart (same map), Settings (window size, camera scroll and zoom speed, trackpad pan speed, edge scrolling, volumes; also on the title screen) |
 | Plant retreat flag | `Ctrl+F` at the mouse (or the Flag button, then click) |
-| Guard a unit / factory output follows a unit | Right-click a friendly unit with army / a factory selected |
+| Guard a unit (escort a constructor, say) / factory output follows a unit | `E` (or the Guard button) then click the unit, or right-click a friendly unit with army selected / with a factory selected |
 | Commander flees home (repairs only there) | `F` with the Commander selected |
 | Arena skills / ultimate | `Q` `W` `E` / `R` at the mouse (Arena) |
 | Hold ground (Annihilation): stop, fire at anything in range, never chase | `D` (or click Hold); any new order releases them; a gold bar marks units holding |
