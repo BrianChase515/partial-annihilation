@@ -40,6 +40,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Wildlands:** creep-heavy, with camps guarding every expansion and the roads between them.
   - **Crossroads (2v2):** you and a computer ally against two enemies. Each team is one race, and heroes can repeat across players.
 - **Auto-cast hero skills** (Auto panel, on by default). Every hero Q W E R isn't controlling right now uses its skills on its own, with the computer's judgement at this match's difficulty; its row in the hero bar says **AUTO**. Select a hero to take its skills back. Commander of Heroes has the same rule for squads. Spiritcaller stance buttons show the animal (Jaguar, Gorilla...) and the stance you're in is outlined in gold.
+- **Only heroes flee (F).** Units don't level up and there's nowhere for them to heal, so they fight on and lost ones are rebuilt; only healers keep them going.
 - **A tougher computer at level 5**, tuned on real games:
   - **Workers like a player's:** about 13 by 3:00 and 20 on two mines by 10:00. Wood piling up no longer shrinks the workforce, and a raided economy rebuilds its workers before teching up.
   - **It expands for real:** around 5-6 minutes it clears the camp guarding its next gold mine on purpose and builds a hall there.

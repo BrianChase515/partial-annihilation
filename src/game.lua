@@ -2554,6 +2554,11 @@ function G:retreat(where)
       self:notice("Commander retreating home: he stays there, weapons off, until fully repaired", 2.5)
     else list[#list + 1] = u end
   end
+  -- Commander Craft: only heroes flee. Units don't level up; a lost one is simply rebuilt
+  if self.craft and #list > 0 then
+    if #list == #units then self:notice("Only heroes can flee in Commander Craft - units fight on (rebuild what you lose)", 2.5) end
+    return
+  end
   if #list == 0 then return end
   local c = self.world.teams[1].commander
   local x, y

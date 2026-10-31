@@ -649,6 +649,22 @@ local function script(mode, secs)
     print(string.format("LONG seed %d %s at %d:%02d", sd, w.over and "over" or "NOT over", math.floor(t / 60), math.floor(t % 60)))
     return
   end
+  if os.getenv("PA_CRAFTFLEE") then
+    game = startFn({ mode = "craft", size = 96, seed = 8,
+      players = { { ally = 1, level = 5, human = true, race = "vanguard" }, { ally = 2, level = 5, race = "warband" } } })
+    game.ais = {}
+    local w = game.world
+    local h = w.teams[1].commander
+    local f = w:spawn("footman", 1, h.x + 40, h.y)
+    w:update(1 / 30)
+    game.selected = { [h] = true, [f] = true }
+    game:retreat("flag")
+    print("CRAFTFLEE hero + footman: hero fleeing " .. tostring(w:isFleeing(h)) .. ", footman fleeing " .. tostring(w:isFleeing(f)))
+    game.selected = { [f] = true }
+    game:retreat("flag")
+    print("CRAFTFLEE footman alone: fleeing " .. tostring(w:isFleeing(f)))
+    return
+  end
   if os.getenv("PA_LASTBLDS") then
     -- the enemy is down to a few buildings tucked away in far corners: does the AI find and
     -- flatten every one of them?
