@@ -431,7 +431,9 @@ function AI:buildings(tm)
   local halls = self:count(r.hall, true)
   local mainLow = not main or U.dist(main.x, main.y, hx, hy) > 700 or main.gold < 2500
   self.savingHall = nil
-  if exp and halls < 3 and (mainLow or (halls < 2 and t > self.P.expandAt)) and not self:pendingBuildAny(r.hall) then
+  -- (gold-starved with wood piling up later on: a third mine is where the army comes from)
+  local woodRich = not self.P.legacy and halls < 3 and tm.wood > 1500 and t > 600
+  if exp and halls < 3 and (mainLow or (halls < 2 and t > self.P.expandAt) or woodRich) and not self:pendingBuildAny(r.hall) then
     local sx, sy = self:hallSpotNear(exp)
     if sx and self:build(r.hall, sx, sy, 0, 5) then
       self.expanding = exp
@@ -953,8 +955,26 @@ function AI:army(tm)
     end
     if mine > theirs * self.P.attackRatio then need = 0 end
   end
+  -- a wave into a much bigger army is just feeding them: hold and grow instead (usually -
+  -- the better players more reliably)
+  local outmatched = false
+  if not self.P.legacy and not broke and t < 1200 and (food >= need or (tm.foodUsed or 0) >= D.CRAFT.FOOD_CAP - 6) then
+    local mine, theirs = strength(fighters), 0
+    for _, o in ipairs(w.entities) do
+      if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.building and not o.def.worker then
+        theirs = theirs + o.hp * (o.def.weapon.damage / o.def.weapon.reload)
+      end
+    end
+    if mine < theirs * 0.75 and self.rng:random() < 0.45 + 0.07 * self.level then
+      outmatched = true
+      if t >= (self.holdNote or 0) then
+        self.holdNote = t + 60
+        Tel.note(w, "wave", self.team, string.format("holding the wave: their army is bigger (%d%% of theirs)", math.floor(mine / math.max(1, theirs) * 100)))
+      end
+    end
+  end
   -- out of gold for good: no point waiting, go and finish it
-  if food >= need or (tm.foodUsed or 0) >= D.CRAFT.FOOD_CAP - 6 or broke then
+  if not outmatched and (food >= need or (tm.foodUsed or 0) >= D.CRAFT.FOOD_CAP - 6 or broke) then
     self.mode = "attack"
     if not self.P.legacy then
       self.tgtState = {} -- a fresh plan for each wave
@@ -1229,8 +1249,19 @@ function AI:pickPlan(cx, cy)
   end
   if an >= 3 then
     ax, ay = ax / an, ay / an
+    -- (only worth it with the bigger army; and a raiding party avoids their army, it doesn't seek it)
+    local rel = 1
+    if not self.P.legacy then
+      local mine, theirs = strength(self:armyUnits()), 0
+      for _, o in ipairs(w.entities) do
+        if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.building and not o.def.worker then
+          theirs = theirs + o.hp * (o.def.weapon.damage / o.def.weapon.reload)
+        end
+      end
+      rel = U.clamp(mine / math.max(1, theirs), 0.15, 1.5) * (self.posture == "raid" and 0.3 or 1)
+    end
     opts[#opts + 1] = { key = "army", label = string.format("wear down their army (%d)", an), x = ax, y = ay,
-      score = 0.4 * P.aggression * (1 - 0.3 * U.dist(cx, cy, ax, ay) / diag) }
+      score = 0.4 * P.aggression * (1 - 0.3 * U.dist(cx, cy, ax, ay) / diag) * rel }
   end
   -- their hero, if he's out on his own or hurt
   for _, o in ipairs(w.entities) do

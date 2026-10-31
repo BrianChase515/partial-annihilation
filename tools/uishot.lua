@@ -665,6 +665,42 @@ local function script(mode, secs)
     print("CRAFTFLEE footman alone: fleeing " .. tostring(w:isFleeing(f)))
     return
   end
+  if os.getenv("PA_FEEDWAVES") then
+    -- the AI with a middling army against a much bigger one parked at home: does it keep sending
+    -- small waves to die (the old habit), or hold and grow?
+    for _, sd in ipairs({ 31, 47, 63 }) do
+      game = startFn({ mode = "craft", size = 96, seed = sd, autotest = true,
+        players = { { ally = 1, level = 5, race = "warband" }, { ally = 2, level = 5, race = "vanguard" } } })
+      game.ais[1] = nil
+      local ais = {}
+      for k, v in pairs(game.ais) do ais[#ais + 1] = v end
+      game.ais = ais
+      local w = game.world
+      local ai
+      for _, a2 in ipairs(game.ais) do if a2.team == 2 then ai = a2 end end
+      local tm1 = w.teams[1]
+      local big = {}
+      for k = 1, 16 do big[#big + 1] = w:spawn(k % 3 == 0 and "headhunter" or "grunt", 1, tm1.startX + (k % 4) * 30, tm1.startY + 200 + math.floor(k / 4) * 30) end
+      local lost0 = 0
+      local waves = 0
+      local seen = {}
+      for _ = 1, 30 * 600 do
+        game:update(1 / 30)
+        for _, u in ipairs(big) do if u.alive and #u.orders == 0 then u.homeX, u.homeY = u.homeX or u.x, u.homeY or u.y end end
+      end
+      local lost = 0
+      for _, nt in ipairs(w.tel.notes) do
+        if nt.team == 2 and nt.kind == "wave" then if nt.text:match("^wave:") then waves = waves + 1 elseif nt.text:match("holding") then seen.hold = (seen.hold or 0) + 1 end end
+      end
+      local alive = 0
+      for _, u in ipairs(big) do if u.alive then alive = alive + 1 end end
+      local army = 0
+      for _, u in ipairs(ai:armyUnits()) do army = army + ((u.def.cost and u.def.cost.food) or 4) end
+      print(string.format("FEEDWAVES seed %d (%s): 10 min vs a parked army of 16: waves sent %d, holds %d, their army left %d/16, AI army now %d food, over %s",
+        sd, ai.p and ai.p.name or "?", waves, seen.hold or 0, alive, army, tostring(w.over)))
+    end
+    return
+  end
   if os.getenv("PA_LASTBLDS") then
     -- the enemy is down to a few buildings tucked away in far corners: does the AI find and
     -- flatten every one of them?

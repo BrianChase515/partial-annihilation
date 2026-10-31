@@ -47,6 +47,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Its hero respects yours:** it won't take on a hero two or more levels above it without an army, and it gets out sooner against a stronger one.
   - **Workers run from raids** the army can't stop in time, and come back after.
   - **It creeps with a real army,** not the hero and a grunt.
+  - **No more feeding waves:** it won't send a wave into an army much bigger than its own (it usually holds and grows instead, the better players more reliably), and a raiding party goes for workers, not your main army. Wood piling up later on sends it to a third mine.
   - **A new posture, dig in:** with its army beaten and yours still standing, it may build up to four towers at home and keep its army behind them until it's the stronger side again. Like the other postures (creep, mass up, strike, raid), it picks the best option only some of the time.
 - **Extra heroes:** a hero from the altar starts at about half your best hero's level (level 5 -> level 2) instead of nearly catching up. Right-click your hero with the altar selected and new or risen heroes walk out to join him.
 - **Cards:** the level-up card says whose it is ("Your Elementalist (level 3)", with his portrait). The Auto panel's **Auto-pick hero cards** (on by default) chooses cards for the heroes you aren't playing, the way the computer would; your main hero's cards stay yours.
