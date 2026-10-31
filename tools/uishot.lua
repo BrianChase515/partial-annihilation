@@ -504,6 +504,31 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_CRAFTPASS") then
+    -- Craft: a footman walled in by his own farms walks straight out; an enemy can't walk in
+    game = startFn({ mode = "craft", size = 88, seed = 31, autotest = true,
+      players = { { human = true, ally = 1, race = "vanguard", class = "ranger" }, { ally = 2, level = 1, race = "warband" } } })
+    game.ais = {}
+    local w = game.world
+    local map = w.map
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    local tx, ty = map:tileAt(cx, cy)
+    tx, ty = map:nearestTile(tx, ty, function(a2, b2) return w:canPlace("v_farm", a2 - 3, b2 - 3, 1, "land") and w:canPlace("v_farm", a2 + 1, b2 + 1, 1, "land") end, 30)
+    -- a ring of 2x2 farms round a 2x2 hole
+    for _, o in ipairs({ { -2, -2 }, { 0, -2 }, { 2, -2 }, { -2, 0 }, { 2, 0 }, { -2, 2 }, { 0, 2 }, { 2, 2 } }) do
+      w:spawn("v_farm", 1, (tx + o[1] + 1) * w.T, (ty + o[2] + 1) * w.T, 1)
+    end
+    w:rebuildGrid()
+    local u = w:spawn("footman", 1, (tx + 1) * w.T, (ty + 1) * w.T)
+    local gx, gy = (tx + 12) * w.T, (ty + 1) * w.T
+    w:issue(u, { type = "move", x = gx, y = gy })
+    local e = w:spawn("grunt", 2, (tx - 10) * w.T, (ty + 1) * w.T)
+    w:issue(e, { type = "move", x = (tx + 1) * w.T, y = (ty + 1) * w.T })
+    for _ = 1, 30 * 20 do w:update(1 / 30) end
+    print(string.format("CRAFTPASS walled-in footman: %d px from where he was sent; enemy grunt %d px from the hole inside the farms",
+      math.floor(U.dist(u.x, u.y, gx, gy)), math.floor(U.dist(e.x, e.y, (tx + 1) * w.T, (ty + 1) * w.T))))
+    return
+  end
   if os.getenv("PA_COHMAP") then
     -- save a Commander of Heroes map, pick it on the menu, and the game starts on that seed
     local Maps = require("src.maps")

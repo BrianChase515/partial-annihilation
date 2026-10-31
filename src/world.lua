@@ -20,6 +20,9 @@ function W.new(opts)
     CRAFT = CRAFT or require("src.craft")
     self.craft = true
     self.map = require("src.craft_map").generate(opts)
+    -- units walk through their own side's buildings (farms packed round the hall don't trap
+    -- your workers); enemies are still walled out
+    self.passFriendly = true
   elseif opts.arena then
     ARENA = ARENA or require("src.arena")
     self.map = Map.generateArena(opts)

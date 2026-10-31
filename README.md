@@ -137,7 +137,7 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
   - **Expand**: claim the nearest free metal deposit - nearest by the walk there, so a deposit just across water doesn't win - skipping any with enemies next to it
   - **Power**: when energy runs low, build a solar collector at home (one at a time)
   - Sea Constructors take the same jobs on the water: Expand claims the nearest offshore deposit (by sailing distance), Power builds a tidal generator nearby, and Repair fixes ships
-- **Auto in the other modes:** in Commander of Heroes, whole squads flee to the HQ (or your flag) below a health you pick and rejoin once every member is whole; in Commander Craft, idle workers get to work (gold, then wood) and put up a farm when food runs short (one at a time, by your hall). Each mode remembers its own settings. (Not in the Arena, or War is Hell, which has no HQ.)
+- **Auto in the other modes:** in Commander of Heroes, whole squads flee to the HQ (or your flag) below a health you pick and rejoin once every member is whole; in Commander Craft, idle workers get to work (gold, then wood) and put up a farm when food runs short (one at a time, by your hall - and in Craft, as in Annihilation, your units walk through your own buildings, so packed farms never trap anyone; enemies are still walled out). Each mode remembers its own settings. (Not in the Arena, or War is Hell, which has no HQ.)
 
 The button turns green while any of them is on. Annihilation only.
 
