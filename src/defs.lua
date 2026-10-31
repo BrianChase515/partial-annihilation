@@ -6,7 +6,7 @@
 local D = {}
 
 D.TILE = 32
-D.VERSION = "0.28.29"
+D.VERSION = "0.28.30"
 -- high-score season: every minor version (0.25, 0.26...) is a new season - the game changes a lot
 -- between them, so scores are only compared like for like
 D.SEASON = D.VERSION:match("^(%d+%.%d+)")
@@ -14,7 +14,7 @@ D.SEASON = D.VERSION:match("^(%d+%.%d+)")
 D.MODE_VERSIONS = {
   rts = { "1.0", "Ready: rich economy, Power Core tower, Defense and Garrison Towers, a real navy, Auto standing orders, nukes from level 5 up; tuned for ~12-minute games." },
   arena = { "0.6", "Playable end to end; heroes and maps still being tuned." },
-  craft = { "0.4", "Early: the core is in, races, heroes and maps are still changing a lot." },
+  craft = { "0.7", "Close: races, heroes, maps and the computer opponent are in; balance is still being tuned." },
   coh = { "0.4", "Squads, leader skills, capture points and tickets - and War is Hell. Still being balanced." },
 }
 D.MODE_NAMES = { rts = "Annihilation", arena = "Commander Arena", craft = "Commander Craft", coh = "Commander of Heroes" }

@@ -504,6 +504,53 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_HEROS2") then
+    -- Craft extra heroes: starting level, the altar rally onto your hero, auto cards for the
+    -- hero you aren't playing, and the label over your main hero's cards
+    local C = require("src.craft")
+    local ARENA = require("src.arena")
+    game = startFn({ mode = "craft", size = 96, seed = 8,
+      players = { { ally = 1, level = 5, human = true, race = "vanguard", class = "warden" }, { ally = 2, level = 5, race = "warband" } } })
+    game.ais = {}
+    local w = game.world
+    local h1 = w.teams[1].commander
+    ARENA.commanderXP(w, h1, ARENA.THRESHOLDS[5], true)
+    for _, o in ipairs(h1.offers) do end
+    h1.offers = {} -- (cleared: the test gives him a fresh one below)
+    -- an altar, rallied onto the hero by right-click
+    local tm = w.teams[1]
+    local altar = w:spawn("v_altar", 1, tm.startX + 260, tm.startY + 200)
+    altar.built = 1
+    h1.x, h1.y = tm.startX + 700, tm.startY - 100
+    h1.orders = {}
+    w:update(1 / 30)
+    game.selected = { [altar] = true }
+    game:rightClick(h1.x, h1.y, false)
+    print("HEROS2 altar rally:", altar.rally and (altar.rally.type .. (altar.rally.target and " onto hero" or "")) or "none")
+    -- the altar trains the second hero
+    local key
+    for k, d in pairs(D.units) do if d.heroRecruit and d.heroRecruit == "elementalist" then key = k end end
+    C.produce(w, altar, key)
+    local h2
+    for _, h in ipairs(C.heroesOf(w, 1, true)) do if h ~= h1 then h2 = h end end
+    print(string.format("HEROS2 main hero L%d, new hero %s starts at L%d", h1.clevel, h2 and h2.class or "?", h2 and h2.clevel or -1))
+    local d0 = U.dist(h2.x, h2.y, h1.x, h1.y)
+    game.selected = { [h1] = true }
+    game.activeHero = h1
+    -- both get a card waiting
+    h2.offers = {}
+    h1.offers[#h1.offers + 1] = ARENA.offer(w, h1, "passive")
+    h2.offers[#h2.offers + 1] = ARENA.offer(w, h2, "passive")
+    local n1, n2 = #h1.offers, #h2.offers
+    game.opts.autotest = false
+    for _ = 1, 30 * 12 do game:update(1 / 30) end
+    print(string.format("HEROS2 new hero walked from %d px to %d px from the main hero", d0, U.dist(h2.x, h2.y, h1.x, h1.y)))
+    print(string.format("HEROS2 cards waiting: main %d -> %d (should stay), other %d -> %d (auto picked)", n1, #h1.offers, n2, #h2.offers))
+    frame(); frame()
+    pending = "uishot_heros2.png"
+    frame(); frame()
+    return
+  end
   if os.getenv("PA_CRAFTHOLD") then
     -- Craft: riflemen told to hold ground while grunts charge them - do they stay put?
     for _, hold in ipairs({ false, true }) do

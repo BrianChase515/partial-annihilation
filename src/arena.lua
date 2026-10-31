@@ -967,8 +967,13 @@ function A.learn(w, c, key)
   c.taken[key] = true
 end
 
-function A.commanderXP(w, e, amount)
+function A.commanderXP(w, e, amount, raw)
   if not e or not e.skills then return end
+  if raw then
+    -- (an exact grant: no team share, catch-up or difficulty bonus)
+    e.cxp = (e.cxp or 0) + amount
+    amount = 0
+  end
   -- bigger teams share the map's experience: scale it so max level still arrives late
   local st = w.arena
   local teamMul = 1

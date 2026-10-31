@@ -2665,16 +2665,28 @@ function UI.draw(game)
     lg.setFont(font(15))
     -- heroes go by their class name (Ranger level 3!), the RTS Commander by his title
     local who = "Commander"
-    if myc.class and game.world.heroes then
+    if myc.class then
       local cls = require("src.arena").byClass[myc.class]
       who = cls and cls.name or who
     end
     local head = string.format("%s level %d!  Choose an upgrade%s", who, myc.clevel - #myc.offers + 1,
       #myc.offers > 1 and string.format("  (%d more waiting)", #myc.offers - 1) or "")
+    -- Craft (up to three heroes): whose card this is, with his portrait, so there's no guessing
+    local icon = game.craft and myc.class
+    if game.craft and myc.class then
+      head = string.format("Your %s (level %d): choose an upgrade%s", who, myc.clevel - #myc.offers + 1,
+        #myc.offers > 1 and string.format("  (%d more waiting)", #myc.offers - 1) or "")
+    end
+    local hw = font(15):getWidth(head) + (icon and 30 or 0)
+    local hx = w / 2 - hw / 2
     lg.setColor(0, 0, 0, 0.6)
-    lg.rectangle("fill", w / 2 - font(15):getWidth(head) / 2 - 10, oy - 28, font(15):getWidth(head) + 20, 24, 5)
+    lg.rectangle("fill", hx - 10, oy - (icon and 32 or 28), hw + 20, icon and 30 or 24, 5)
+    if icon then
+      UI.drawIcon("cls_" .. myc.class, hx + 12, oy - 17, 26, 1)
+      hx = hx + 30
+    end
     lg.setColor(1, 0.85, 0.35)
-    lg.print(head, w / 2 - font(15):getWidth(head) / 2, oy - 25)
+    lg.print(head, hx, oy - 25)
     game.offerBtns = {}
     local mx, my = love.mouse.getPosition()
     for i, u in ipairs(offer) do

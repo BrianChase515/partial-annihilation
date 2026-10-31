@@ -191,10 +191,11 @@ function C.spawnHero(w, team, cls, x, y)
   c.cxp, c.clevel = 0, 0
   C.makeHero(w, c, cls)
   w.craft.heroes[#w.craft.heroes + 1] = c
-  -- a later hero starts a little ahead, like an Arena catch-up
+  -- a later hero starts a little ahead: about half your best hero's level (L5 -> L2, L8 -> L4)
   local best = 0
   for _, h in ipairs(C.heroesOf(w, team, true)) do best = math.max(best, h.clevel or 0) end
-  if best >= 3 then ARENA.commanderXP(w, c, ARENA.THRESHOLDS[math.max(1, best - 2)]) end
+  local start = math.floor(best / 2)
+  if start >= 1 then ARENA.commanderXP(w, c, ARENA.THRESHOLDS[start], true) end
   if w.onHeroJoined then w.onHeroJoined(c) end
   return c
 end
@@ -346,6 +347,19 @@ function C.dequeue(w, f, i)
   C.recount(w)
 end
 
+-- a new (or risen) hero heads for the altar's rally: a spot, or a unit of yours (right-click
+-- your hero with the altar selected) - he walks over and joins it there
+function C.heroToRally(w, c, f)
+  local r = f.rally
+  if not r or not c.alive then return end
+  local tg = r.type == "guard" and r.target
+  if tg and tg.alive and tg ~= c then
+    w:issue(c, { type = "amove", x = tg.x, y = tg.y })
+  elseif r.x then
+    w:issue(c, { type = r.type == "amove" and "amove" or "move", x = r.x, y = r.y })
+  end
+end
+
 -- a factory finished something: research and heroes don't walk out of the door
 function C.produce(w, f, key)
   local d = D.units[key]
@@ -354,7 +368,7 @@ function C.produce(w, f, key)
   if d.heroRecruit then
     local x, y = f.x, f.y + f.def.h * w.T * 0.5 + 30
     local c = C.spawnHero(w, f.team, d.heroRecruit, x, y)
-    if f.rally and f.rally.x then w:issue(c, { type = "move", x = f.rally.x, y = f.rally.y }) end
+    C.heroToRally(w, c, f)
     return true
   end
   if not d.research then return false end
@@ -813,6 +827,7 @@ function C.update(w, dt)
             w.teams[tt].gold = w.teams[tt].gold - cost
             h.respawnX, h.respawnY = spot.x, spot.y + spot.def.h * w.T * 0.5 + 30
             ARENA.respawn(w, h)
+            if spot.def.altar then C.heroToRally(w, h, spot) end
           end
         end
       end

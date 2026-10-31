@@ -42,7 +42,7 @@ A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin
   farm = false, farmAt = 4, farmPull = false, farmCrew = 1, farmFrom = "wood",
   gather = false, crepair = false, craftOrder = "crepair,gather",
   -- Craft and Commander of Heroes: skills of the heroes / squads you aren't controlling
-  heroAuto = true }
+  heroAuto = true, heroCards = true }
 
 -- Commander Craft rules: when to put up a farm, and who builds it
 A.CRAFT_RULES = {
@@ -52,6 +52,7 @@ A.CRAFT_RULES = {
     value = "farmCrew", min = 1, max = 4, step = 1, unit = " workers" },
   { key = "farmFromRow", label = "Pull workers from", desc = "Where the farm crew comes from when no one is idle.", noToggle = true,
     value = "farmFrom", choices = { "wood", "gold", "either" }, unit = "" },
+  { key = "heroCards", label = "Auto-pick hero cards", desc = "Level-up cards for your other heroes (not the one Q W E R controls) are chosen for you, the way the computer would. Your main hero's cards are always yours." },
   { key = "heroAuto", label = "Auto-cast hero skills", desc = "Heroes Q W E R isn't controlling right now use their skills on their own, with the computer's judgement (as sharp as this match's difficulty). Their row in the hero bar says AUTO." },
 }
 
@@ -833,7 +834,7 @@ function A.squadIsAuto(game, sq)
 end
 
 function A.updateHeroSkills(game, dt)
-  if not A.v.heroAuto then return end
+  if not (A.v.heroAuto or A.v.heroCards) then return end
   local w = game.world
   if not w or w.over or game.watching or game.outOver then return end
   if not (w.squads or game.craft) then return end
@@ -842,6 +843,23 @@ function A.updateHeroSkills(game, dt)
   A.hsTimer = 0.4
   local team = game.playerTeam or w.playerTeam or 1
   local L = A.matchLevel(game)
+  -- Craft: cards for the heroes you aren't playing
+  if game.craft and A.v.heroCards then
+    local CAI = require("src.craft_ai")
+    local main = require("src.craft_game").activeHero(game)
+    local brain = game.autoCardBrain
+    if not brain then
+      brain = setmetatable({ world = w, team = team, level = L, rng = love.math.newRandomGenerator((w.map.seed or 1) + 4244) }, CAI.HeroBrain)
+      game.autoCardBrain = brain
+    end
+    for _, h in ipairs(require("src.craft").heroesOf(w, team, true)) do
+      if h ~= main and h.offers and #h.offers > 0 then
+        brain:pickOffer(h)
+        if game.notice then game:notice(string.format("Auto picked a card for your %s", require("src.arena").byClass[h.class].name), 1.5) end
+      end
+    end
+  end
+  if not A.v.heroAuto then return end
   if w.squads then
     local S = require("src.squads")
     local brain = game.autoSquadBrain

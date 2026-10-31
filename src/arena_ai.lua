@@ -119,7 +119,7 @@ function AI:pickOffer(c)
             -- one or two stances are worth a lot; a third adds little
             local have = 0
             for i = 1, 3 do local sk = c.skills[i]; if sk and ARENA.SKILLS[sk.key].tags[1] == "stance" then have = have + 1 end end
-            v = v + (have == 0 and 1.6 or have == 1 and 1.1 or -0.5)
+            v = v + (have == 0 and 1.6 or have == 1 and 1.3 or 0.9) -- (each switch fires a burst: more stances, more to dance with)
           end
         end
         return v + self.rng:random()
