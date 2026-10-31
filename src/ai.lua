@@ -1629,7 +1629,9 @@ function AI:thinkArmy()
       if u.fleeRoll == nil and self.fleeSkill then u.fleeRoll = self.rng:random() < self.fleeSkill end
       if u.hp < u.maxhp * at and (not o or o.type ~= "retreat") and u.key ~= "scout" and u.fleeRoll ~= false
         and U.dist(u.x, u.y, self.baseX, self.baseY) > 600 and self:threatAt(u.x, u.y, 350) > 0 then
-        world:issue(u, { type = "retreat", x = self.baseX + self.rng:random(-150, 150), y = self.baseY + self.rng:random(-150, 150) })
+        -- back to the plant that built it (where it repairs; a shipyard for ships)
+        local hx, hy = require("src.automation").homeFor(world, u)
+        world:issue(u, { type = "retreat", x = hx, y = hy })
         self.wave[u] = nil
         inWave[u] = nil
       end

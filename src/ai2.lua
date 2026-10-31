@@ -1012,11 +1012,14 @@ function AI2:sendHurtHome()
       self.wave[e] = nil
       if self.raidSquad then for i = #self.raidSquad, 1, -1 do if self.raidSquad[i] == e then table.remove(self.raidSquad, i) end end end
       local o = e.orders[1]
-      local home = U.dist(e.x, e.y, self.baseX, self.baseY)
-      if (not o or (o.type ~= "retreat" and o.type ~= "move")) and home > 350 then
-        w:issue(e, { type = "retreat", x = self.baseX + self.rng:random(-120, 120), y = self.baseY + self.rng:random(-120, 120) })
-      elseif o and o.type == "move" and U.dist(o.x, o.y, self.baseX, self.baseY) > 450 and not w:isFleeing(e) then
-        w:issue(e, { type = "retreat", x = self.baseX + self.rng:random(-120, 120), y = self.baseY + self.rng:random(-120, 120) })
+      -- home = the plant that built it (it repairs there), a shipyard for ships - like the
+      -- player's Auto flee
+      local hx, hy = require("src.automation").homeFor(w, e)
+      local home = U.dist(e.x, e.y, hx, hy)
+      if (not o or (o.type ~= "retreat" and o.type ~= "move")) and home > 300 then
+        w:issue(e, { type = "retreat", x = hx, y = hy })
+      elseif o and o.type == "move" and U.dist(o.x, o.y, hx, hy) > 400 and not w:isFleeing(e) then
+        w:issue(e, { type = "retreat", x = hx, y = hy })
       end
     end
   end
