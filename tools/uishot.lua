@@ -504,6 +504,81 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_GOLDLINE") then
+    -- a second hall's gold line, with a friendly unit parked in three places and 5 or 8 workers:
+    -- gold per minute, and any worker frozen (not moving for 10 s, not inside the mine)
+    for _, spot in ipairs({ "middle", "mine mouth", "hall edge", "none" }) do
+      for _, nw in ipairs({ 5, 8 }) do
+        game = startFn({ mode = "craft", size = 88, seed = 31, autotest = true,
+          players = { { human = true, ally = 1, race = "warband", class = "juggernaut" }, { ally = 2, level = 1, race = "vanguard" } } })
+        game.ais = {}
+        local w = game.world
+        local tm = w.teams[1]
+        local home
+        for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.hall then home = e end end
+        local ms = {}
+        for _, m in ipairs(w.craft.mines) do if m.alive and m.gold > 0 then ms[#ms + 1] = m end end
+        table.sort(ms, function(a2, b2) return U.dist2(a2.x, a2.y, home.x, home.y) < U.dist2(b2.x, b2.y, home.x, home.y) end)
+        local mine = ms[2]
+        local map = w.map
+        local mx, my = map:tileAt(mine.x, mine.y)
+        local hx, hy
+        for r = 4, 9 do
+          for dy = -r, r do for dx = -r, r do
+            if not hx and (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace("w_hall", mx + dx, my + dy, 1, "land") then hx, hy = mx + dx, my + dy end
+          end end
+          if hx then break end
+        end
+        local d = D.units.w_hall
+        local hall2 = w:spawn("w_hall", 1, (hx + d.w / 2) * w.T, (hy + d.h / 2) * w.T, 1)
+        w:rebuildGrid()
+        for _, e in ipairs(w.entities) do if e.alive and e.creepCamp and U.dist(e.x, e.y, mine.x, mine.y) < 700 then e.alive = false end end
+        local ux, uy = U.norm(mine.x - hall2.x, mine.y - hall2.y)
+        local bx, by
+        if spot == "middle" then bx, by = (mine.x + hall2.x) / 2, (mine.y + hall2.y) / 2
+        elseif spot == "mine mouth" then bx, by = mine.x - ux * (mine.def.w * w.T * 0.6 + 6), mine.y - uy * (mine.def.w * w.T * 0.6 + 6)
+        elseif spot == "hall edge" then bx, by = hall2.x + ux * (d.w * w.T * 0.6 + 6), hall2.y + uy * (d.w * w.T * 0.6 + 6) end
+        if bx then w:spawn("grunt", 1, bx, by) end
+        local ws = {}
+        for k = 1, nw do
+          local u = w:spawn("peon", 1, hall2.x + (k - 4) * 14, hall2.y + d.h * w.T / 2 + 30)
+          w:issue(u, { type = "harvest", kind = "gold", target = mine })
+          ws[k] = u
+        end
+        local g0 = tm.gold
+        local t, frozen = 0, {}
+        local last = {}
+        for k, u in ipairs(ws) do last[k] = { u.x, u.y, 0 } end
+        local prevSt = {}
+        while t < 120 do
+          w:update(1 / 30); t = t + 1 / 30
+          if os.getenv("PA_GOLDDBG") and spot == "none" and nw == 5 and t < 25 then
+            for k, u in ipairs(ws) do
+              local st = u.inMine and "IN MINE" or (u.carry and "carrying" or "to mine")
+              if st ~= prevSt[k] then print(string.format("GOLDLINE   t=%5.1f peon %d -> %s (%d px from mine, %d from hall)", t, k, st, U.dist(u.x, u.y, mine.x, mine.y), U.dist(u.x, u.y, hall2.x, hall2.y))); prevSt[k] = st end
+            end
+          end
+          for k, u in ipairs(ws) do
+            local l = last[k]
+            if U.dist2(u.x, u.y, l[1], l[2]) > 4 or u.inMine or u.dormant then l[1], l[2], l[3] = u.x, u.y, t
+            elseif t - l[3] > 10 and t > 15 then frozen[k] = true end
+          end
+        end
+        local nf = 0 for _ in pairs(frozen) do nf = nf + 1 end
+        if os.getenv("PA_GOLDDBG") and spot == "none" and nw == 5 then
+          for k, u in ipairs(ws) do
+            local o = u.orders[1]
+            print(string.format("GOLDLINE   peon %d: %s, carry %s, %d px from mine (reach %d), %d px from hall2, %d px from home hall, path %s, edge %s",
+              k, o and o.type or "idle", u.carry and u.carry.kind or "-", U.dist(u.x, u.y, mine.x, mine.y), mine.def.w * w.T * 0.72 + u.def.radius + 12,
+              U.dist(u.x, u.y, hall2.x, hall2.y), U.dist(u.x, u.y, home.x, home.y), u.path and #u.path or "nil", o and o.edge and "yes" or "no"))
+          end
+          print("GOLDLINE   mine busy until " .. string.format("%.1f", mine.busyUntil or -1) .. " now " .. string.format("%.1f", w.time))
+        end
+        print(string.format("GOLDLINE blocker %-10s %d workers: %3d gold a minute, %d waiting at the mine", spot, nw, math.floor((tm.gold - g0) / 2), nf))
+      end
+    end
+    return
+  end
   if os.getenv("PA_EXPMINE") then
     -- Craft: a second Great Hall by another gold mine, five workers on that mine: does gold come in?
     for _, pass in ipairs({ true, false }) do
@@ -544,7 +619,7 @@ local function script(mode, secs)
         w:issue(u, { type = "harvest", kind = "gold", target = mine })
         ws[k] = u
       end
-      local g0 = tm.goldIn or 0
+      local g0 = tm.gold
       local t = 0
       while t < 60 do w:update(1 / 30); t = t + 1 / 30 end
       local states = {}
@@ -555,7 +630,7 @@ local function script(mode, secs)
       end
       local sl = {} for k, n in pairs(states) do sl[#sl + 1] = k .. " x" .. n end
       print(string.format("EXPMINE pass-through %s: gold in over 60s from the second hall's workers: %d; workers: %s; mine %d px from the hall",
-        pass and "ON" or "off", math.floor((tm.goldIn or 0) - g0), table.concat(sl, ", "), math.floor(U.dist(mine.x, mine.y, hall2.x, hall2.y))))
+        pass and "ON" or "off", math.floor(tm.gold - g0), table.concat(sl, ", "), math.floor(U.dist(mine.x, mine.y, hall2.x, hall2.y))))
     end
     return
   end
