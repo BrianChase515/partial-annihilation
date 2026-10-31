@@ -504,6 +504,33 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_FFAOUT") then
+    local UI = require("src.ui")
+    -- a 4-way free-for-all: you're knocked out early; results, watch the rest, the real end
+    game = startFn({ size = 112, water = 0.3, seed = 9, autotest = true,
+      players = { { ally = 1, level = 5 }, { ally = 2, level = 5 }, { ally = 3, level = 5 }, { ally = 4, level = 5 } } })
+    local w = game.world
+    game.opts.autotest = false
+    for _ = 1, 60 do game:update(1 / 30) end
+    local c = w.teams[1].commander
+    w:damage(c, c.hp + 10, nil)
+    for _ = 1, 30 do game:update(1 / 30) end
+    print(string.format("FFAOUT after you fall: result screen up? %s (game over? %s); buttons: %s", tostring(game:resultShowing() and true or false),
+      tostring(w.over ~= nil), (function() local t = {} for _, r in ipairs(UI.overRects(game)) do t[#t + 1] = r.label end return table.concat(t, " | ") end)()))
+    love.timer.sleep(1.7)
+    for _ = 1, 3 do frame() end
+    pending = "uishot_ffaout.png"
+    frame(); frame()
+    -- Watch the rest
+    for _, r in ipairs(UI.overRects(game)) do if r.action == "watch" then UI.overClick(game, r.x + 5, r.y + 5, 1) end end
+    print("FFAOUT watching: result screen up? " .. tostring(game:resultShowing() and true or false) .. ", fog lifted? " .. tostring(w.noFog == true))
+    -- end the game for real: kill all but one remaining Commander
+    for t = 3, 4 do local ec = w.teams[t].commander; if ec and ec.alive then w:damage(ec, ec.hp + 10, nil) end end
+    for _ = 1, 30 do game:update(1 / 30) end
+    print("FFAOUT the game ends while watching: over? " .. tostring(w.over ~= nil) .. ", results back? " .. tostring(game:resultShowing() and true or false))
+    game.opts.autotest = true
+    return
+  end
   if os.getenv("PA_CORESCAN") then
     -- how often does a map end up with no Power Core spot in the middle (all mountain there)?
     local Map = require("src.map")

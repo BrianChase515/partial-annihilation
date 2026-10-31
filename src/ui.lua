@@ -2139,16 +2139,21 @@ local OVER_W, OVER_H = 940, 600
 function UI.overRects(game)
   local w, h = lg.getDimensions()
   local by = h / 2 + OVER_H / 2 - 64
-  local list = {
-    { label = "Play again", action = "again" },
-  }
+  local list = {}
+  -- knocked out while the others fight on: watch the rest (everything revealed); after the end:
+  -- look round the whole map
+  if game.outOver and not game.world.over then list[#list + 1] = { label = "Watch the rest", action = "watch" }
+  else list[#list + 1] = { label = "Look around", action = "watch" } end
+  list[#list + 1] = { label = "Same map again", action = "same" }
+  list[#list + 1] = { label = "New map", action = "again" }
   if canSaveMap(game) then list[#list + 1] = { label = "Save this map...", action = "savemap" } end
   local f = game and game.finalScore
   if f and f.official and require("src.online").enabled() then
     list[#list + 1] = { label = game.submitted and "Score submitted" or "Submit score online", action = "submit" }
   end
   list[#list + 1] = { label = "Title screen", action = "title" }
-  local bw, gap = 200, 14
+  local gap = 12
+  local bw = math.min(200, math.floor((OVER_W - 40 - (#list - 1) * gap) / #list))
   local x0 = w / 2 - (#list * bw + (#list - 1) * gap) / 2
   for i, r in ipairs(list) do
     r.x, r.y, r.w, r.h = x0 + (i - 1) * (bw + gap), by, bw, 44
@@ -2161,7 +2166,7 @@ local function mmss(t) return string.format("%d:%02d", math.floor(t / 60), math.
 function UI.drawOver(game)
   local w, h = lg.getDimensions()
   local world = game.world
-  local o = world.over
+  local o = game:resultOver()
   local k = math.min(1, (love.timer.getTime() - (game.overTime or 0)) / 1.5)
   o.winner = (o.winnerAlly == world.ally[1]) and 1 or 2
   lg.setColor(0, 0, 0, 0.6 * k)
@@ -2524,6 +2529,12 @@ function UI.overClick(game, x, y, b)
   for _, r in ipairs(UI.overRects(game)) do
     if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
       if r.action == "again" then game.playAgain = true
+      elseif r.action == "same" then game.playAgain, game.restartSame = true, true
+      elseif r.action == "watch" then
+        -- the fog lifts: you're out (or it's over), there's nothing left to hide
+        game.watching = true
+        game.world.noFog = true
+        if R.updateFogImage then R.updateFogImage() end
       elseif r.action == "savemap" then game:startNaming()
       elseif r.action == "submit" then game:submitScore()
       else game.quitToTitle = true end
@@ -2741,7 +2752,19 @@ function UI.draw(game)
   if game.menuOpen then UI.drawMenu(game) end
   if game.autoOpen then require("src.automation").draw(game, font) end
   if require("src.settings").open then require("src.settings").draw() end
-  if game.world.over and game.overShown then UI.drawOver(game) end
+  if game:resultShowing() then UI.drawOver(game)
+  elseif game.watching then
+    -- watching the rest of the game (or looking round the map): a strip at the top says how back
+    local w = lg.getWidth()
+    local text = game.world.over and "Looking around - the game is over.  Esc: back to the results"
+      or "Watching the rest of the game, everything revealed.  Esc: back to the results"
+    lg.setFont(font(14))
+    local tw = font(14):getWidth(text) + 32
+    lg.setColor(0.05, 0.07, 0.1, 0.85)
+    lg.rectangle("fill", w / 2 - tw / 2, UI.TOP_H + 6, tw, 28, 6)
+    lg.setColor(1, 0.85, 0.4)
+    lg.print(text, w / 2 - tw / 2 + 16, UI.TOP_H + 11)
+  end
   if game.naming then
     lg.setColor(0, 0, 0, 0.5)
     lg.rectangle("fill", 0, 0, w, h)

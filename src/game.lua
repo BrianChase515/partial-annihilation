@@ -183,6 +183,9 @@ function G.new(opts)
       for t = 2, world.np do if not world.teams[t].dead and world:allied(t, 1) then alliesLeft = true end end
       if alliesLeft then self:notice("Your Commander has fallen. Your allies fight on - you're spectating.", 6) end
       self.spectating = true
+      -- out, with no allies left, while the others fight on (a free-for-all): your game is over
+      -- now - the result screen comes up, and you can watch the rest or leave
+      if not alliesLeft and not world.over then self.outOver = { winnerAlly = -1, time = world.time, out = true } end
     elseif world:hostile(team, 1) then
       self:notice(name .. " has been eliminated!", 4)
       VOICE.say("enemy_eliminated")
@@ -1361,11 +1364,20 @@ function G:update(dt)
     local c = self.world.teams[1].commander
     if c and c.alive and not self.selected[c] then self.selected[c] = true end
   end
-  if self.world.over then
+  -- the game ended while you were watching it out: say who won and bring the results back
+  if self.watching and self.outOver and self.world.over and not self.finalNoted then
+    self.finalNoted = true
+    local wa = self.world.over.winnerAlly
+    local who
+    for t = 1, self.world.np do if self.world.ally[t] == wa then who = D.teamName[t]; break end end
+    self:notice((who or "Nobody") .. " wins the game.", 6)
+    self.watching = false
+  end
+  if self:resultOver() then
     if not self.overShown then
       self.overShown = true
       self.overTime = love.timer.getTime()
-      local won = self.world.over.winnerAlly == self.world.ally[1]
+      local won = self:resultOver().winnerAlly == self.world.ally[1]
       VOICE.say(won and "victory" or "defeat")
       if self.ghostRec then
         local GH = require("src.ghost")
@@ -1797,10 +1809,15 @@ function G:decideMercy(choice)
   if q then self:openMercy(q.ally, q.units) end
 end
 
+-- the result: the game's end, or (a free-for-all you've been knocked out of) yours
+function G:resultOver() return self.world.over or self.outOver end
+-- the result screen is up (not while you're watching the rest of the game)
+function G:resultShowing() return self:resultOver() and self.overShown and not self.watching end
+
 function G:mousepressed(x, y, button)
   self.stats.actions = (self.stats.actions or 0) + 1
   if self.naming then return end
-  if self.world.over and self.overShown then
+  if self:resultShowing() then
     return UI.overClick(self, x, y, button)
   end
   local SET = require("src.settings")
@@ -2096,7 +2113,9 @@ function G:keypressed(key)
   if self.naming then return self:namingKey(key) end
   local ctrl = love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")
   local shift = love.keyboard.isDown("lshift", "rshift")
-  if self.world.over and self.overShown then return end
+  if self:resultShowing() then return end
+  -- watching the rest: Esc brings the results back
+  if self.watching and key == "escape" then self.watching = false; return end
 
   if key == "escape" and require("src.settings").open then require("src.settings").open = false; require("src.settings").save(); return end
   if require("src.settings").open then return end
