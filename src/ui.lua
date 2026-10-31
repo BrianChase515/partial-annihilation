@@ -1696,7 +1696,7 @@ function UI.orderButtons(game)
   local cohText = {
     flee = { "Flee", "Pull the selection back to your HQ (or your flag, if planted) at +25% speed. Weapons stay off until repaired - the HQ heals fast." },
     cmd = { "Squad", "C: with several squads selected, the next one becomes ACTIVE (gold - Q / W fire its skills). Otherwise: jump to the next squad." },
-    hold = { "Hold", "Hold fire: selected squads stop shooting while you hold D (or until you click again)." },
+    hold = { "Hold", "Hold ground: the selected squads stop where they are and fire at anything in range, but never chase or move toward attackers - hold a point. Any new order releases them." },
   }
   for _, o in ipairs(ORDERS) do
     if game.world.squads then
@@ -1733,7 +1733,7 @@ function UI.drawOrders(game)
     if b.action == "follow" and game.follow then active = true end
     if b.action == "help" and game.showHelp then active = true end
     if b.action == "hold" and game.holdingFire then active = true end
-    if b.action == "hold" and game.world.rtsTune then
+    if b.action == "hold" and (game.world.rtsTune or game.world.squads) then
       local any = false
       for _, e in ipairs(game:selectedMobile()) do if e.holdGround then any = true end end
       active = any
@@ -1998,7 +1998,7 @@ COMMANDER OF HEROES - CONTROLS
   Q / W ..................... the ACTIVE squad's two skills, aimed at the mouse
   F ......................... flee: back to your HQ, weapons off until repaired
   Alt+1-5 / card's Flee ..... just that squad flees (your selection stays as it is)
-  S / D ..................... stop / hold fire       + / - ... game speed
+  S / D ..................... stop / hold ground (fire in range, never chase)       + / - ... game speed
 
 HOW TO WIN
   Squad units are 60% tougher than in Annihilation: fights last long enough to use skills.
@@ -2077,7 +2077,8 @@ UI.button = button
 
 -- only Annihilation's own maps can be saved (Arena, Craft and Commander of Heroes build theirs)
 local function canSaveMap(game)
-  return game and not game.arena and not game.craft and not game.world.squads
+  -- Annihilation and Commander of Heroes (Arena and Craft maps come from fixed templates)
+  return game and not game.arena and not game.craft
 end
 
 function UI.menuRects(game)

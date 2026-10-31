@@ -938,8 +938,8 @@ function A.commanderXP(w, e, amount)
     e.clevel = (e.clevel or 0) + 1
     local L = e.clevel
     -- every level: a little tougher and harder hitting
-    hpUp(e, 1.06)
-    e.hp = math.min(e.maxhp, e.hp + e.maxhp * 0.15)
+    -- (max health grows, but ranking up heals nothing - in every mode; going home is how you heal)
+    e.maxhp = math.floor(e.maxhp * 1.06)
     mulMod(e, "dmg", 1.05)
     if e.mods.levelDmg then mulMod(e, "dmg", e.mods.levelDmg) end -- carries grow faster
     fx(w, "levelup", e.x, e.y, 46, 1.2)

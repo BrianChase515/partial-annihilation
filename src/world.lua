@@ -887,6 +887,25 @@ function W:reinforce(e)
 end
 
 -- The Nuke: unlimited range, slow visible flight, 10 minute cooldown
+-- seconds until what's around a unit could kill it, if everything in reach (plus a margin) kept
+-- shooting it: its health over their damage per second. math.huge when nothing can. Used by the
+-- hero AIs to leave before they're burst down, not after
+function W:killTime(e, margin)
+  margin = margin or 150
+  local dps = 0
+  self:query(e.x, e.y, 700, function(o)
+    if not o.alive or o == e or not o.team or not self:hostile(o.team, e.team) or o.disarmed or (o.built or 1) < 1 then return end
+    local wp = o.def.weapon
+    if not wp or not self:canTarget(o, e) then return end
+    local r = self:rangeOf(o) + margin
+    if U.dist2(o.x, o.y, e.x, e.y) > r * r then return end
+    local mods = o.mods or {}
+    dps = dps + (wp.damage or 0) * (mods.dmg or 1) * (1 + 0.1 * (o.level or 0)) / math.max(0.1, (wp.reload or 1) / (mods.rof or 1))
+  end)
+  if dps <= 0 then return math.huge end
+  return e.hp / dps
+end
+
 function W:canNuke(e)
   return e and e.alive and (e.nukes or 0) > 0
 end
@@ -1094,12 +1113,8 @@ function W:gainXP(e, amount)
     L = L + 1
     local oldMax = e.maxhp
     e.maxhp = math.floor(e.def.hp * (1 + 0.10 * L) * (e.hpMul or 1))
-    if e.arenaTower or self.rtsTune then
-      -- towers just grow; and in Annihilation ranking up never repairs a unit (fleeing home does)
-      if e.arenaTower then e.hp = e.hp + (e.maxhp - oldMax) end
-    else
-      e.hp = math.min(e.maxhp, e.hp + (e.maxhp - oldMax) + e.maxhp * 0.25) -- level-up heals a bit
-    end
+    -- ranking up never repairs a unit, in any mode (fleeing home does); Arena towers just grow
+    if e.arenaTower then e.hp = e.hp + (e.maxhp - oldMax) end
     e.level = L
     self.maxLvl = self.maxLvl or {}
     if e.team then self.maxLvl[e.team] = math.max(self.maxLvl[e.team] or 0, L) end

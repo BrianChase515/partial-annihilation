@@ -8,6 +8,11 @@ local ARENA = require("src.arena")
 local AI = {}
 AI.__index = AI
 
+-- a decision, for the match log (the same notes the Annihilation AI writes)
+function AI:note(kind, text)
+  require("src.telemetry").note(self.world, kind, self.team, text)
+end
+
 local MODELOG = os.getenv("PA_MODELOG")
 function AI.new(world, team, level, opts)
   local self = setmetatable({}, AI)
@@ -545,7 +550,21 @@ function AI:update(dt)
   if hpf < leaveAt or (hpf < 0.5 and danger and theirs > mine * 2) then
     self.mode = "heal"
     w:issue(c, { type = "move", x = homeX, y = homeY, arrive = 120 })
+    self:note("heal", string.format("heads home to heal at %d%%", math.floor(hpf * 100)))
     return
+  end
+  -- what's around could kill him before he gets away (a burst of skills, a tower dive gone
+  -- wrong): leave now, while there's health to leave with. Better players read it earlier
+  if not atHome and w.time >= (self.nextKT or 0) then
+    self.nextKT = w.time + 0.5
+    local kt = w:killTime(c)
+    local need = 2.5 + 0.35 * self.level
+    if kt < need and self.rng:random() < 0.35 + 0.07 * self.level then
+      self.mode = "heal"
+      w:issue(c, { type = "move", x = homeX, y = homeY, arrive = 120 })
+      self:note("escape", string.format("gets out at %d%%: what's around could kill him in %.1fs", math.floor(hpf * 100), kt))
+      return
+    end
   end
 
   -- dive a weak enemy Commander that isn't sitting under its own tower

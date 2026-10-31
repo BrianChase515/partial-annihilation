@@ -645,7 +645,15 @@ function AI:army(tm)
     local danger = n >= 4 or (eh ~= nil)
     if foe or eh or (h.chase and h.chase.alive) then self.brain:useSkills(h, eh, danger) end
     -- a hurt hero goes home to heal (better players do it earlier)
-    if h.hp < h.maxhp * self.P.heroRetreat and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 then
+    -- (also: what's around could kill him before he gets away - leave now, not at the threshold)
+    local burst = false
+    if not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 and w.time >= (h.ktCheck or 0) then
+      h.ktCheck = w.time + 0.5
+      local kt = w:killTime(h)
+      burst = kt < 2.5 + 0.35 * self.level and self.rng:random() < 0.35 + 0.07 * self.level
+      if burst and w.tel then require("src.telemetry").note(w, "hero", self.team, string.format("%s gets out at %d%%: what's around could kill him in %.1fs", h.def.name, math.floor(h.hp / h.maxhp * 100), kt)) end
+    end
+    if (burst or h.hp < h.maxhp * self.P.heroRetreat) and not w:isFleeing(h) and hall and U.dist(h.x, h.y, hall.x, hall.y) > 500 then
       w:issue(h, { type = "retreat", x = hall.x, y = hall.y + 120 })
       h.aiHealing = true
     end

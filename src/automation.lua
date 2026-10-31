@@ -28,16 +28,46 @@ A.RULES = {
     value = "builderMin", min = 1, max = 8, step = 1, unit = " minimum" },
 }
 A.JOBS = {
+  gather = { label = "Gather", desc = "Go to work: gold until the nearest mine has five workers, then wood." },
+  farm = { label = "Farm", desc = "Food running short: build a farm by your hall (one at a time)." },
   repair = { label = "Repair", desc = "Fix damaged units and buildings near it (costs resources)." },
   expand = { label = "Expand", desc = "Claim the nearest free metal deposit by the walk there (Sea Constructors: offshore). Skips ones with enemies near." },
   power = { label = "Power", desc = "Energy running low: build a solar collector at home (Sea Constructors: a tidal generator)." },
 }
 A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin = 2, repair = false, expand = false, power = false,
-  idleOrder = "repair,expand,power" }
+  idleOrder = "repair,expand,power",
+  -- Commander of Heroes: whole squads
+  sqflee = false, sqFleePct = 40, sqrejoin = false,
+  -- Commander Craft: idle workers
+  gather = false, farm = false, craftOrder = "farm,gather" }
+
+-- Commander of Heroes rules: a squad falls back as one
+A.SQ_RULES = {
+  { key = "sqflee", label = "Squads flee when hurt", desc = "A squad whose health drops below this falls back to the HQ (or your flag) as one, weapons off until healed, and leaves your selection.",
+    value = "sqFleePct", min = 10, max = 70, step = 5, unit = "% health" },
+  { key = "sqrejoin", label = "Healed squads rejoin", desc = "A squad that fled goes back to where it fled from once every member is whole." },
+}
+-- what each mode offers: rules, the idle-worker jobs (in a draggable order), and the wording
+A.MODES = {
+  rts = { jobs = { "repair", "expand", "power" }, orderKey = "idleOrder", idleTitle = "When a constructor is idle",
+    idleSub = "Never overrides your orders: it does the first job that's on and has work. Drag to reorder." },
+  coh = { jobs = {} },
+  craft = { jobs = { "farm", "gather" }, orderKey = "craftOrder", idleTitle = "When a worker is idle",
+    idleSub = "Never overrides your orders or a worker already busy. Drag to reorder." },
+}
+A.mode = "rts"
+function A.rules()
+  if A.mode == "coh" then return A.SQ_RULES elseif A.mode == "craft" then return {} end
+  return A.RULES
+end
 function A.jobOrder()
-  local out, seen = {}, {}
-  for k in A.v.idleOrder:gmatch("[^,]+") do if A.JOBS[k] and not seen[k] then out[#out + 1] = k; seen[k] = true end end
-  for _, k in ipairs({ "repair", "expand", "power" }) do if not seen[k] then out[#out + 1] = k end end
+  local M = A.MODES[A.mode] or A.MODES.rts
+  local out, seen, allowed = {}, {}, {}
+  for _, k in ipairs(M.jobs) do allowed[k] = true end
+  if M.orderKey then
+    for k in (A.v[M.orderKey] or ""):gmatch("[^,]+") do if allowed[k] and not seen[k] then out[#out + 1] = k; seen[k] = true end end
+  end
+  for _, k in ipairs(M.jobs) do if not seen[k] then out[#out + 1] = k end end
   return out
 end
 -- per-unit flee thresholds ("Per unit..." on the flee row): 0 = use the general one
@@ -67,13 +97,24 @@ function A.load()
 end
 function A.save() pcall(love.filesystem.write, A.FILE, ser(A.v)) end
 
--- only in Annihilation proper (Commander of Heroes, the Arena and Craft run their own way)
+-- Annihilation (units and constructors), Commander of Heroes (squads; not War is Hell, which has
+-- no HQ to fall back to) and Commander Craft (workers). Not the Arena. Sets A.mode
 function A.applies(game)
   local w = game.world
-  return not (w.squads or w.craft or w.arena or w.heroes or game.arena or game.craft)
+  if game.arena or w.arena then return false end
+  if w.squads then
+    if w.wih then return false end
+    A.mode = "coh"; return true
+  end
+  if game.craft or w.craft then A.mode = "craft"; return true end
+  if w.heroes then return false end
+  A.mode = "rts"
+  return true
 end
 
 function A.anyOn()
+  if A.mode == "coh" then return A.v.sqflee or A.v.sqrejoin end
+  if A.mode == "craft" then return A.v.gather or A.v.farm end
   return A.v.flee or A.v.rejoin or A.v.builders or A.v.repair or A.v.expand or A.v.power
 end
 
@@ -224,6 +265,15 @@ end
 -- one line saying which standing orders are on (shown when a match starts)
 function A.summary()
   local parts = {}
+  if A.mode == "coh" then
+    if A.v.sqflee then parts[#parts + 1] = "squads flee at " .. A.v.sqFleePct .. "%" end
+    if A.v.sqrejoin then parts[#parts + 1] = "rejoin" end
+    return table.concat(parts, ", ")
+  elseif A.mode == "craft" then
+    local jobs = {}
+    for _, j in ipairs(A.jobOrder()) do if A.v[j] then jobs[#jobs + 1] = A.JOBS[j].label:lower() end end
+    return "idle workers: " .. table.concat(jobs, " > ")
+  end
   if A.v.flee then parts[#parts + 1] = "flee at " .. A.v.fleePct .. "%" end
   if A.v.rejoin then parts[#parts + 1] = "rejoin" end
   if A.v.builders then parts[#parts + 1] = A.v.builderMin .. " constructors" end
@@ -244,6 +294,8 @@ function A.update(game, dt)
   end
   local w = game.world
   if w.over then return end
+  if A.mode == "coh" then return A.updateSquads(game, dt) end
+  if A.mode == "craft" then return A.updateCraft(game, dt) end
   local team = game.playerTeam or w.playerTeam or 1
   local v = A.v
   -- the flee check runs ten times a second (a scout can lose half its health in a single
@@ -345,7 +397,7 @@ function A.unitRects()
 end
 
 local JOB_H = 50
-local function idleTop(py, rowH) return py + 70 + #A.RULES * rowH + 54 end
+local function idleTop(py, rowH) return py + 70 + #A.rules() * rowH + (#A.jobOrder() > 0 and 54 or 10) end
 
 function A.rects()
   if A.view == "units" then return A.unitRects() end
@@ -353,7 +405,8 @@ function A.rects()
   local w, h = lg.getDimensions()
   local pw, rowH = 640, 80
   local px = (w - pw) / 2
-  local total = 70 + #A.RULES * rowH + 54 + 3 * JOB_H + 60
+  local nj = #A.jobOrder()
+  local total = 70 + #A.rules() * rowH + (nj > 0 and 54 or 10) + nj * JOB_H + 60
   local py = math.max(40, h / 2 - total / 2)
   local out = {}
   local iy = idleTop(py, rowH)
@@ -362,7 +415,7 @@ function A.rects()
     out[#out + 1] = { x = px + 18, y = y + 6, w = 30, h = 34, kind = "handle", job = job, idx = i }
     out[#out + 1] = { x = px + pw - 120, y = y + 6, w = 96, h = 34, kind = "jobtoggle", job = job }
   end
-  for i, r in ipairs(A.RULES) do
+  for i, r in ipairs(A.rules()) do
     local y = py + 70 + (i - 1) * rowH
     out[#out + 1] = { x = px + pw - 120, y = y, w = 96, h = 34, kind = "toggle", rule = r }
     if r.value then
@@ -371,7 +424,7 @@ function A.rects()
     end
     if r.key == "flee" then out[#out + 1] = { x = px + pw - 300, y = y + 40, w = 174, h = 28, kind = "perunit" } end
   end
-  out[#out + 1] = { x = px + pw / 2 - 70, y = iy + 3 * JOB_H + 14, w = 140, h = 36, kind = "close" }
+  out[#out + 1] = { x = px + pw / 2 - 70, y = iy + nj * JOB_H + 14, w = 140, h = 36, kind = "close" }
   return out, px, py, pw, rowH
 end
 
@@ -426,7 +479,7 @@ function A.draw(game, fontFn)
   lg.setColor(0, 0, 0, 0.55)
   lg.rectangle("fill", 0, 0, w, h)
   local iy = idleTop(py, rowH)
-  local ph = iy - py + 3 * JOB_H + 64
+  local ph = iy - py + #A.jobOrder() * JOB_H + 64
   lg.setColor(0.07, 0.09, 0.12, 0.97)
   lg.rectangle("fill", px, py, pw, ph, 10)
   lg.setColor(0.4, 0.55, 0.7)
@@ -436,9 +489,9 @@ function A.draw(game, fontFn)
   lg.print("AUTO", px + 24, py + 18)
   lg.setFont(fontFn(13))
   lg.setColor(0.65, 0.72, 0.8)
-  lg.print("Standing orders for routine jobs. Remembered between matches (Annihilation only).", px + 24, py + 46)
+  lg.print("Standing orders for routine jobs. Remembered between matches (each mode has its own).", px + 24, py + 46)
   local mx, my = love.mouse.getPosition()
-  for i, r in ipairs(A.RULES) do
+  for i, r in ipairs(A.rules()) do
     local y = py + 70 + (i - 1) * rowH
     lg.setFont(fontFn(16))
     lg.setColor(A.v[r.key] and 1 or 0.7, A.v[r.key] and 1 or 0.72, A.v[r.key] and 1 or 0.75)
@@ -453,16 +506,18 @@ function A.draw(game, fontFn)
       lg.printf(txt, px + pw - 266, y + 8, 106, "center")
     end
   end
-  -- idle constructors: the priority list
-  lg.setColor(0.3, 0.38, 0.48)
-  lg.line(px + 18, iy - 50, px + pw - 18, iy - 50)
-  lg.setFont(fontFn(16))
-  lg.setColor(1, 1, 1)
-  lg.print("When a constructor is idle", px + 24, iy - 44)
-  lg.setFont(fontFn(12))
-  lg.setColor(0.6, 0.66, 0.72)
-  lg.print("Never overrides your orders: it does the first job that's on and has work. Drag to reorder.",
-    px + 24, iy - 22)
+  -- idle constructors / workers: the priority list
+  local M = A.MODES[A.mode] or A.MODES.rts
+  if #A.jobOrder() > 0 then
+    lg.setColor(0.3, 0.38, 0.48)
+    lg.line(px + 18, iy - 50, px + pw - 18, iy - 50)
+    lg.setFont(fontFn(16))
+    lg.setColor(1, 1, 1)
+    lg.print(M.idleTitle, px + 24, iy - 44)
+    lg.setFont(fontFn(12))
+    lg.setColor(0.6, 0.66, 0.72)
+    lg.print(M.idleSub, px + 24, iy - 22)
+  end
   local order = A.jobOrder()
   for i, job in ipairs(order) do
     local y = iy + (i - 1) * JOB_H
@@ -518,7 +573,7 @@ function A.release(x, y)
   local job = A.drag.job
   for i = #order, 1, -1 do if order[i] == job then table.remove(order, i) end end
   table.insert(order, to, job)
-  A.v.idleOrder = table.concat(order, ",")
+  A.v[(A.MODES[A.mode] or A.MODES.rts).orderKey or "idleOrder"] = table.concat(order, ",")
   A.drag = nil
   A.save()
 end
@@ -547,6 +602,103 @@ function A.click(x, y)
     end
   end
   return true
+end
+
+-- Commander of Heroes: squads fall back as one, and come back once whole
+function A.updateSquads(game, dt)
+  A.timer = (A.timer or 0) - dt
+  if A.timer > 0 then return end
+  A.timer = 0.25
+  local w = game.world
+  local S = require("src.squads")
+  local team = game.playerTeam or w.playerTeam or 1
+  local v = A.v
+  for _, sq in ipairs(S.squadsOf(w, team)) do
+    local hp, maxhp, alive, fleeing, whole = 0, 0, {}, false, true
+    for _, u in ipairs(sq.members) do
+      if u.alive then
+        alive[#alive + 1] = u
+        hp, maxhp = hp + u.hp, maxhp + u.maxhp
+        if w:isFleeing(u) then fleeing = true end
+        if u.hp < u.maxhp - 0.5 or u.disarmed then whole = false end
+      end
+    end
+    if #alive == 0 then sq.autoFled = nil
+    elseif v.sqflee and not fleeing and not sq.autoFled and hp < maxhp * v.sqFleePct / 100 then
+      local L = sq.leader and sq.leader.alive and sq.leader or alive[1]
+      sq.autoFled = { x = L.x, y = L.y }
+      game:fleeSquad(sq)
+      -- out of the selection, so the next order doesn't drag it back
+      if game.selected then for _, u in ipairs(alive) do game.selected[u] = nil end end
+    elseif v.sqrejoin and sq.autoFled and whole and not fleeing then
+      local tx, ty = sq.autoFled.x, sq.autoFled.y
+      sq.autoFled = nil
+      local keep = game.selected
+      game.selected = {}
+      for _, u in ipairs(alive) do game.selected[u] = true end
+      game:commandMove(tx, ty, "amove")
+      game.selected = keep
+      if game.notice then game:notice(string.format("Auto: squad %d healed - back to the fight", sq.idx or 0), 1.5) end
+    end
+  end
+end
+
+-- Commander Craft: idle workers go to work (gather) or put up a farm when food runs short
+A.craftJob = {}
+function A.craftJob.gather(game, w, team, u)
+  local C = require("src.craft")
+  C.autoGather(w, u)
+  return #u.orders > 0
+end
+function A.craftJob.farm(game, w, team, u)
+  local D = require("src.defs")
+  local C = require("src.craft")
+  local tm = w.teams[team]
+  local race = D.CRAFT.byKey[tm.race]
+  if not race then return false end
+  local key = race.farm
+  if (tm.foodCap or 0) >= D.CRAFT.FOOD_CAP then return false end
+  if (tm.foodCap or 0) - (tm.foodUsed or 0) >= 4 then return false end
+  -- one at a time: none going up, none on its way
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team == team then
+      if e.key == key and e.built < 1 then return false end
+      for _, o in ipairs(e.orders or {}) do if o.type == "build" and o.key == key then return false end end
+    end
+  end
+  if not C.canOrder(w, team, key) then return false end
+  local hall
+  for _, e in ipairs(w.entities) do if e.alive and e.team == team and e.def.hall and e.built >= 1 then hall = e; break end end
+  if not hall then return false end
+  local map = w.map
+  local hx, hy = map:tileAt(hall.x, hall.y)
+  for r = 4, 13 do
+    for dy = -r, r do
+      for dx = -r, r do
+        if (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace(key, hx + dx, hy + dy, team, "land") then
+          w:issue(u, { type = "build", key = key, tx = hx + dx, ty = hy + dy })
+          if game.notice then game:notice("Auto: a worker puts up a " .. D.units[key].name .. " (food was running short)", 1.5) end
+          return true
+        end
+      end
+    end
+  end
+  return false
+end
+function A.updateCraft(game, dt)
+  A.timer = (A.timer or 0) - dt
+  if A.timer > 0 then return end
+  A.timer = 0.5
+  local w = game.world
+  local team = game.playerTeam or w.playerTeam or 1
+  local order = A.jobOrder()
+  for _, u in ipairs(w.entities) do
+    if u.alive and u.team == team and u.def.worker and u.built >= 1 and #u.orders == 0 then
+      for _, job in ipairs(order) do
+        if A.v[job] and A.craftJob[job] and A.craftJob[job](game, w, team, u) then break end
+      end
+    end
+  end
 end
 
 return A

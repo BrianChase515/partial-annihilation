@@ -58,7 +58,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **Spiritcaller:** four spirit stances (Jaguar, Gorilla, Eagle, Centipede), one at a time, each reshaping every attack.
 - **Roguelike levels to 10.** Levels 2, 4 and 8 offer 1 of 2 class skills (cast with Q/W/E at the mouse), level 6 unlocks your ultimate (R), and the other levels offer upgrade cards.
 - **Death isn't the end.** Your Commander respawns at your Core. Towers must fall in order (outer, inner, then the Core), and a lane whose towers are down sends super creeps.
-- **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal, dive a weakened Commander, gang up with allies and use their skills. Higher difficulties last-hit and deny, back off from a stronger Commander, and lead their skill shots; 8-10 also learn 10-30% faster (the menu says so when you hover a difficulty).
+- **Computer opponents that play like it:** they farm behind their creep wave, avoid tower fire, retreat home to heal (and get out early when what's around them could burst them down before they escape), dive a weakened Commander, gang up with allies and use their skills. Higher difficulties last-hit and deny, back off from a stronger Commander, and lead their skill shots; 8-10 also learn 10-30% faster (the menu says so when you hover a difficulty).
 - **1v1 up to 5v5, 1v2, 2v1, or a 3- or 4-way free-for-all** (5v5 starts on a Huge map: two Commanders top, one mid, one bot and a jungler on Battlefield) (bases on a triangle or in every corner, with a lane between each pair of bases), with its own scoring, high scores and online leaderboard.
 - **Six map templates:**
   - **Classic:** three lanes, two towers each.
@@ -75,6 +75,7 @@ Switch the title screen to **COMMANDER ARENA** for a different game. There's no 
   - **Healing relics** respawn every 70 seconds.
   - Computer Commanders farm camps, contest shrines and gang up on the Colossus. On Treeline the third Commander of a side is a jungler; on Battlefield the fourth.
 - **Last-hitting and denying:** hold `D` to hold fire and time the killing shot, which gets the full experience. Finish off your own dying creep to deny it to the enemy: right-click it and your hero shoots it.
+- **No healing from ranking up, in any mode:** a hero, squad member or unit that levels up gets the bigger maximum health, not a refill - going home is how you heal.
 - **Creep veterancy:** creeps that land killing blows rank up (gold pips, up to 3), getting +12% health and damage each rank and becoming worth more experience. Denying your dying creep doesn't just starve the enemy Commander; it stops the enemy creep that was about to rank up off it. Computer players from difficulty 4 deny too, more often the better they are.
 
 ![Commander Arena: Commanders trading skills in the middle lane](screenshots/arena.gif)
@@ -136,6 +137,7 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
   - **Expand**: claim the nearest free metal deposit - nearest by the walk there, so a deposit just across water doesn't win - skipping any with enemies next to it
   - **Power**: when energy runs low, build a solar collector at home (one at a time)
   - Sea Constructors take the same jobs on the water: Expand claims the nearest offshore deposit (by sailing distance), Power builds a tidal generator nearby, and Repair fixes ships
+- **Auto in the other modes:** in Commander of Heroes, whole squads flee to the HQ (or your flag) below a health you pick and rejoin once every member is whole; in Commander Craft, idle workers get to work (gold, then wood) and put up a farm when food runs short (one at a time, by your hall). Each mode remembers its own settings. (Not in the Arena, or War is Hell, which has no HQ.)
 
 The button turns green while any of them is on. Annihilation only.
 
@@ -173,6 +175,8 @@ Lose him and you lose the game, but he only grows by fighting. He levels up **on
 
 ### Every match is a scored run on a seasonal online leaderboard
 Kills pay out what you destroy is worth (its metal plus a tenth of its energy), and towers, AA and sea batteries pay a 1.5x siege bonus, so cracking a fortified Turtle is worth the trouble. A kill-streak multiplier climbs to x2 (x3 in the Arena and Craft) and resets after 10 seconds without an enemy death (the window tightens as the streak grows) - and in Annihilation, the moment you lose a unit. At the end your points are scaled by how strong the enemies were, by **how stacked the odds were** (1v2 against a team pays far more than a free-for-all where the computers also fight each other) and by your time against par, which grows with every extra enemy you face. Speed pays: winning in half the par time doubles your score, and a third of it triples it. The victory screen breaks down every number. Clean games go on your high-score table, and one click submits them to the **[online leaderboard](LEADERBOARD.md)**, which resets with every new version so each release is a fresh season.
+
+Saved maps work in Commander of Heroes too: save one from the end screen or the Esc menu, and pick it on the setup screen's Map button (Conquest and War is Hell keep their own lists).
 
 When a game ends you can **Look around** (the fog lifts so you can see the whole map), play the **Same map again**, start a **New map**, save the map, submit your score or go back to the title screen. Knocked out of a free-for-all while the others fight on? The result screen comes up right away, and **Watch the rest** lets you follow the remainder with everything revealed (Esc brings the results back, and they come back by themselves when someone wins).
 
@@ -348,7 +352,8 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Commander flees home (repairs only there) | `F` with the Commander selected |
 | Arena skills / ultimate | `Q` `W` `E` / `R` at the mouse (Arena) |
 | Hold ground (Annihilation): stop, fire at anything in range, never chase | `D` (or click Hold); any new order releases them; a gold bar marks units holding |
-| Hold fire (Arena, Commander of Heroes: time your last hits) | Hold `D` (or click Hold) |
+| Hold ground (Commander of Heroes: hold a point) | `D` (or click Hold) |
+| Hold fire (Arena: time your last hits) | Hold `D` (or click Hold) |
 | Deny your own creep (Arena) | Right-click your creep |
 | Self-destruct selection | `Delete` (unfinished buildings refund their metal; the Commander needs two presses) |
 | Drop last queued order | `Shift+Delete` |

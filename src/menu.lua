@@ -152,6 +152,11 @@ function Menu.new(prev)
   self.craft.map = self.craft.map or 1
   self.mods = prev and prev.mods or { alien = false, drops = false, score = false, groovy = false }
   self.maps = Maps.load()
+  self.allMaps = self.maps
+  -- (the Annihilation list shows only its own maps; Commander of Heroes has its own picker)
+  local rtsMaps = {}
+  for _, m in ipairs(self.allMaps) do if (m.mode or "rts") == "rts" then rtsMaps[#rtsMaps + 1] = m end end
+  self.maps = rtsMaps
   self.t = 0
   self.shapes = {}
   local rng = love.math.newRandomGenerator(os.time())
@@ -541,6 +546,18 @@ function Menu:rects()
   return r
 end
 
+-- saved maps for the kind of Commander of Heroes game picked (and the one chosen, if any)
+function Menu:cohMaps()
+  local out, kind = {}, COH_SETUP.game or "conquest"
+  for _, m in ipairs(self.allMaps or {}) do if m.mode == kind then out[#out + 1] = m end end
+  return out
+end
+function Menu:cohSavedMap()
+  if not COH_SETUP.mapName then return nil end
+  for _, m in ipairs(self:cohMaps()) do if m.name == COH_SETUP.mapName then return m end end
+  return nil
+end
+
 -- Commander of Heroes setup: map, format, difficulty on the left; your three squads on the right
 function Menu:cohRects()
   local x0, y, w, h = self:layout()
@@ -562,6 +579,12 @@ function Menu:cohRects()
   for i, o in ipairs({ { "Conquest", "conquest" }, { "War is Hell", "wih" } }) do
     r[#r + 1] = { x = x0 + 220 + (i - 1) * 154, y = y, w = 150, h = 34, label = o[1], kind = "cohgame", value = o[2],
       active = (C.game or "conquest") == o[2], small = true }
+  end
+  -- a saved Commander of Heroes map (Random, or one you saved from this kind of game)
+  do
+    local m = self:cohSavedMap()
+    r[#r + 1] = { x = x0 + 220, y = y + 132, w = 300, h = 34, label = m and ("Saved map: " .. m.name) or "Map: random new one",
+      kind = "cohmap", small = true, active = m ~= nil }
   end
   if (C.game or "conquest") == "conquest" then
     for i, o in ipairs({ { "Quick  5-7 min", "quick" }, { "Standard  10-12 min", "standard" }, { "Long  ~18 min", "long" } }) do
@@ -1210,6 +1233,13 @@ function Menu:mousepressed(x, y, b)
       elseif r.kind == "cohfmt" then COH_SETUP.format = r.value
       elseif r.kind == "cohenemy" then COH_SETUP.enemy = r.value
       elseif r.kind == "cohlen" then COH_SETUP.length = r.value
+      elseif r.kind == "cohmap" then
+        -- cycle: random, then each saved map for this kind of game (right-click goes back)
+        local list = self:cohMaps()
+        local cur = 0
+        for i, m in ipairs(list) do if m.name == COH_SETUP.mapName then cur = i end end
+        local nx = (cur + (b == 2 and -1 or 1)) % (#list + 1)
+        COH_SETUP.mapName = nx > 0 and list[nx].name or nil
       elseif r.kind == "cohgame" then
         COH_SETUP.game = r.value
         if r.value == "wih" and COH_SETUP.size == 1 then COH_SETUP.size = 2 end -- (a moderate map to search)
@@ -1238,7 +1268,9 @@ function Menu:mousepressed(x, y, b)
       elseif r.delmap and b == 1 then
         Maps.remove(r.delmap.name)
         if self.savedMap and self.savedMap.name == r.delmap.name then self.savedMap = nil end
-        self.maps = Maps.load()
+        self.allMaps = Maps.load()
+        self.maps = {}
+        for _, m in ipairs(self.allMaps) do if (m.mode or "rts") == "rts" then self.maps[#self.maps + 1] = m end end
       elseif r.action == "random" then self.savedMap = nil
       elseif r.action == "start" and b == 1 then
         if self:validTeams() then return "start" end
@@ -1299,7 +1331,10 @@ function Menu:options()
     for _ = 2, f[2] do players[#players + 1] = { ally = 1, level = C.level } end
     -- creation order decides colors and starts: you, enemy, (ally, enemy 2)
     if #players == 4 then players = { players[1], players[2], players[4], players[3] } end
-    return { mode = "rts", coh = true, size = C.size == 1 and 96 or 128, water = WATER[1][2], players = players,
+    local sm = self:cohSavedMap()
+    if sm and sm.np < #players then sm = nil end
+    return { mode = "rts", coh = true, size = sm and sm.size or (C.size == 1 and 96 or 128), water = sm and sm.water or WATER[1][2], players = players,
+      seed = sm and sm.seed or nil, savedMap = sm,
       mods = { squads = true }, squadSetup = C.squads, enemySquads = C.enemy or "own", cohLength = C.length or "standard", menuMode = "coh",
       cohMode = C.game or "conquest", hillFrac = C.game == "wih" and 0.22 or nil, rockFrac = C.game == "wih" and 0.06 or nil,
       arenaSetup = self.arena, craftSetup = self.craft, sizeI = self.size, waterI = self.water, slots = self.slots }

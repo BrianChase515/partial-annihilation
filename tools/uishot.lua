@@ -504,6 +504,147 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_COHMAP") then
+    -- save a Commander of Heroes map, pick it on the menu, and the game starts on that seed
+    local Maps = require("src.maps")
+    Maps.add({ name = "Test hills", seed = 424242, size = 128, water = 0.15, np = 2, mode = "conquest" })
+    Maps.add({ name = "Test rts", seed = 777, size = 112, water = 0.3, np = 2 })
+    local menu = require("src.menu").new()
+    menu.mode = "coh"
+    local names = {}
+    for _, m in ipairs(menu:cohMaps()) do names[#names + 1] = m.name end
+    local rtsNames = {}
+    for _, m in ipairs(menu.maps) do rtsNames[#rtsNames + 1] = m.name end
+    print("COHMAP Conquest list: " .. table.concat(names, ", ") .. "; Annihilation list: " .. table.concat(rtsNames, ", "))
+    for _, r in ipairs(menu:cohRects()) do if r.kind == "cohmap" then menu:mousepressed(r.x + 4, r.y + 4, 1) end end
+    local o = menu:options()
+    print(string.format("COHMAP picked -> game options seed %s, size %s", tostring(o.seed), tostring(o.size)))
+    Maps.remove("Test hills"); Maps.remove("Test rts")
+    return
+  end
+  if os.getenv("PA_HEROESC") then
+    -- an AI hero at 70% with a pack of enemies suddenly round it: does it get out before 30%?
+    local res = {}
+    for trial = 1, 5 do
+      game = startFn({ mode = "arena", size = 80, water = 0.3, seed = 30 + trial, autotest = true,
+        players = { { ally = 1, level = 5, class = "ranger" }, { ally = 2, level = 7 } } })
+      local w = game.world
+      local h = w.teams[2].commander
+      for _ = 1, 30 * 20 do game:update(1 / 30) end
+      h.hp = h.maxhp * 0.7
+      local foes = {}
+      for k = 1, 12 do foes[k] = w:spawn("tank", 1, h.x + math.cos(k * 0.52) * 140, h.y + math.sin(k * 0.52) * 140) end
+      foes[#foes + 1] = w:spawn("turret", 1, h.x + 160, h.y, 1)
+      local t, left = 0, nil
+      while t < 15 and h.alive do
+        game:update(1 / 30); t = t + 1 / 30
+        if not left and h.orders[1] and h.orders[1].type == "move" then left = { t = t, hp = h.hp / h.maxhp } end
+      end
+      print(string.format("HEROESC   debug: hero hp %d%% now, killTime %.1f, foes alive %d, ais %d, mode %s", h.hp / h.maxhp * 100, w:killTime(h), (function() local n = 0 for _, f in ipairs(foes) do if f.alive then n = n + 1 end end return n end)(), #game.ais, tostring(game.ais[1] and game.ais[1].mode)))
+      res[#res + 1] = left and string.format("left at %d%% after %.1fs, %s", left.hp * 100, left.t, h.alive and "survived" or "died anyway")
+        or (h.alive and "stayed and survived" or "stayed and died")
+      for _, f in ipairs(foes) do f.alive = false end
+    end
+    local esc = 0
+    for _, nt in ipairs(game.world.tel.notes) do if nt.kind == "escape" then esc = esc + 1 end end
+    print("HEROESC " .. table.concat(res, " | "))
+    return
+  end
+  if os.getenv("PA_AUTOPANEL") then
+    local m = os.getenv("PA_AUTOPANEL")
+    if m == "coh" then
+      game = startFn({ mode = "rts", coh = true, size = 96, water = 0.15, seed = 5, mods = { squads = true }, autotest = true,
+        cohMode = "conquest", squadSetup = require("src.squads").randomSquads(love.math.newRandomGenerator(3), 3), enemySquads = "own",
+        players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
+    else
+      game = startFn({ mode = "craft", size = 88, seed = 31, autotest = true,
+        players = { { human = true, ally = 1, race = "vanguard", class = "ranger" }, { ally = 2, level = 1, race = "warband" } } })
+    end
+    require("src.automation").applies(game)
+    game.autoOpen = true
+    for _ = 1, 4 do frame() end
+    pending = "uishot_auto_" .. m .. ".png"
+    frame(); frame()
+    return
+  end
+  if os.getenv("PA_MODEAUTO") then
+    local A = require("src.automation")
+    -- Commander of Heroes: a squad at 30% with squad flee at 40%, then healed with rejoin on
+    A.v.sqflee, A.v.sqFleePct, A.v.sqrejoin = true, 40, true
+    game = startFn({ mode = "rts", coh = true, size = 96, water = 0.15, seed = 5, mods = { squads = true }, autotest = true,
+      cohMode = "conquest", squadSetup = require("src.squads").randomSquads(love.math.newRandomGenerator(3), 3), enemySquads = "own",
+      players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
+    game.ais = {}
+    local w = game.world
+    print("MODEAUTO CoH: Auto applies? " .. tostring(A.applies(game)) .. " (mode " .. A.mode .. ")")
+    local S = require("src.squads")
+    local sq = S.squadsOf(w, 1)[1]
+    -- move it out into the field first
+    for _, u in ipairs(sq.members) do if u.alive then u.x, u.y = u.x + 600, u.y; u.hp = u.maxhp * 0.3; u.lastHit = w.time end end
+    game.opts.autotest = false
+    for _ = 1, 15 do game:update(1 / 30) end
+    local fleeing = 0
+    for _, u in ipairs(sq.members) do if u.alive and w:isFleeing(u) then fleeing = fleeing + 1 end end
+    print(string.format("MODEAUTO CoH: squad of %d at 30%%: %d fleeing; remembered where from? %s", #sq.members, fleeing, tostring(sq.autoFled ~= nil)))
+    for _, u in ipairs(sq.members) do if u.alive then u.hp = u.maxhp; u.disarmed = nil; u.orders = {} end end
+    for _ = 1, 15 do game:update(1 / 30) end
+    local o = sq.members[1].orders[1]
+    print("MODEAUTO CoH: healed -> order " .. tostring(o and o.type) .. "; squad flag cleared? " .. tostring(sq.autoFled == nil))
+    game.opts.autotest = true
+    -- Craft: idle workers gather; food short -> a farm
+    A.v.gather, A.v.farm = true, true
+    game = startFn({ mode = "craft", size = 88, seed = 31, autotest = true,
+      players = { { human = true, ally = 1, race = "vanguard", class = "ranger" }, { ally = 2, level = 1, race = "warband" } } })
+    game.ais = {}
+    w = game.world
+    print("MODEAUTO Craft: Auto applies? " .. tostring(A.applies(game)) .. " (mode " .. A.mode .. ")")
+    local workers = {}
+    for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.worker then workers[#workers + 1] = e; e.orders = {} end end
+    local tm = w.teams[1]
+    tm.gold, tm.wood = 2000, 2000
+    game.opts.autotest = false
+    for _ = 1, 20 do game:update(1 / 30) end
+    local busy, farm = 0, 0
+    for _, e in ipairs(workers) do
+      local o = e.orders[1]
+      if o then busy = busy + 1; if o.type == "build" then farm = farm + 1 end end
+    end
+    print(string.format("MODEAUTO Craft: %d idle workers -> %d busy (%d building a farm); food %d/%d", #workers, busy, farm, tm.foodUsed or 0, tm.foodCap or 0))
+    -- make food short and free one worker
+    tm.foodUsed = (tm.foodCap or 12) - 1
+    if workers[1] then workers[1].orders = {} end
+    for _ = 1, 20 do game:update(1 / 30) end
+    farm = 0
+    for _, e in ipairs(workers) do local o = e.orders[1]; if o and o.type == "build" then farm = farm + 1 end end
+    print(string.format("MODEAUTO Craft: food short (%d/%d) -> workers building a farm: %d", tm.foodUsed or 0, tm.foodCap or 0, farm))
+    game.opts.autotest = true
+    return
+  end
+  if os.getenv("PA_NOHEAL") then
+    -- ranking up heals nothing: an Arena hero, and a unit in Commander of Heroes
+    local ARENA = require("src.arena")
+    game = startFn({ mode = "arena", size = 80, water = 0.3, seed = 31, autotest = true,
+      players = { { ally = 1, level = 5, class = "ranger" }, { ally = 2, level = 5 } } })
+    local w = game.world
+    local h = w.teams[1].commander
+    h.hp = h.maxhp * 0.5
+    local hp0, L0 = h.hp, h.clevel or 0
+    ARENA.commanderXP(w, h, ARENA.THRESHOLDS[(h.clevel or 0) + 1] + 1)
+    print(string.format("NOHEAL Arena hero L%d -> L%d: health %d -> %d (max %d)", L0, h.clevel, hp0, h.hp, h.maxhp))
+    game = startFn({ mode = "rts", coh = true, size = 96, water = 0.15, seed = 5, mods = { squads = true }, autotest = true,
+      cohMode = "conquest", squadSetup = require("src.squads").randomSquads(love.math.newRandomGenerator(3), 3), enemySquads = "own",
+      players = { { ally = 1, level = 5 }, { ally = 2, level = 5 } } })
+    w = game.world
+    local u
+    for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.weapon and not e.def.building and e.squad then u = e; break end end
+    if u then
+      u.hp = u.maxhp * 0.5
+      local a0, l0 = u.hp, u.level or 0
+      w:gainXP(u, w:xpForLevel(u, l0 + 1) * 3)
+      print(string.format("NOHEAL CoH %s L%d -> L%d: health %d -> %d (max %d)", u.def.name, l0, u.level or 0, a0, u.hp, u.maxhp))
+    end
+    return
+  end
   if os.getenv("PA_GUARD") then
     -- Guard: 3 tanks guard a constructor, which then walks off; do they keep up?
     local UI = require("src.ui")

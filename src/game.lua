@@ -896,7 +896,7 @@ function G:orderAction(action, shift)
     return self:useSkill(slot)
   end
   if action == "home" then return self:goHome() end
-  if action == "hold" and self.world.rtsTune then return self:holdGround() end
+  if action == "hold" and (self.world.rtsTune or self.world.squads) then return self:holdGround() end
   if action == "hold" then
     self.holdToggle = not self.holdToggle
     self:notice(self.holdToggle and "Holding fire (click Hold again or press D to release)" or "Weapons free", 1.5)
@@ -935,7 +935,7 @@ end
 -- Hold fire: while D is held (or the Hold button is on), your selected units - in the
 -- Arena, your Commander - don't shoot, so you can time the killing shot
 function G:updateHoldFire()
-  if self.world.rtsTune then self.holdingFire = false; return end -- (Annihilation: D holds ground instead)
+  if self.world.rtsTune or self.world.squads then self.holdingFire = false; return end -- (Annihilation, Commander of Heroes: D holds ground instead)
   local on = self.holdToggle or (not self.naming and love.keyboard.isDown("d"))
   local want = {}
   if on then
@@ -2241,7 +2241,7 @@ function G:keypressed(key)
     self:pickUpgrade(key == "z" and 1 or 2)
     return
   end
-  if key == "d" and self.world.rtsTune and not self.naming then self:holdGround(); return end
+  if key == "d" and (self.world.rtsTune or self.world.squads) and not self.naming then self:holdGround(); return end
   if key == "d" and self.holdToggle then self.holdToggle = false end
   if self.world.squads and (key == "q" or key == "w") then self:squadSkill(key == "q" and 1 or 2); return end
   if self.craft then
@@ -2401,7 +2401,9 @@ function G:namingKey(key)
     local name = n.text:gsub("^%s+", ""):gsub("%s+$", "")
     if #name > 0 then
       local map = self.world.map
-      require("src.maps").add({ name = name, seed = map.seed, size = map.w, water = self.opts.water or 0.3, np = map.four and 4 or 2 })
+      local w = self.world
+      local mode = w.squads and (w.wih and "wih" or "conquest") or "rts"
+      require("src.maps").add({ name = name, seed = map.seed, size = map.w, water = self.opts.water or 0.3, np = map.four and 4 or (w.np or 2), mode = mode })
       self:notice("Saved map \"" .. name .. "\"", 2)
     end
     self.naming = nil
