@@ -571,6 +571,8 @@ end
 
 function W:issue(e, order, queue)
   if not e.alive then return end
+  -- Commander Craft: only workers build and repair (heroes don't lend a hand)
+  if self.craft and not e.def.worker and (order.type == "build" or order.type == "assist" or order.type == "repairzone") then return end
   if e.def.building and not e.def.factory then return end
   if e.def.factory then
     -- factories only take rally points
@@ -1044,7 +1046,10 @@ function W:rangeOf(e)
   return e.def.weapon.range * (1 + 0.04 * (e.level or 0)) * (self:modsOf(e).range or 1) * (self:bv(e, "range") or 1)
 end
 function W:buildRangeOf(e) return (e.def.buildRange or 0) * (self:modsOf(e).buildRange or 1) end
-function W:buildPowerOf(e) return (e.def.buildPower or 0) * (self:modsOf(e).build or 1) end
+function W:buildPowerOf(e)
+  if self.craft and not e.def.worker and not e.def.building then return 0 end
+  return (e.def.buildPower or 0) * (self:modsOf(e).build or 1)
+end
 function W:sightOf(e) return e.def.sight * (self:modsOf(e).sight or 1) * (e.sqSight or 1) * (self.sightMul or 1) end
 -- how far a unit hunts for targets: its sight, or for artillery (spotted fire) its range
 function W:lookOf(e)

@@ -39,6 +39,7 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
   - **Horseshoe Classic:** a smaller, quicker Horseshoe with only three gold mines: yours, theirs, and the rich one across the contested beach.
   - **Wildlands:** creep-heavy, with camps guarding every expansion and the roads between them.
   - **Crossroads (2v2):** you and a computer ally against two enemies. Each team is one race, and heroes can repeat across players.
+- **Only workers build.** Heroes can't help construct or repair buildings; right-clicking your own building with a hero just walks it there.
 - **Map previews.** The title screen shows a small picture of the chosen (or hovered) map, for Craft and for the Arena: terrain, bases, gold mines, creep camps, and in the Arena the lanes, towers, shrines and boss pits.
 - **Creep camps everywhere.** Every map has about eleven camps (nine on Crossroads), so there is always something for your heroes to hunt between army fights. The **Creep camps** option on the title screen picks:
   - **Plenty** (default): the extra camps sit in the same places every time you play that map.

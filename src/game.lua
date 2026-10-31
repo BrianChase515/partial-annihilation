@@ -861,7 +861,7 @@ function G:rightClick(wx, wy, queue)
     local helps = target.built < 1 or target.hp < target.maxhp or target.def.factory
     local others = {}
     for _, u in ipairs(units) do
-      if u.def.builds and helps and u ~= target and not self.arena then -- (no repairs by the Commander in the Arena)
+      if u.def.builds and helps and u ~= target and not self.arena and not (self.craft and not u.def.worker) then -- (no repairs by the Commander in the Arena)
         world:issue(u, { type = "assist", target = target, persist = target.def.factory and target.built >= 1 }, queue)
       elseif not target.def.building and u ~= target and u.def.weapon then
         -- right-click a friendly unit: guard it (follow and protect)

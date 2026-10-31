@@ -504,6 +504,31 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_HERONOBUILD") then
+    -- Commander Craft: the hero must not help build or repair; a worker still does
+    game = startFn({ mode = "craft", size = 96, seed = 31, autotest = true,
+      players = { { ally = 1, level = 0, race = "vanguard" }, { ally = 2, level = 1, race = "warband" } } })
+    local w = game.world
+    local h = w.teams[1].commander
+    local wk
+    for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.worker then wk = e; break end end
+    local fx, fy = h.x + 140, h.y
+    local farm = w:spawn("v_farm", 1, fx, fy)
+    farm.built, farm.hp = 0.3, farm.maxhp * 0.3
+    w:update(1 / 30)
+    game.selected = { [h] = true }
+    game:rightClick(farm.x, farm.y, false)
+    local o = h.orders[1]
+    print("HERONOBUILD hero order after right-click:", o and o.type or "none")
+    w:issue(h, { type = "assist", target = farm })
+    o = h.orders[1]
+    print("HERONOBUILD hero order after direct assist:", o and o.type or "none", "power", w:buildPowerOf(h))
+    w:issue(wk, { type = "assist", target = farm })
+    local b0 = farm.built
+    for i = 1, 300 do game:update(1 / 30) end
+    print(string.format("HERONOBUILD worker assist: %s, built %.2f -> %.2f", wk.orders[1] and wk.orders[1].type or "done", b0, farm.built))
+    return
+  end
   if os.getenv("PA_CAMPS") then
     for _, t in ipairs({ "horseshoe", "classic", "temple", "isles", "glade", "wild", "cross" }) do
       local CM = require("src.craft_map")
