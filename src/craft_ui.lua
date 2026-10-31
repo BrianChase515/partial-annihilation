@@ -201,9 +201,9 @@ CU.ORDERS = {
   { "amove", "Attack", "A", "Attack-move: click a spot; units fight anything on the way." },
   { "stop", "Stop", "S", "Stop: cancel orders and hold position." },
   { "hold", "Hold", "D", "Hold fire while D is held (or click to toggle)." },
+  { "guard", "Guard", "U", "Guard: click one of your units (a worker heading out, your hero) - the selected fighters follow it and fight anything that comes near it. Right-clicking a friendly unit does the same." },
   { "patrol", "Patrol", "P", "Patrol back and forth to a spot." },
   { "flee", "Flee", "F", "Selected units retreat to your flag (+25% speed, weapons off until healed). A hero flees to your hall at +50%." },
-  { "skill1", nil, "Q" }, { "skill2", nil, "W" }, { "skill3", nil, "E" }, { "skill4", nil, "R" },
   { "army", "Army", "Ctrl+A", "Select every fighting unit (not workers)." },
   { "builder", "Worker", "Tab", "Jump to the next idle worker. Shift+Q trains one at your hall from anywhere." },
   { "cmd", "Hero", "C", "Several heroes selected: switch which one Q W E R control (the selection stays). Otherwise: jump to your next hero. Shift+C always jumps." },
@@ -218,7 +218,7 @@ function CU.orderButtons(game)
   local heroSel = hero and game.selected[hero]
   local mobile = #game:selectedMobile() > 0
   local n = #game:selectedList()
-  local enabled = { amove = mobile, stop = mobile, hold = n > 0, patrol = mobile, flee = mobile, army = true, builder = true,
+  local enabled = { amove = mobile, stop = mobile, hold = n > 0, guard = mobile, patrol = mobile, flee = mobile, army = true, builder = true,
     cmd = true, follow = n > 0, help = true }
   local list, gap, total = {}, 4, 0
   for _, o in ipairs(CU.ORDERS) do total = total + (o[1]:match("^skill") and 96 or 60) + gap end

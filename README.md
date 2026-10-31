@@ -137,7 +137,7 @@ The **Auto** button in the top bar (or K) opens standing orders for the routine 
   - **Expand**: claim the nearest free metal deposit - nearest by the walk there, so a deposit just across water doesn't win - skipping any with enemies next to it
   - **Power**: when energy runs low, build a solar collector at home (one at a time)
   - Sea Constructors take the same jobs on the water: Expand claims the nearest offshore deposit (by sailing distance), Power builds a tidal generator nearby, and Repair fixes ships
-- **Auto in the other modes:** in Commander of Heroes, whole squads flee to the HQ (or your flag) below a health you pick and rejoin once every member is whole; in Commander Craft, idle workers get to work (gold, then wood) and put up a farm when food runs short (one at a time, by your hall - and in Craft, as in Annihilation, your units walk through your own buildings, so packed farms never trap anyone; enemies are still walled out). Each mode remembers its own settings. (Not in the Arena, or War is Hell, which has no HQ.)
+- **Auto in the other modes:** in Commander of Heroes, whole squads flee to the HQ (or your flag) below a health you pick and rejoin once every member is whole; in Commander Craft, farms go up by rule - when food left drops to a number you set, by idle workers or (if you allow it) a crew of up to four taken off wood, gold or either, who go back to work afterwards - and idle workers repair damaged buildings nearby and get to work (gold, then wood) in the order you drag them into (one farm at a time, by your hall - and in Craft, as in Annihilation, your units walk through your own buildings, so packed farms never trap anyone; enemies are still walled out). Each mode remembers its own settings. (Not in the Arena, or War is Hell, which has no HQ.)
 
 The button turns green while any of them is on. Annihilation only.
 
@@ -348,7 +348,7 @@ If you keep the game in Documents, Desktop or Downloads, macOS asks once whether
 | Game speed | `+` / `-` (0.5x up to 15x; the result never depends on speed) |
 | Restart the same map / Settings | Esc menu: Restart (same map), Settings (window size, camera scroll and zoom speed, trackpad pan speed, edge scrolling, volumes; also on the title screen) |
 | Plant retreat flag | `Ctrl+F` at the mouse (or the Flag button, then click) |
-| Guard a unit (escort a constructor, say) / factory output follows a unit | `E` (or the Guard button) then click the unit, or right-click a friendly unit with army selected / with a factory selected |
+| Guard a unit (escort a constructor, say) / factory output follows a unit | `E` (`U` in Craft, where Q W E R are skills; or the Guard button) then click the unit, or right-click a friendly unit with army selected / with a factory selected |
 | Commander flees home (repairs only there) | `F` with the Commander selected |
 | Arena skills / ultimate | `Q` `W` `E` / `R` at the mouse (Arena) |
 | Hold ground (Annihilation): stop, fire at anything in range, never chase | `D` (or click Hold); any new order releases them; a gold bar marks units holding |

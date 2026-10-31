@@ -586,7 +586,9 @@ local function script(mode, secs)
         players = { { human = true, ally = 1, race = "vanguard", class = "ranger" }, { ally = 2, level = 1, race = "warband" } } })
     end
     require("src.automation").applies(game)
-    game.autoOpen = true
+    if os.getenv("PA_BAR") then
+      for _, e in ipairs(game.world.entities) do if e.alive and e.team == 1 and not e.def.building and e.def.weapon then game.selected = { [e] = true } end end
+    else game.autoOpen = true end
     for _ = 1, 4 do frame() end
     pending = "uishot_auto_" .. m .. ".png"
     frame(); frame()
@@ -616,32 +618,51 @@ local function script(mode, secs)
     local o = sq.members[1].orders[1]
     print("MODEAUTO CoH: healed -> order " .. tostring(o and o.type) .. "; squad flag cleared? " .. tostring(sq.autoFled == nil))
     game.opts.autotest = true
-    -- Craft: idle workers gather; food short -> a farm
-    A.v.gather, A.v.farm = true, true
+    -- Craft: farm by rule (at 4 food left, crew of 2 taken off wood), repair, gather
+    A.v.gather, A.v.crepair, A.v.farm, A.v.farmAt, A.v.farmPull, A.v.farmCrew, A.v.farmFrom = true, true, true, 4, true, 2, "either"
     game = startFn({ mode = "craft", size = 88, seed = 31, autotest = true,
       players = { { human = true, ally = 1, race = "vanguard", class = "ranger" }, { ally = 2, level = 1, race = "warband" } } })
     game.ais = {}
     w = game.world
     print("MODEAUTO Craft: Auto applies? " .. tostring(A.applies(game)) .. " (mode " .. A.mode .. ")")
+    local tm = w.teams[1]
+    tm.gold, tm.wood = 3000, 3000
     local workers = {}
     for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.worker then workers[#workers + 1] = e; e.orders = {} end end
-    local tm = w.teams[1]
-    tm.gold, tm.wood = 2000, 2000
+    -- plenty of food at first: everyone just goes to work
+    A.v.farm = false
     game.opts.autotest = false
-    for _ = 1, 20 do game:update(1 / 30) end
-    local busy, farm = 0, 0
+    for _ = 1, 30 * 6 do game:update(1 / 30) end
+    local kinds = {}
+    for _, e in ipairs(workers) do local o = e.orders[1]; local k = o and (o.type .. (o.kind and ("/" .. o.kind) or "")) or "idle"; kinds[k] = (kinds[k] or 0) + 1 end
+    local ks = {} for k, n in pairs(kinds) do ks[#ks + 1] = k .. " x" .. n end
+    print("MODEAUTO Craft: 6s in: " .. table.concat(ks, ", "))
+    -- food short now; farm rule on
+    A.v.farm = true
+    for _ = 1, 30 * 3 do
+      local spare = (tm.foodCap or 0) - 3
+      tm.foodUsed = spare
+      game:update(1 / 30)
+    end
+    local crew, back = 0, 0
     for _, e in ipairs(workers) do
       local o = e.orders[1]
-      if o then busy = busy + 1; if o.type == "build" then farm = farm + 1 end end
+      if o and (o.type == "build" or o.type == "assist") then
+        crew = crew + 1
+        if e.orders[2] and e.orders[2].type == "harvest" then back = back + 1 end
+      end
     end
-    print(string.format("MODEAUTO Craft: %d idle workers -> %d busy (%d building a farm); food %d/%d", #workers, busy, farm, tm.foodUsed or 0, tm.foodCap or 0))
-    -- make food short and free one worker
-    tm.foodUsed = (tm.foodCap or 12) - 1
-    if workers[1] then workers[1].orders = {} end
-    for _ = 1, 20 do game:update(1 / 30) end
-    farm = 0
-    for _, e in ipairs(workers) do local o = e.orders[1]; if o and o.type == "build" then farm = farm + 1 end end
-    print(string.format("MODEAUTO Craft: food short (%d/%d) -> workers building a farm: %d", tm.foodUsed or 0, tm.foodCap or 0, farm))
+    print(string.format("MODEAUTO Craft: 3 food left -> farm crew %d (rule: 2, from either); %d will go back to their work after", crew, back))
+    -- repair: damage the hall, free a worker
+    local hall
+    for _, e in ipairs(w.entities) do if e.alive and e.team == 1 and e.def.hall then hall = e end end
+    hall.hp = hall.maxhp * 0.6
+    local last = workers[#workers]
+    last.orders = {}
+    A.v.farm = false
+    for _ = 1, 30 * 2 do game:update(1 / 30) end
+    local o = last.orders[1]
+    print("MODEAUTO Craft: hall at 60%, a worker goes idle -> " .. tostring(o and o.type) .. " " .. tostring(o and o.target and o.target.def.name))
     game.opts.autotest = true
     return
   end

@@ -2292,8 +2292,10 @@ function G:keypressed(key)
     if #self:selectedMobile() > 0 then self.mode = "amove" end
   elseif key == "s" then
     self:stop()
-  elseif key == "e" and not self.arena and not self.craft and not self.world.squads then
+  elseif key == "e" and not self.arena and not self.craft then
     self:orderAction("guard")
+  elseif key == "u" and self.craft then
+    self:orderAction("guard") -- (Craft: Q W E R are the hero's skills)
   elseif (key == "delete" or key == "backspace") and not shift then
     self:selfDestruct()
   elseif key == "p" then

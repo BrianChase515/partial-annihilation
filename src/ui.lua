@@ -1692,7 +1692,7 @@ function UI.orderButtons(game)
   local bw, gap = 66, 4
   local list = {}
   -- Commander of Heroes: no building, no Commander - just the squad orders
-  local cohSkip = { guard = true, fleecmd = true, destroy = true, half = true, builder = true, ["repeat"] = true, nuke = true }
+  local cohSkip = { fleecmd = true, destroy = true, half = true, builder = true, ["repeat"] = true, nuke = true }
   local cohText = {
     flee = { "Flee", "Pull the selection back to your HQ (or your flag, if planted) at +25% speed. Weapons stay off until repaired - the HQ heals fast." },
     cmd = { "Squad", "C: with several squads selected, the next one becomes ACTIVE (gold - Q / W fire its skills). Otherwise: jump to the next squad." },

@@ -29,7 +29,7 @@ A.RULES = {
 }
 A.JOBS = {
   gather = { label = "Gather", desc = "Go to work: gold until the nearest mine has five workers, then wood." },
-  farm = { label = "Farm", desc = "Food running short: build a farm by your hall (one at a time)." },
+  crepair = { label = "Repair", desc = "Fix damaged buildings of yours nearby." },
   repair = { label = "Repair", desc = "Fix damaged units and buildings near it (costs resources)." },
   expand = { label = "Expand", desc = "Claim the nearest free metal deposit by the walk there (Sea Constructors: offshore). Skips ones with enemies near." },
   power = { label = "Power", desc = "Energy running low: build a solar collector at home (Sea Constructors: a tidal generator)." },
@@ -38,8 +38,19 @@ A.v = { flee = false, fleePct = 30, rejoin = false, builders = false, builderMin
   idleOrder = "repair,expand,power",
   -- Commander of Heroes: whole squads
   sqflee = false, sqFleePct = 40, sqrejoin = false,
-  -- Commander Craft: idle workers
-  gather = false, farm = false, craftOrder = "farm,gather" }
+  -- Commander Craft: farms by rule, idle workers by job
+  farm = false, farmAt = 4, farmPull = false, farmCrew = 1, farmFrom = "wood",
+  gather = false, crepair = false, craftOrder = "crepair,gather" }
+
+-- Commander Craft rules: when to put up a farm, and who builds it
+A.CRAFT_RULES = {
+  { key = "farm", label = "Build farms", desc = "When food left drops to this or below, a worker builds a farm by your hall (one farm at a time).",
+    value = "farmAt", min = 0, max = 12, step = 1, unit = " food left" },
+  { key = "farmPull", label = "Farm crew", desc = "On: up to this many workers build it, taken off their work if no one is idle (they go back after). Off: idle workers only.",
+    value = "farmCrew", min = 1, max = 4, step = 1, unit = " workers" },
+  { key = "farmFromRow", label = "Pull workers from", desc = "Where the farm crew comes from when no one is idle.", noToggle = true,
+    value = "farmFrom", choices = { "wood", "gold", "either" }, unit = "" },
+}
 
 -- Commander of Heroes rules: a squad falls back as one
 A.SQ_RULES = {
@@ -52,12 +63,12 @@ A.MODES = {
   rts = { jobs = { "repair", "expand", "power" }, orderKey = "idleOrder", idleTitle = "When a constructor is idle",
     idleSub = "Never overrides your orders: it does the first job that's on and has work. Drag to reorder." },
   coh = { jobs = {} },
-  craft = { jobs = { "farm", "gather" }, orderKey = "craftOrder", idleTitle = "When a worker is idle",
+  craft = { jobs = { "crepair", "gather" }, orderKey = "craftOrder", idleTitle = "When a worker is idle",
     idleSub = "Never overrides your orders or a worker already busy. Drag to reorder." },
 }
 A.mode = "rts"
 function A.rules()
-  if A.mode == "coh" then return A.SQ_RULES elseif A.mode == "craft" then return {} end
+  if A.mode == "coh" then return A.SQ_RULES elseif A.mode == "craft" then return A.CRAFT_RULES end
   return A.RULES
 end
 function A.jobOrder()
@@ -114,7 +125,7 @@ end
 
 function A.anyOn()
   if A.mode == "coh" then return A.v.sqflee or A.v.sqrejoin end
-  if A.mode == "craft" then return A.v.gather or A.v.farm end
+  if A.mode == "craft" then return A.v.gather or A.v.farm or A.v.crepair end
   return A.v.flee or A.v.rejoin or A.v.builders or A.v.repair or A.v.expand or A.v.power
 end
 
@@ -272,7 +283,8 @@ function A.summary()
   elseif A.mode == "craft" then
     local jobs = {}
     for _, j in ipairs(A.jobOrder()) do if A.v[j] then jobs[#jobs + 1] = A.JOBS[j].label:lower() end end
-    return "idle workers: " .. table.concat(jobs, " > ")
+    local f = A.v.farm and string.format("farms at %d food left%s, ", A.v.farmAt, A.v.farmPull and (" (crew " .. A.v.farmCrew .. ")") or "") or ""
+    return f .. "idle workers: " .. table.concat(jobs, " > ")
   end
   if A.v.flee then parts[#parts + 1] = "flee at " .. A.v.fleePct .. "%" end
   if A.v.rejoin then parts[#parts + 1] = "rejoin" end
@@ -417,7 +429,7 @@ function A.rects()
   end
   for i, r in ipairs(A.rules()) do
     local y = py + 70 + (i - 1) * rowH
-    out[#out + 1] = { x = px + pw - 120, y = y, w = 96, h = 34, kind = "toggle", rule = r }
+    if not r.noToggle then out[#out + 1] = { x = px + pw - 120, y = y, w = 96, h = 34, kind = "toggle", rule = r } end
     if r.value then
       out[#out + 1] = { x = px + pw - 300, y = y, w = 34, h = 34, kind = "minus", rule = r }
       out[#out + 1] = { x = px + pw - 160, y = y, w = 34, h = 34, kind = "plus", rule = r }
@@ -494,7 +506,8 @@ function A.draw(game, fontFn)
   for i, r in ipairs(A.rules()) do
     local y = py + 70 + (i - 1) * rowH
     lg.setFont(fontFn(16))
-    lg.setColor(A.v[r.key] and 1 or 0.7, A.v[r.key] and 1 or 0.72, A.v[r.key] and 1 or 0.75)
+    local lit = r.noToggle or A.v[r.key]
+    lg.setColor(lit and 1 or 0.7, lit and 1 or 0.72, lit and 1 or 0.75)
     lg.print(r.label, px + 24, y + 2)
     lg.setFont(fontFn(12))
     lg.setColor(0.6, 0.66, 0.72)
@@ -502,7 +515,9 @@ function A.draw(game, fontFn)
     if r.value then
       lg.setFont(fontFn(16))
       lg.setColor(1, 0.85, 0.4)
-      local txt = tostring(A.v[r.value]) .. r.unit
+      local unit = r.unit or ""
+      if A.v[r.value] == 1 then unit = unit:gsub("s$", "") end -- (1 worker, not 1 workers)
+      local txt = tostring(A.v[r.value]) .. unit
       lg.printf(txt, px + pw - 266, y + 8, 106, "center")
     end
   end
@@ -594,6 +609,12 @@ function A.click(x, y)
         else p = (p <= 10) and 0 or p - 5 end
         A.v[k] = p
       elseif b.kind == "toggle" then A.v[r.key] = not A.v[r.key]
+      elseif (b.kind == "minus" or b.kind == "plus") and r.choices then
+        -- a choice: - and + step through the options
+        local i = 1
+        for k, c in ipairs(r.choices) do if c == A.v[r.value] then i = k end end
+        i = (i - 1 + (b.kind == "plus" and 1 or -1)) % #r.choices + 1
+        A.v[r.value] = r.choices[i]
       elseif b.kind == "minus" then A.v[r.value] = math.max(r.min, A.v[r.value] - r.step)
       elseif b.kind == "plus" then A.v[r.value] = math.min(r.max, A.v[r.value] + r.step)
       elseif b.kind == "close" then A.save(); A.view = "main"; return false end
@@ -650,40 +671,112 @@ function A.craftJob.gather(game, w, team, u)
   C.autoGather(w, u)
   return #u.orders > 0
 end
-function A.craftJob.farm(game, w, team, u)
+function A.craftJob.crepair(game, w, team, u)
+  local best, bd
+  w:query(u.x, u.y, 650, function(e)
+    if e.alive and e.team == team and e.def.building and (e.built or 1) >= 1 and e.hp < e.maxhp * 0.98 then
+      local d = U.dist2(u.x, u.y, e.x, e.y)
+      if d < 600 * 600 and (not bd or d < bd) then best, bd = e, d end
+    end
+  end)
+  if best then w:issue(u, { type = "assist", target = best }); return true end
+  return false
+end
+
+-- Commander Craft farms, by rule: when food left drops to farmAt, one farm goes up by the hall,
+-- built by idle workers - or, with the crew rule on, by up to farmCrew workers taken off wood or
+-- gold (they go back to what they were doing afterwards)
+local function farmKey(w, team)
+  local D = require("src.defs")
+  local race = D.CRAFT.byKey[w.teams[team].race]
+  return race and race.farm
+end
+local function harvestKind(u)
+  local o = u.orders and u.orders[1]
+  return o and o.type == "harvest" and o.kind or nil
+end
+function A.craftFarm(game, w, team)
   local D = require("src.defs")
   local C = require("src.craft")
+  local v = A.v
+  local key = farmKey(w, team)
+  if not key then return end
   local tm = w.teams[team]
-  local race = D.CRAFT.byKey[tm.race]
-  if not race then return false end
-  local key = race.farm
-  if (tm.foodCap or 0) >= D.CRAFT.FOOD_CAP then return false end
-  if (tm.foodCap or 0) - (tm.foodUsed or 0) >= 4 then return false end
-  -- one at a time: none going up, none on its way
+  -- the farm going up (or ordered), and who's on it
+  local site, crew = nil, {}
   for _, e in ipairs(w.entities) do
     if e.alive and e.team == team then
-      if e.key == key and e.built < 1 then return false end
-      for _, o in ipairs(e.orders or {}) do if o.type == "build" and o.key == key then return false end end
-    end
-  end
-  if not C.canOrder(w, team, key) then return false end
-  local hall
-  for _, e in ipairs(w.entities) do if e.alive and e.team == team and e.def.hall and e.built >= 1 then hall = e; break end end
-  if not hall then return false end
-  local map = w.map
-  local hx, hy = map:tileAt(hall.x, hall.y)
-  for r = 4, 13 do
-    for dy = -r, r do
-      for dx = -r, r do
-        if (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace(key, hx + dx, hy + dy, team, "land") then
-          w:issue(u, { type = "build", key = key, tx = hx + dx, ty = hy + dy })
-          if game.notice then game:notice("Auto: a worker puts up a " .. D.units[key].name .. " (food was running short)", 1.5) end
-          return true
+      if e.key == key and e.built < 1 then site = site or e end
+      if e.def.worker then
+        local o = e.orders[1]
+        if o and ((o.type == "build" and o.key == key) or (o.type == "assist" and o.target and o.target.key == key and o.target.built < 1)) then
+          crew[#crew + 1] = e
+          if o.ent then site = site or o.ent end
         end
       end
     end
   end
-  return false
+  local spare = (tm.foodCap or 0) - (tm.foodUsed or 0)
+  local want = (site or #crew > 0) and true or ((tm.foodCap or 0) < D.CRAFT.FOOD_CAP and spare <= v.farmAt)
+  if not want then return end
+  local crewMax = v.farmPull and v.farmCrew or 1
+  if #crew >= crewMax then return end
+  -- who joins: idle workers first, then (crew rule on) workers taken off wood / gold
+  local function pick()
+    local best, bd
+    local hall
+    for _, e in ipairs(w.entities) do if e.alive and e.team == team and e.def.hall and e.built >= 1 then hall = e; break end end
+    local hx, hy = hall and hall.x or 0, hall and hall.y or 0
+    local function consider(e, pass)
+      if not (e.alive and e.team == team and e.def.worker and e.built >= 1) then return end
+      for _, c in ipairs(crew) do if c == e then return end end
+      local o = e.orders[1]
+      local ok
+      if pass == 1 then ok = not o
+      else
+        local k = harvestKind(e)
+        ok = k and (v.farmFrom == "either" or v.farmFrom == k) and not e.carry
+      end
+      if ok then
+        local d = U.dist2(e.x, e.y, hx, hy)
+        if not bd or d < bd then best, bd = e, d end
+      end
+    end
+    for _, e in ipairs(w.entities) do consider(e, 1) end
+    if not best and v.farmPull then for _, e in ipairs(w.entities) do consider(e, 2) end end
+    return best
+  end
+  local u = pick()
+  if not u then return end
+  local back = u.orders[1]
+  if site then
+    w:issue(u, { type = "assist", target = site })
+  else
+    if not C.canOrder(w, team, key) then return end
+    local hall
+    for _, e in ipairs(w.entities) do if e.alive and e.team == team and e.def.hall and e.built >= 1 then hall = e; break end end
+    if not hall then return end
+    local map = w.map
+    local hx, hy = map:tileAt(hall.x, hall.y)
+    local placed = false
+    for r = 4, 13 do
+      for dy = -r, r do
+        for dx = -r, r do
+          if not placed and (math.abs(dx) == r or math.abs(dy) == r) and w:canPlace(key, hx + dx, hy + dy, team, "land") then
+            w:issue(u, { type = "build", key = key, tx = hx + dx, ty = hy + dy })
+            placed = true
+          end
+        end
+      end
+      if placed then break end
+    end
+    if not placed then return end
+    if game.notice then game:notice(string.format("Auto: %s (%d food left)", "a farm goes up", math.max(0, spare)), 1.5) end
+  end
+  -- then back to the wood or gold it was taken off
+  if back and back.type == "harvest" then
+    w:issue(u, { type = "harvest", kind = back.kind, target = back.target, tree = back.tree }, true)
+  end
 end
 function A.updateCraft(game, dt)
   A.timer = (A.timer or 0) - dt
@@ -691,6 +784,7 @@ function A.updateCraft(game, dt)
   A.timer = 0.5
   local w = game.world
   local team = game.playerTeam or w.playerTeam or 1
+  if A.v.farm then A.craftFarm(game, w, team) end
   local order = A.jobOrder()
   for _, u in ipairs(w.entities) do
     if u.alive and u.team == team and u.def.worker and u.built >= 1 and #u.orders == 0 then
