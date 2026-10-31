@@ -160,11 +160,24 @@ function A.doJob.expand(game, w, team, u)
   local map = w.map
   local taken = claimed(w, team)
   local best, bd
+  -- the closest by the walk, not as the crow flies: a deposit just across the water can be the
+  -- longest trip on the map
+  local utx, uty = map:tileAt(u.x, u.y)
+  local walk = map:walkDistances("land", utx, uty, math.floor(2400 / w.T))
+  local function walkTo(tx, ty)
+    local m
+    for dy = -1, 1 do for dx = -1, 1 do
+      local d = walk[(ty + dy) * map.w + tx + dx]
+      if d and (not m or d < m) then m = d end
+    end end
+    return m
+  end
   for _, dp in ipairs(map.deposits) do
     if not dp.sea and not taken[dp.y * map.w + dp.x] and w:canPlace("mex", dp.x, dp.y, team, "land") then
       local x, y = map:center(dp.x, dp.y)
-      local d = U.dist2(u.x, u.y, x, y)
-      if d < 2400 * 2400 and (not bd or d < bd) then
+      local wd = walkTo(dp.x, dp.y)
+      local d = wd and (wd * w.T) ^ 2 or nil
+      if d and d < 2400 * 2400 and (not bd or d < bd) then
         -- nobody hostile and armed standing next to it
         local danger = false
         w:query(x, y, 450, function(e)

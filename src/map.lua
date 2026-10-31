@@ -715,6 +715,62 @@ function M:canReach(layer, ax, ay, bx, by, reach)
   return res
 end
 
+-- walking distance (in tiles, 8 directions, diagonals ~1.4) from tile (sx, sy) to every tile a
+-- `layer` unit can reach, out to maxD tiles. Buildings count as open (units of that side walk
+-- through their own), so only terrain shapes the route
+function M:walkDistances(layer, sx, sy, maxD)
+  local w, h, terrain = self.w, self.h, self.terrain
+  local function open(x, y)
+    if x < 0 or y < 0 or x >= w or y >= h then return false end
+    local t = terrain[y * w + x]
+    if layer == "land" then return t == M.LAND or t == M.HILL end
+    return t == M.WATER
+  end
+  local dist = {}
+  -- start from the nearest open tile (a unit can stand on a building's edge)
+  if not open(sx, sy) then
+    local nx, ny = self:nearestTile(sx, sy, open, 4)
+    if not nx then return dist end
+    sx, sy = nx, ny
+  end
+  -- a bucketed Dijkstra: costs are 10 (straight) and 14 (diagonal)
+  local buckets, cur = { [0] = { sy * w + sx } }, 0
+  dist[sy * w + sx] = 0
+  local limit = (maxD or 1e9) * 10
+  local pending = 1
+  while pending > 0 and cur <= limit do
+    local b = buckets[cur]
+    if b then
+      buckets[cur] = nil
+      for _, i in ipairs(b) do
+        pending = pending - 1
+        if dist[i] == cur then
+          local x, y = i % w, (i - i % w) / w
+          for dy = -1, 1 do
+            for dx = -1, 1 do
+              if (dx ~= 0 or dy ~= 0) and open(x + dx, y + dy)
+                and (dx == 0 or dy == 0 or (open(x + dx, y) and open(x, y + dy))) then
+                local j = (y + dy) * w + x + dx
+                local nd = cur + ((dx ~= 0 and dy ~= 0) and 14 or 10)
+                if not dist[j] or nd < dist[j] then
+                  dist[j] = nd
+                  local nb = buckets[nd]
+                  if not nb then nb = {}; buckets[nd] = nb end
+                  nb[#nb + 1] = j
+                  pending = pending + 1
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    cur = cur + 1
+  end
+  for i, d in pairs(dist) do dist[i] = d / 10 end
+  return dist
+end
+
 function M:idx(x, y) return y * self.w + x end
 function M:inBounds(x, y) return x >= 0 and y >= 0 and x < self.w and y < self.h end
 function M:tileAt(wx, wy) return math.floor(wx / self.T), math.floor(wy / self.T) end

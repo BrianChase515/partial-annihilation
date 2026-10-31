@@ -503,6 +503,50 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_WALKEXP") then
+    -- builders standing by the shore: does Auto's expand pick the closest deposit by the walk?
+    local A = require("src.automation")
+    local found = 0
+    for sd = 1, 40 do
+      if found >= 5 then break end
+      game = startFn({ size = 112, water = 0.4, seed = sd, autotest = true })
+      game.ais = {}
+      local w = game.world
+      local map = w.map
+      -- a land tile right on the shore
+      for tries = 1, 400 do
+        local tx, ty = math.random(3, map.w - 4), math.random(3, map.h - 4)
+        if map:passable("land", tx, ty) and (map:passable("sea", tx + 3, ty) or map:passable("sea", tx - 3, ty)) then
+          local u = w:spawn("builder", 1, map:center(tx, ty))
+          local walk = map:walkDistances("land", tx, ty, 200)
+          local crow, cd, near, nd
+          for _, dp in ipairs(map.deposits) do
+            if not dp.sea and w:canPlace("mex", dp.x, dp.y, 1, "land") then
+              local x, y = map:center(dp.x, dp.y)
+              local d = U.dist(u.x, u.y, x, y)
+              local wd
+              for dy = -1, 1 do for dx = -1, 1 do local v = walk[(dp.y + dy) * map.w + dp.x + dx]; if v and (not wd or v < wd) then wd = v end end end
+              if not cd or d < cd then crow, cd = dp, d end
+              if wd and (not nd or wd < nd) then near, nd = dp, wd end
+            end
+          end
+          if crow and near and crow ~= near then
+            local cwalk
+            for dy = -1, 1 do for dx = -1, 1 do local v = walk[(crow.y + dy) * map.w + crow.x + dx]; if v and (not cwalk or v < cwalk) then cwalk = v end end end
+            A.doJob.expand(game, w, 1, u)
+            local o = u.orders[1]
+            local pick = (o and o.tx == near.x and o.ty == near.y) and "the nearest by the walk" or ((o and o.tx == crow.x and o.ty == crow.y) and "the nearest as the crow flies" or "another")
+            print(string.format("WALKEXP seed %d: crow-nearest is %d px away but a %s walk; walk-nearest is a %d px walk. Auto picked %s",
+              sd, math.floor(cd), cwalk and (math.floor(cwalk * w.T) .. " px") or "no-route", math.floor(nd * w.T), pick))
+            found = found + 1
+            break
+          end
+          u.alive = false
+        end
+      end
+    end
+    return
+  end
   if os.getenv("PA_STALE") then
     -- the matchup that stalls: Turtle vs Warlord, level 5, up to 25 minutes
     for _, sd in ipairs({ 3, 7, 11, 19 }) do
