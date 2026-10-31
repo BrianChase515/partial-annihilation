@@ -9,6 +9,16 @@ local U = require("src.util")
 local C = require("src.craft")
 local ARENA = require("src.arena")
 local ArenaAI = require("src.arena_ai")
+local B = require("src.brain")
+local Tel = require("src.telemetry")
+
+-- personalities (as in Annihilation): each game draws one, every weight nudged +/-20%
+local ARCH = {
+  { name = "Rusher",  weights = { aggression = 1.35, patience = 0.7, raid = 1.0, hunt = 1.1, creep = 0.8 } },
+  { name = "Builder", weights = { aggression = 0.85, patience = 1.35, raid = 0.8, hunt = 0.9, creep = 1.1 } },
+  { name = "Hunter",  weights = { aggression = 1.0, patience = 1.0, raid = 0.9, hunt = 1.45, creep = 1.3 } },
+  { name = "Raider",  weights = { aggression = 1.0, patience = 0.9, raid = 1.5, hunt = 1.0, creep = 1.0 } },
+}
 
 local AI = {}
 AI.__index = AI
@@ -45,15 +55,15 @@ local COMP = {
 function AI.params(L)
   return {
     think = math.max(0.3, 1.6 - 0.13 * L),
-    act = math.min(1, 0.25 + 0.075 * L),
-    workers = ({ -6, -5, -3, -2, -1, 0, 1, 1, 1, 1 })[L],
+    act = math.min(1, 0.35 + 0.08 * L),
+    workers = ({ -6, -5, -3, -1, 1, 2, 3, 3, 4, 4 })[L],
     tier2At = 420 - 24 * L, tier3At = 900 - 45 * L,
-    expandAt = 600 - 25 * L,
+    expandAt = 440 - 24 * L,
     attackFood = L <= 3 and (10 + 2 * L) or (20 + L),
     smart = L >= 4, attackRatio = 1.7 - 0.05 * L,
     towers = L >= 6 and 2 or (L >= 4 and 1 or 0),
     research = 0.1 + 0.08 * L,
-    creep = L >= 3, creepRatio = 1.8 - 0.06 * L,
+    creep = L >= 3, creepRatio = 1.4 - 0.06 * L,
     focusHero = L >= 5, skillChance = 0.25 + 0.07 * L,
     heroRetreat = 0.2 + 0.02 * L,
     regroupRatio = 1.05 + 0.05 * L,
@@ -91,6 +101,13 @@ function AI.new(world, team, level, opts)
   self.attackFood = P.attackFood
   self.workerGoal = 11
   self.mode = "build"
+  -- (not the frozen yardstick: it keeps its old habits) a personality, and the AI War-style
+  -- decisions - posture and attack plan - committed through the shared brain and logged
+  if not P.legacy then
+    self.p = B.personality(ARCH, self.rng)
+    self.postState, self.tgtState = {}, {}
+    self.posture = "creep"
+  end
   local tm = world.teams[team]
   tm.goldMul = P.goldMul -- the top difficulties mine faster (the menu says so)
   for _, h in ipairs(C.heroesOf(world, team, true)) do h.aiLevel = L end
@@ -265,6 +282,10 @@ function AI:update(dt)
   if self.think > 0 then return end
   self.think = self.thinkEvery * (0.8 + self.rng:random() * 0.4)
   local tm = w.teams[self.team]
+  if self.p and not self.announced then
+    self.announced = true
+    Tel.note(w, "personality", self.team, string.format("%s, level %d", self.p.name, self.level))
+  end
   for _, h in ipairs(C.heroesOf(w, self.team, false)) do
     h.aiLevel = self.level
     if h.offers and #h.offers > 0 then self.brain:pickOffer(h) end
@@ -290,7 +311,8 @@ function AI:economy(tm)
     if m and d < 600 then myMines[#myMines + 1] = m end
   end
   local woodWant = 2 + (tm.tier or 1) + math.min(1, #halls - 1)
-  if tm.wood > 700 then woodWant = 1 elseif tm.wood > 400 then woodWant = 2 end
+  if not self.P.legacy then woodWant = 4 + 2 * ((tm.tier or 1) - 1) + 2 * math.max(0, #halls - 1) end
+  if tm.wood > 700 then woodWant = 1 elseif tm.wood > 400 then woodWant = math.min(woodWant, 3) end
   local goal = math.max(4, 5 * #myMines + woodWant + 1 + self.P.workers)
   if hall and #workers < goal and self.rng:random() < self.P.act then
     for _, h in ipairs(halls) do
@@ -755,8 +777,10 @@ function AI:army(tm)
     end
     return
   end
+  -- (the posture: creep, mass up, strike or raid - AI War style, the best only some of the time)
+  if not self.P.legacy then self:thinkPosture(fighters, food) end
   -- 3. creeping: with the hero and a few units, clear camps for experience and the middle mine
-  local camp = self.P.creep and self:creepTarget(fighters, food)
+  local camp = self.P.creep and (self.P.legacy or self.posture == "creep" or food < 6) and self:creepTarget(fighters, food)
   if camp then
     self.mode = "creep"
     for _, u in ipairs(fighters) do
@@ -770,6 +794,12 @@ function AI:army(tm)
   -- 4. strong enough: attack
   local need = math.min(self.attackFood + math.floor(t / 300) * 4 + 4 * (self.failedWaves or 0), 40)
   if t > 1200 then need = math.min(need, 18) end -- late game: no more turtling
+  -- the posture sets how big a wave it waits for
+  if not self.P.legacy then
+    if self.posture == "strike" then need = math.floor(need * 0.65)
+    elseif self.posture == "raid" then need = math.min(need, math.max(8, math.floor(self.attackFood * 0.45)))
+    elseif self.posture == "mass" then need = math.floor(need * 1.35) end
+  end
   -- better players attack when they're actually stronger, not at a fixed army size
   if self.P.smart and food >= (self.P.legacy and 10 or math.max(12, self.attackFood * 0.7) + 3 * (self.failedWaves or 0)) then
     local mine = strength(fighters)
@@ -786,6 +816,10 @@ function AI:army(tm)
   -- out of gold for good: no point waiting, go and finish it
   if food >= need or (tm.foodUsed or 0) >= D.CRAFT.FOOD_CAP - 6 or broke then
     self.mode = "attack"
+    if not self.P.legacy then
+      self.tgtState = {} -- a fresh plan for each wave
+      Tel.note(w, "wave", self.team, string.format("wave: %d food of units%s (%s)", food, #C.heroesOf(w, self.team, false) > 0 and " with the hero" or "", self.posture or "?"))
+    end
     return
   end
   -- 5. otherwise: gather at the rally point
@@ -825,13 +859,14 @@ function AI:creepTarget(fighters, food)
     for _, u in ipairs(cp.units) do if u.alive then hp = hp + u.hp; alive = alive + 1 end end
     if alive > 0 then
       local myHp = 0
-      for _, u in ipairs(fighters) do myHp = myHp + u.hp end
+      -- (a hero's skills and healing make him worth more than his health alone)
+      for _, u in ipairs(fighters) do myHp = myHp + u.hp * ((u.key == "commander" and not self.P.legacy) and 1.8 or 1) end
       if myHp > hp * self.P.creepRatio then
         local d = U.dist(h.x, h.y, cp.x, cp.y)
         -- the enemy's side of the map is off limits for creeping
         local enemyHall
         for _, e in ipairs(w.entities) do
-          if e.alive and e.def.hall and w:hostile(e.team, self.team) and U.dist(e.x, e.y, cp.x, cp.y) < 1700 then enemyHall = true end
+          if e.alive and e.def.hall and w:hostile(e.team, self.team) and U.dist(e.x, e.y, cp.x, cp.y) < (self.P.legacy and 1700 or 1100) then enemyHall = true end
         end
         if not enemyHall and (not bd or d < bd) then best, bd = cp, d end
       end
@@ -841,8 +876,139 @@ function AI:creepTarget(fighters, food)
 end
 
 -- what to march on: the nearest enemy building (their expansion first), else their units
+-- every dozen seconds: what to do with the army now. Scores follow the situation and the
+-- personality; brain.commit takes the best only some of the time (sharper at higher levels)
+function AI:thinkPosture(fighters, food)
+  local w = self.world
+  local t = w.time
+  if t < (self.nextPosture or 0) then return end
+  self.nextPosture = t + 12
+  local P = self.p.w
+  local mine = strength(fighters)
+  local theirs, towers, exposed = 0, 0, 0
+  for _, o in ipairs(w.entities) do
+    if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) then
+      if o.def.weapon and not o.def.worker then
+        local s = o.hp * (o.def.weapon.damage / o.def.weapon.reload)
+        if o.def.building then towers = towers + s * 0.6 else theirs = theirs + s end
+      end
+    end
+  end
+  exposed = #self:exposedEconomy()
+  local odds = mine / math.max(1, mine + theirs + towers * 0.5)
+  local h = C.heroesOf(w, self.team, false)[1]
+  local hl = h and h.clevel or 0
+  local camp = self.P.creep and self:creepTarget(fighters, food)
+  local opts = {
+    { key = "creep", label = "creep with the hero", score = camp and (0.55 * P.creep * (hl < 3 and 1.3 or (hl < 5 and 0.8 or 0.4)) * (t < 780 and 1 or 0.5)) or 0 },
+    { key = "mass", label = "mass up first", score = 0.45 * P.patience * (1.25 - odds) },
+    { key = "strike", label = "strike", score = 0.55 * P.aggression * (0.3 + odds) * (t > 210 and 1 or 0.3) },
+    { key = "raid", label = "raid their economy", score = exposed > 0 and (0.45 * P.raid * (0.6 + 0.4 * odds) * (1 + math.min(1, towers / math.max(1, theirs + 1)) * 0.5) * (t > 180 and 1 or 0.3)) or 0 },
+  }
+  local o, changed = B.commit(self.postState, opts, self.level, self.rng, t, { reconsider = 50, minHold = 20, margin = 1.25 })
+  if not o then return end
+  self.posture = o.key
+  if changed then Tel.note(w, "posture", self.team, B.explain(opts, o)) end
+end
+
+-- the enemy's economy away from their towers: workers out at a mine or a wood line, and halls
+-- (an expansion) no tower covers
+function AI:exposedEconomy()
+  local w = self.world
+  local towers, out = {}, {}
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team and e.team > 0 and w:hostile(e.team, self.team) and e.def.building and e.def.weapon and e.built >= 1 then towers[#towers + 1] = e end
+  end
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team and e.team > 0 and w:hostile(e.team, self.team) and (e.def.worker or e.def.hall) then
+      local covered = false
+      for _, tw in ipairs(towers) do
+        local r = (tw.def.weapon.range or 300) + 80
+        if U.dist2(e.x, e.y, tw.x, tw.y) < r * r then covered = true; break end
+      end
+      if not covered then out[#out + 1] = e end
+    end
+  end
+  return out
+end
+
+-- the wave's plan: their base, their economy, their army or their hero - weighed like the
+-- Annihilation AI weighs its targets, committed for a while, and logged
+function AI:pickPlan(cx, cy)
+  local w = self.world
+  local t = w.time
+  local P = self.p.w
+  local diag = math.sqrt((w.map.w * w.T) ^ 2 + (w.map.h * w.T) ^ 2)
+  local function guardAt(x, y, r)
+    local s = 0
+    for _, o in ipairs(w.entities) do
+      if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.worker and U.dist2(o.x, o.y, x, y) < r * r then
+        s = s + o.hp * (o.def.weapon.damage / o.def.weapon.reload) * (o.def.building and 1.25 or 1)
+      end
+    end
+    return s
+  end
+  local opts = {}
+  -- their base: the hall with the most around it
+  local base
+  for _, e in ipairs(w.entities) do
+    if e.alive and e.team and e.team > 0 and w:hostile(e.team, self.team) and e.def.hall then
+      if not base or U.dist(cx, cy, e.x, e.y) < U.dist(cx, cy, base.x, base.y) then base = e end
+    end
+  end
+  if base then
+    local g = guardAt(base.x, base.y, 600)
+    opts[#opts + 1] = { key = "base", label = "hit their base", x = base.x, y = base.y, ent = base,
+      score = 0.5 * P.aggression / (1 + g / 4000) * (1 - 0.3 * U.dist(cx, cy, base.x, base.y) / diag) }
+  end
+  -- their economy away from the towers
+  local eco = self:exposedEconomy()
+  if #eco > 0 then
+    local best, bn
+    for _, e in ipairs(eco) do
+      local n = 0
+      for _, f in ipairs(eco) do if U.dist2(e.x, e.y, f.x, f.y) < 350 * 350 then n = n + 1 end end
+      if not bn or n > bn then best, bn = e, n end
+    end
+    local g = guardAt(best.x, best.y, 500)
+    opts[#opts + 1] = { key = "eco", label = string.format("raid their economy (%d)", bn), x = best.x, y = best.y, ent = best,
+      score = 0.45 * P.raid * (0.6 + 0.1 * math.min(6, bn)) / (1 + g / 3000) * (self.posture == "raid" and 1.8 or 1) }
+  end
+  -- their army in the field
+  local ax, ay, an = 0, 0, 0
+  for _, o in ipairs(w.entities) do
+    if o.alive and o.team and o.team > 0 and w:hostile(o.team, self.team) and o.def.weapon and not o.def.building and not o.def.worker and o.key ~= "commander" then
+      ax, ay, an = ax + o.x, ay + o.y, an + 1
+    end
+  end
+  if an >= 3 then
+    ax, ay = ax / an, ay / an
+    opts[#opts + 1] = { key = "army", label = string.format("wear down their army (%d)", an), x = ax, y = ay,
+      score = 0.4 * P.aggression * (1 - 0.3 * U.dist(cx, cy, ax, ay) / diag) }
+  end
+  -- their hero, if he's out on his own or hurt
+  for _, o in ipairs(w.entities) do
+    if o.alive and o.key == "commander" and o.team and w:hostile(o.team, self.team) then
+      local g = guardAt(o.x, o.y, 450)
+      local s = 0.45 * P.hunt * (o.hp / o.maxhp < 0.5 and 1.4 or 1) / (1 + math.max(0, g - o.hp * 30) / 3000)
+      opts[#opts + 1] = { key = "hero", label = "go for their hero", x = o.x, y = o.y, ent = o, score = s }
+    end
+  end
+  if #opts == 0 then return nil end
+  local o, changed = B.commit(self.tgtState, opts, self.level, self.rng, t, { reconsider = 40, minHold = 15, margin = 1.3 })
+  if not o then return nil end
+  if changed then Tel.note(w, "target", self.team, B.explain(opts, o)) end
+  -- the hero target moves: follow him
+  if o.ent and o.ent.alive then return o.ent end
+  return { x = o.x, y = o.y, key = o.key }
+end
+
 function AI:attackTarget(cx, cy)
   local w = self.world
+  if not self.P.legacy then
+    local p = self:pickPlan(cx, cy)
+    if p then return p end
+  end
   local best, bd
   for _, e in ipairs(w.entities) do
     if e.alive and e.team and e.team > 0 and w:hostile(e.team, self.team) and (e.def.building or e.key == "commander") then

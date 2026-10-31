@@ -533,6 +533,11 @@ local function script(mode, secs)
           if not snaps[m] and t >= m then snaps[m] = snap(1) .. " / " .. snap(2) end
         end
       end
+      if os.getenv("PA_CRAFTNOTES") and sd == 31 then
+        for _, nt in ipairs(w.tel.notes) do
+          if nt.team == 2 and nt.t < 420 then print(string.format("CRAFTL5   [%d:%02d] %s: %s", math.floor(nt.t / 60), math.floor(nt.t % 60), nt.kind, nt.text or "")) end
+        end
+      end
       if os.getenv("PA_CRAFTDBG") then
         for team = 1, 2 do
           local tm = w.teams[team]
