@@ -1427,6 +1427,9 @@ function W:damage(o, amount, attacker)
     and not self.heroes and not self.craft and not self.squads then
     amount = amount * tvc
   end
+  -- (Annihilation) raiders: Scouts hit constructors, extractors and solar twice as hard - a
+  -- small pack can kill an unguarded expansion, while against an army they're no stronger
+  if self.rtsTune and attacker and attacker.key == "scout" and D.RAID_TARGETS[o.key] then amount = amount * 2 end
   if self.tel then self.tel:damage(o, amount, attacker) end
   o.hp = o.hp - amount
   o.hitTimer = 0.15

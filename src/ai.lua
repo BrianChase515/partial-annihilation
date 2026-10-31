@@ -1351,7 +1351,17 @@ function AI:thinkHunters(army, inWave)
   end
   self.hunters = pack
   for _, u in ipairs(pack) do inWave[u] = true end
-  if #pack < math.min(2, want) then return end
+  -- a raid needs a real pack: three together (or the whole pack if it's smaller), not one
+  -- scout trickling in
+  if #pack < math.min(3, want) then
+    -- gather up at the staging point meanwhile
+    for _, u in ipairs(pack) do
+      if #u.orders == 0 and U.dist(u.x, u.y, self.stageX, self.stageY) > 200 then
+        world:issue(u, { type = "move", x = self.stageX + self.rng:random(-60, 60), y = self.stageY + self.rng:random(-60, 60) })
+      end
+    end
+    return
+  end
   local cx, cy, str = 0, 0, 0
   for _, u in ipairs(pack) do cx, cy, str = cx + u.x, cy + u.y, str + 35 * (u.hp / u.maxhp) end
   cx, cy = cx / #pack, cy / #pack
@@ -1396,7 +1406,16 @@ function AI:thinkHunters(army, inWave)
     -- chase: refresh orders as the prey moves
     if t > (self.preyOrderT or 0) then
       self.preyOrderT = t + 1.5
-      for _, u in ipairs(pack) do world:issue(u, { type = "amove", x = prey.x + self.rng:random(-20, 20), y = prey.y + self.rng:random(-20, 20) }) end
+      -- a constructor: everyone on it (it runs); a building: attack-move onto it
+      local mobile = not prey.def.building
+      for _, u in ipairs(pack) do
+        if mobile then world:issue(u, { type = "attack", target = prey })
+        else world:issue(u, { type = "amove", x = prey.x + self.rng:random(-20, 20), y = prey.y + self.rng:random(-20, 20) }) end
+      end
+      if prey ~= self.preyNoted then
+        self.preyNoted = prey
+        Tel.note(world, "raid", self.team, string.format("hunter pack (%d scouts) goes for an unguarded %s", #pack, prey.def.name))
+      end
     end
   else
     -- nothing to hunt: go looking (unchecked corners first, then deposits toward the enemy)

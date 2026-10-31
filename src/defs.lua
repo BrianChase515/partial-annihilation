@@ -32,7 +32,7 @@ D.units = {
   },
   builder = {
     name = "Constructor", short = "B", domain = "land", shape = "square",
-    radius = 10, hp = 260, speed = 74, sight = 260,
+    radius = 10, hp = 180, speed = 74, sight = 260,
     buildPower = 7, buildRange = 105,
     builds = { "mex", "solar", "landfac", "airfac", "shipyard", "turret", "storage", "powercore", "refinery" },
     cost = { metal = 60, energy = 500, work = 60 },
@@ -366,6 +366,8 @@ require("src.craft_defs")(D)
 -- Commander has to come with support to crack a defended base - and a hurt Commander, or units
 -- that fled home, are safe under their towers. Other buildings don't shoot; towers are cheap.
 D.TOWER_VS_COMMANDER = 2.5
+-- what Scouts raid: they hit these twice as hard in Annihilation (see W:damage)
+D.RAID_TARGETS = { builder = true, seabuilder = true, mex = true, solar = true, tidal = true }
 
 -- Annihilation only: health multipliers for units, buildings and the Commander (Commander of
 -- Heroes uses the same units at their plain numbers). Tuned for ~12-minute games on a medium map

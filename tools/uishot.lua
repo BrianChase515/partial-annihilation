@@ -503,6 +503,76 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_RAIDS") then
+    -- level-5 v2 games, 10 minutes: what do scouts kill, and does anyone win early off it?
+    local tb, te, tl, packs = 0, 0, 0, 0
+    for _, sd in ipairs({ 3, 7, 11, 19, 23, 29 }) do
+      game = startFn({ size = 112, water = 0.3, seed = sd, autotest = true, level = 5, level1 = 5,
+        profile = "Raider", profile1 = "Random", aiV2Teams = { [1] = true, [2] = true } })
+      local w = game.world
+      local b, e, lost = 0, 0, 0
+      local oldKill = w.kill
+      w.kill = function(self2, o, attacker)
+        if o.alive and attacker and attacker.key == "scout" then
+          if o.key == "builder" then b = b + 1 elseif D.RAID_TARGETS and D.RAID_TARGETS[o.key] or o.key == "mex" or o.key == "solar" then e = e + 1 end
+        end
+        if o.alive and o.key == "scout" then lost = lost + 1 end
+        if o.alive and o.key == "commander" then o.killerKey = attacker and attacker.key or "?" end
+        return oldKill(self2, o, attacker)
+      end
+      local t = 0
+      while t < 600 and not w.over do game:update(1 / 30); t = t + 1 / 30 end
+      local n = 0
+      for _, nt in ipairs(w.tel.notes) do if nt.kind == "raid" then n = n + 1 end end
+      if w.over and t < 300 then
+        for t2 = 1, w.np do
+          local c = w.teams[t2].commander
+          if c and not c.alive then print(string.format("RAIDS   early end: team %d Commander died (killed by a %s), Commander level %d", t2, tostring(c.killerKey), c.clevel or 0)) end
+        end
+        for _, nt in ipairs(w.tel.notes) do if nt.t > t - 60 and (nt.kind == "commander" or nt.kind == "kill") then print(string.format("RAIDS     [%ds] T%d %s %s", math.floor(nt.t), nt.team or 0, nt.kind, nt.text or "")) end end
+      end
+      tb, te, tl, packs = tb + b, te + e, tl + lost, packs + n
+      print(string.format("RAIDS seed %d: scouts killed %d constructors and %d extractors/solar; %d scouts lost; %d pack strikes%s", sd, b, e, lost, n,
+        w.over and string.format(" (game over at %d:%02d)", math.floor(t / 60), math.floor(t % 60)) or ""))
+    end
+    print(string.format("RAIDS total: %d constructors, %d extractors/solar, %d scouts lost, %d pack strikes", tb, te, tl, packs))
+    return
+  end
+  if os.getenv("PA_RAIDTEST") then
+    -- 3 scouts on a lone constructor building an extractor; then 30 scouts vs 9 tanks (same metal)
+    game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
+    game.ais = {}
+    local w = game.world
+    w.noFog = true
+    local map = w.map
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    local tx, ty = map:tileAt(cx, cy)
+    local nx, ny = map:nearestTile(tx, ty, function(a2, b2) return map:passable("land", a2, b2) and not map.blocked[b2 * map.w + a2] end, 30)
+    local x0, y0 = map:center(nx, ny)
+    local b = w:spawn("builder", 1, x0, y0)
+    local sc = {}
+    for k = 1, 3 do sc[k] = w:spawn("scout", 2, x0 + 200, y0 + (k - 2) * 20); w:issue(sc[k], { type = "attack", target = b }) end
+    local t = 0
+    while b.alive and t < 30 do w:update(1 / 30); t = t + 1 / 30 end
+    print(string.format("RAIDTEST 3 scouts kill a constructor (it stands still) in %s", b.alive and "more than 30s" or string.format("%.1fs", t)))
+    local m = w:spawn("mex", 1, x0 + 300, y0 + 300, 1)
+    for k = 1, 3 do if sc[k].alive then w:issue(sc[k], { type = "attack", target = m }) end end
+    t = 0
+    while m.alive and t < 60 do w:update(1 / 30); t = t + 1 / 30 end
+    print(string.format("RAIDTEST ... and an extractor in %s", m.alive and "more than 60s" or string.format("%.1fs", t)))
+    -- scout spam vs tanks
+    for _, e in ipairs(w.entities) do if e.team == 2 then e.alive = false end end
+    local tanks, scouts = {}, {}
+    for k = 1, 9 do tanks[k] = w:spawn("tank", 1, x0 - 300 + (k % 3) * 30, y0 - 600 + math.floor(k / 3) * 30) end
+    for k = 1, 30 do scouts[k] = w:spawn("scout", 2, x0 + 100 + (k % 6) * 22, y0 - 600 + math.floor(k / 6) * 22) end
+    for _, u in ipairs(scouts) do w:issue(u, { type = "amove", x = x0 - 300, y = y0 - 560 }) end
+    for _, u in ipairs(tanks) do w:issue(u, { type = "amove", x = x0 + 150, y = y0 - 560 }) end
+    t = 0
+    local function count(l) local n = 0; for _, u in ipairs(l) do if u.alive then n = n + 1 end end; return n end
+    while t < 90 and count(tanks) > 0 and count(scouts) > 0 do w:update(1 / 30); t = t + 1 / 30 end
+    print(string.format("RAIDTEST 30 scouts vs 9 tanks (about the same metal): tanks left %d, scouts left %d", count(tanks), count(scouts)))
+    return
+  end
   if os.getenv("PA_HOLD") then
     for _, mode in ipairs({ "stop", "hold" }) do
       game = startFn({ size = 96, water = 0.1, seed = 5, autotest = true })
