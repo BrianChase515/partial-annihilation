@@ -657,13 +657,17 @@ function W:setDest(e, x, y)
   end
   -- spread expensive searches over frames: past the per-tick cap, head straight
   -- for the goal briefly and search again shortly
-  if self.pathCount >= 6 then
+  -- (but a unit that has been turned away twice in a row searches anyway: otherwise, with a big
+  -- army moving, the units late in the list could walk straight at a mountain forever)
+  if self.pathCount >= 6 and (e.pathWait or 0) < 2 then
+    e.pathWait = (e.pathWait or 0) + 1
     e.path = { { x = x, y = y } }
     e.pathI = 1
     e.destX, e.destY = nil, nil
     e.repathAt = self.time + 0.15
     return
   end
+  e.pathWait = 0
   self.pathCount = self.pathCount + 1
   if self.passFriendly and e.team then self.map.passFor = self.ally[e.team] end
   e.path = Path.find(self.map, layer, e.x, e.y, x, y)
@@ -680,6 +684,21 @@ function W:followPath(e, dt, arriveDist)
   if not p then return true end
   local dx, dy = p.x - e.x, p.y - e.y
   local nx, ny, len = U.norm(dx, dy)
+  -- stuck: no closer to the next waypoint for 1.5 s (shoved off the route into rocks, or a
+  -- straight-line stand-in route): plan again from where it actually is
+  if e.progI ~= e.pathI or e.progP ~= p then
+    e.progI, e.progP, e.progLen, e.progT = e.pathI, p, len, self.time
+  elseif len < e.progLen - 6 then
+    e.progLen, e.progT = len, self.time
+  elseif self.time - e.progT > 1.5 and e.def.domain ~= "air" then
+    local gx, gy = e.destX, e.destY
+    if not gx then local q = e.path[#e.path]; gx, gy = q.x, q.y end
+    e.progP = nil
+    e.path, e.destX, e.destY = nil, nil, nil
+    e.repathAt = nil
+    self:setDest(e, gx, gy)
+    return false
+  end
   local last = e.pathI >= #e.path
   local thresh = last and (arriveDist or 6) or 14
   if len <= thresh then

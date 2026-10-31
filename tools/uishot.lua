@@ -503,6 +503,84 @@ local function script(mode, secs)
     lg:flush()
     return
   end
+  if os.getenv("PA_STUCK") then
+    -- the player's map: 16 tanks scattered around the centre's mountains all flee home together
+    local tot, home = 0, 0
+    for _, sd in ipairs({ 1793455875, 1793455875, 7, 11 }) do
+      game = startFn({ size = 128, water = 0.31, seed = sd, autotest = true })
+      game.ais = {}
+      local w = game.world
+      w.noFog = true
+      local map = w.map
+      local tm = w.teams[1]
+      local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+      local us = {}
+      local tries = 0
+      local N = tonumber(os.getenv("PA_STUCKN") or "16")
+      while #us < N and tries < 4000 do
+        tries = tries + 1
+        local a, r = math.random() * 6.283, 150 + math.random() * 550
+        local x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
+        local tx, ty = map:tileAt(x, y)
+        if map:passable("land", tx, ty) and map:canReach("land", x, y, tm.startX, tm.startY, 60) then
+          local u = w:spawn("tank", 1, x, y)
+          u.hp = u.maxhp * 0.25
+          us[#us + 1] = u
+        end
+      end
+      w:update(1 / 30)
+      for _, u in ipairs(us) do w:issue(u, { type = "retreat", x = tm.startX + math.random(-100, 100), y = tm.startY + math.random(-100, 100) }) end
+      local t = 0
+      while t < 100 do w:update(1 / 30); t = t + 1 / 30 end
+      local ok = 0
+      for _, u in ipairs(us) do if U.dist(u.x, u.y, tm.startX, tm.startY) < 350 then ok = ok + 1 end end
+      tot, home = tot + #us, home + ok
+      print(string.format("STUCK seed %d: %d of %d fleeing tanks made it home in 100s", sd, ok, #us))
+    end
+    print(string.format("STUCK total: %d of %d home", home, tot))
+    return
+  end
+  if os.getenv("PA_PATHS") then
+    -- the player's map (seed 1793455875): routes between the bases and around the centre - does
+    -- the search find them, and how many give up partway?
+    local Path = require("src.path")
+    game = startFn({ size = 128, water = 0.31, seed = tonumber(os.getenv("PA_PATHS")) or 1793455875, autotest = true })
+    game.ais = {}
+    local w = game.world
+    local map = w.map
+    local cx, cy = map.w * w.T / 2, map.h * w.T / 2
+    local pts = {}
+    for t = 1, 2 do pts[#pts + 1] = { w.teams[t].startX, w.teams[t].startY, "start" .. t } end
+    for k = 0, 11 do
+      local a = k * math.pi / 6
+      for _, r in ipairs({ 250, 450, 700 }) do
+        local x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
+        if map:passable("land", map:tileAt(x, y)) then pts[#pts + 1] = { x, y, string.format("c%d/%d", k, r) } end
+      end
+    end
+    local tried, partial, partialReach = 0, 0, 0
+    local worst
+    for i = 1, #pts do
+      for j = 1, #pts do
+        if i ~= j and (i <= 2 or j <= 2) then
+          local a, b = pts[i], pts[j]
+          if map:canReach("land", a[1], a[2], b[1], b[2], 40) then
+            tried = tried + 1
+            local path, found = Path.find(map, "land", a[1], a[2], b[1], b[2])
+            if not found then
+              partialReach = partialReach + 1
+              local last = path and path[#path]
+              local gap = last and U.dist(last.x, last.y, b[1], b[2]) or 9999
+              if not worst or gap > worst[1] then worst = { gap, a[3], b[3] } end
+            end
+          end
+        end
+      end
+    end
+    print(string.format("PATHS %d reachable routes tried; the search gave up on %d of them%s", tried, partialReach,
+      worst and string.format(" (worst: %s -> %s, left %d px short)", worst[2], worst[3], math.floor(worst[1])) or ""))
+    return
+  end
   if os.getenv("PA_SEAAUTO") then
     -- a Sea Constructor with Auto expand/power on; and repair: unfinished plant vs finished, Commander
     local A = require("src.automation")
