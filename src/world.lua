@@ -1336,6 +1336,8 @@ function W:fire(e, o, wov)
     if o.def.building and m.breaker then dmg = dmg * m.breaker end
     -- Jaguar's pounce: the next few attacks hit harder
     if e.pounceHits and e.pounceHits > 0 then dmg = dmg * 1.5; e.pounceHits = e.pounceHits - 1 end
+    -- Ranger's Evade: the shots right after landing
+    if e.evadeHits and e.evadeHits > 0 then dmg = dmg * 1.4; e.evadeHits = e.evadeHits - 1 end
     if m.crit and math.random() < m.crit then dmg = dmg * 2 end
   end
   local wpn = w

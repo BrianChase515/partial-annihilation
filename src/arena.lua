@@ -303,9 +303,13 @@ A.SKILLS = {
   lance = { name = "Piercing Lance", aim = "point", range = 560, cd = 10, tags = { "dmg", "line" },
     desc = "Hurls a lance that hits everything in a line.",
     use = function(w, c, tx, ty) lineHit(w, c, tx, ty, 560, 22, skillDmg(c, 230), { 1, 0.9, 0.5 }) end },
-  evade = { name = "Evade", aim = "point", range = 260, cd = 11, tags = { "escape", "move" },
-    desc = "Dash away and can't be targeted for 1.5 seconds.",
-    use = function(w, c, tx, ty) dash(w, c, tx, ty, 260); c.fadeUntil = w.time + 1.5 end },
+  evade = { name = "Evade", aim = "point", range = 260, cd = 11, tags = { "escape", "move", "buff" },
+    desc = "Dash and can't be targeted for 1.5 seconds; on landing you move 30% faster and shoot 50% faster for 4 seconds, and your next 3 shots hit 40% harder.",
+    use = function(w, c, tx, ty)
+      dash(w, c, tx, ty, 260); c.fadeUntil = w.time + 1.5
+      A.buff(c, "speed", 1.3, 4, w); A.buff(c, "rof", 1.5, 4, w)
+      c.evadeHits = 3
+    end },
   decoy = { name = "Decoy", aim = "point", range = 400, cd = 20, tags = { "summon", "defend" },
     desc = "A decoy that enemies prefer to shoot, for 8 seconds.",
     use = function(w, c, tx, ty)
@@ -335,7 +339,7 @@ A.SKILLS = {
 
   -- Elementalist
   teleport = { name = "Teleport", aim = "point", range = 340, cd = 8, tags = { "escape", "move" },
-    desc = "Blink to the target spot.",
+    desc = "Blink to the target spot; enemies where you land are slowed for 2 seconds.",
     use = function(w, c, tx, ty)
       local map = w.map
       local dx, dy, len = U.norm(tx - c.x, ty - c.y)
@@ -350,6 +354,9 @@ A.SKILLS = {
       if not w:isFleeing(c) then c.orders = {} end
       c.homeX, c.homeY = c.x, c.y
       fx(w, "levelup", c.x, c.y, 30, 0.4)
+      -- (arriving in a burst of frost: enemies where you land are slowed for 2 seconds)
+      area(w, c, c.x, c.y, 150, 0, { slow = 2 })
+      fx(w, "frost", c.x, c.y, 150, 0.4)
     end },
   frostnova = { name = "Frost Nova", aim = "self", range = 230, cd = 10, tags = { "dmg", "aoe", "cc", "defend" },
     desc = "A ring of frost around you: damage and a 3 second slow.",
@@ -579,7 +586,7 @@ A.SKILLS = {
     end },
 
   -- Ascetic (a martial monk: fast strikes, mantras, healing)
-  flurry = { name = "Flurry of Blows", aim = "point", range = 280, cd = 8, tags = { "dmg", "move" },
+  flurry = { name = "Flurry of Blows", aim = "point", range = 280, cd = 6, tags = { "dmg", "move" },
     desc = "Dash to the target and strike the nearest enemy four times.",
     use = function(w, c, tx, ty)
       dash(w, c, tx, ty, 280)
@@ -644,12 +651,12 @@ A.SKILLS = {
       fx(w, "beam", c.x, c.y, 3, 0.3, { x2 = best.x, y2 = best.y, color = { 0.55, 1, 0.35 } })
     end },
   ghouls = { name = "Raise Ghouls", aim = "self", range = 0, cd = 18, tags = { "summon" },
-    desc = "Three ghouls join you for good (max 3, more with Fetish Army).",
+    desc = "Three ghouls fight for you for 45 seconds (max 3 at a time, more with Fetish Army).",
     use = function(w, c)
       local maxN = 3 + ((c.mods and c.mods.extraGhouls) or 0)
       local have = countOwned(w, c, "ghoul")
       if have >= maxN then return false end
-      summon(w, c, "ghoul", math.min(3, maxN - have), nil, math.floor((c.clevel or 1) / 3))
+      summon(w, c, "ghoul", math.min(3, maxN - have), 45, math.floor((c.clevel or 1) / 3))
     end },
   grasp = { name = "Grasp of the Dead", aim = "point", range = 500, cd = 12, tags = { "cc", "aoe", "dmg" },
     desc = "Hands claw out of the ground: enemies there are slowed and poisoned for 4 seconds.",
@@ -660,13 +667,13 @@ A.SKILLS = {
       end
       fx(w, "curse", tx, ty, 170, 1.0)
     end },
-  sacrifice = { name = "Hex: Sacrifice", aim = "point", range = 480, cd = 20, tags = { "summon", "cc" },
-    desc = "Up to 4 enemy creeps near the target fight for you for 7 seconds, then burst apart.",
+  sacrifice = { name = "Hex: Sacrifice", aim = "point", range = 480, cd = 24, tags = { "summon", "cc" },
+    desc = "Up to 2 enemy creeps near the target fight for you for 7 seconds, then burst apart.",
     use = function(w, c, tx, ty)
       local n = 0
       for _, o in ipairs(hostiles(w, c, tx, ty, 170)) do
         local able = o.creep or (w.craft and not o.def.building and o.key ~= "commander" and not o.def.worker)
-        if n < 4 and able and not o.charm then charm(w, c, o, 7); n = n + 1 end
+        if n < 2 and able and not o.charm then charm(w, c, o, 7); n = n + 1 end
       end
       if n == 0 then return false end
     end },
@@ -680,7 +687,7 @@ A.SKILLS = {
       c.hp = math.min(c.maxhp, c.hp + c.maxhp * 0.03 * n); c.healing = 1
       for i = 1, n do fx(w, "beam", list[i].x, list[i].y, 3, 0.4, { x2 = c.x, y2 = c.y, color = { 0.6, 1, 0.5 } }) end
     end },
-  gargantuan = { name = "Gargantuan", aim = "self", range = 0, cd = 60, ult = true, tags = { "summon", "ult", "siege" },
+  gargantuan = { name = "Gargantuan", aim = "self", range = 0, cd = 90, ult = true, tags = { "summon", "ult", "siege" },
     desc = "ULTIMATE: raise a Gargantuan brute that fights for you for 30 seconds.",
     use = function(w, c) summon(w, c, "gargantuan", 1, 30, math.floor((c.clevel or 1) / 2)) end },
 
@@ -803,7 +810,11 @@ A.CLASSES = {
     base = function(w, e) end },
   { key = "juggernaut", name = "Juggernaut", tag = "Melee brawler: huge health, leaps and shouts.",
     skills = { "leap", "warcry", "whirlwind", "battleorders", "shout" }, ult = "berserk", passives = { "ironskin", "regen" },
-    base = function(w, e) hpUp(e, 1.5); e.mods.melee = true; mulMod(e, "range", 0.45); mulMod(e, "dmg", 1.6); mulMod(e, "armor", 0.85); mulMod(e, "speed", 1.08) end },
+    base = function(w, e)
+      hpUp(e, 1.5); e.mods.melee = true; mulMod(e, "range", 0.45); mulMod(e, "dmg", 1.6); mulMod(e, "armor", 0.85); mulMod(e, "speed", 1.08)
+      -- (Arena: a melee hero has to stand in the lane's fire; this keeps him in it)
+      if w.arena then e.mods.regen = (e.mods.regen or 0) + 10 end
+    end },
   { key = "warden", name = "Warden", tag = "Auras for allies and creeps; charge and smite.",
     skills = { "charge", "holyshield", "hammers", "smite", "prayer" }, ult = "judgment", passives = { "might", "prayeraura", "freezeaura" },
     base = function(w, e) hpUp(e, 1.2); mulMod(e, "armor", 0.92) end },
@@ -815,7 +826,7 @@ A.CLASSES = {
     base = function(w, e) mulMod(e, "speed", 1.15); hpUp(e, 1.05); mulMod(e, "dmg", 1.1) end },
   { key = "ascetic", name = "Ascetic", tag = "Melee monk: flurries, dashes, mantras and healing; every blow heals him a little.",
     skills = { "flurry", "dashstrike", "mantra", "breath", "pull" }, ult = "sanctuary", passives = { "fleetfoot", "harmony" },
-    base = function(w, e) hpUp(e, 1.3); e.mods.melee = true; e.mods.lifesteal = (e.mods.lifesteal or 0) + 0.05; mulMod(e, "range", 0.42); mulMod(e, "dmg", 1.6); mulMod(e, "speed", 1.15); mulMod(e, "armor", 0.86) end },
+    base = function(w, e) hpUp(e, 1.4); e.mods.melee = true; e.mods.lifesteal = (e.mods.lifesteal or 0) + 0.10; mulMod(e, "range", 0.42); mulMod(e, "dmg", 1.6); mulMod(e, "speed", 1.15); mulMod(e, "armor", 0.86) end },
   { key = "hexer", name = "Hexer", tag = "Poisons, ghouls and hexes that turn creeps against their own side.",
     skills = { "plague", "ghouls", "grasp", "sacrifice", "soulharvest" }, ult = "gargantuan", passives = { "toxin", "fetish" },
     base = function(w, e) hpUp(e, 1.0); mulMod(e, "skillDmg", 1.1) end },
@@ -934,8 +945,9 @@ function A.offer(w, e, kind)
   local pool = {}
   -- every skill slot full (a Commander Craft hero starts with a skill): offer an upgrade instead
   if kind == "skill" and e.skills and e.skills[1] and e.skills[2] and e.skills[3] then kind = "passive" end
+  local off = os.getenv("PA_NOSKILL") -- (dev: test a class without one of its skills)
   if kind == "skill" then
-    for _, k in ipairs(cls.skills) do if not e.taken[k] then pool[#pool + 1] = k end end
+    for _, k in ipairs(cls.skills) do if not e.taken[k] and k ~= off then pool[#pool + 1] = k end end
   else
     for _, k in ipairs(cls.passives) do if not e.taken[k] then pool[#pool + 1] = k end end
     for _, k in ipairs(A.SHARED) do if not e.taken[k] and not U.contains(pool, k) then pool[#pool + 1] = k end end
@@ -1349,7 +1361,7 @@ function A.tickHeroes(w, dt, st)
       if e.charm and t > e.charm.untilT and e.alive then
         local src = e.charm.src
         e.team = e.charm.team
-        area(w, src, e.x, e.y, 100, skillDmg(src, 160))
+        area(w, src, e.x, e.y, 100, skillDmg(src, 100))
         fx(w, "splash", e.x, e.y, 100, 0.4, { color = { 0.5, 1, 0.3 } })
         e.noXP = true
         e.charm = nil

@@ -67,6 +67,15 @@ Switch the title screen to **COMMANDER CRAFT** for a classic fantasy-RTS ruleset
 - **A computer opponent (difficulty 1-10)** that works its economy, creeps with its heroes, expands, techs up and attacks. Levels 8-10 also mine 10-30% faster.
 - **Its own soundtrack**: seven fantasy suites (Banners of Dawn, Drums of the Warband, Moonlit Grove, Frostpeak Vigil, Caravan of Sands, The Elven Watch, Siege of Ironhold). Annihilation has its own eight; the Arena mixes the orchestral and fantasy suites.
 
+### Hero balance (0.28.34)
+Tested with a 270-game Arena round-robin (every hero against every other, both sides, three maps) and checked in Commander Craft (duels, creep camps, hero with an army), since the heroes are shared:
+- **Hexer:** Hex: Sacrifice takes 2 creeps instead of 4, bursts for less, and has a 24 s cooldown (it was flipping whole creep waves: 90% of Arena matches won). Ghouls last 45 seconds; Gargantuan every 90 seconds.
+- **Ascetic:** more health, 10% lifesteal (was 5%), Flurry of Blows every 6 seconds (was 12% of matches won).
+- **Juggernaut (Arena only):** regenerates 10 health a second, to stay in the lane's fire. Craft keeps its own tuning.
+- **Ranger's Evade** pays off on landing: +30% speed and +50% attack speed for 4 seconds, and the next 3 shots hit 40% harder.
+- **Elementalist's Teleport** slows enemies where he lands for 2 seconds.
+Arena match win rates went from 12-90% to 31-68% (about 43% is even, since some games time out).
+
 ### Commander Arena: a single-player lane battler
 Switch the title screen to **COMMANDER ARENA** for a different game. There's no base and no army: just your Commander, three lanes, towers, a Core to protect, and endless waves of creeps marching at the enemy.
 - **Ten classes inspired by classic action-RPG archetypes, each with five skills and an ultimate:**
